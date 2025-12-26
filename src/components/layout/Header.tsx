@@ -29,16 +29,18 @@ const breadcrumbMap: Record<string, string> = {
   '/users': 'Users',
   '/segments': 'Segments',
   '/analytics': 'Analytics',
+  '/notifications': 'Notifications',
   '/integrations': 'Integrations',
-  '/logs': 'Audit & Logs',
+  '/audit-logs': 'Audit & Logs',
   '/settings': 'Settings',
 };
 
 interface HeaderProps {
   sidebarCollapsed: boolean;
+  onOpenSearch?: () => void;
 }
 
-export default function Header({ sidebarCollapsed }: HeaderProps) {
+export default function Header({ sidebarCollapsed, onOpenSearch }: HeaderProps) {
   const [environment, setEnvironment] = useState<'sandbox' | 'production'>('sandbox');
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -71,13 +73,16 @@ export default function Header({ sidebarCollapsed }: HeaderProps) {
       {/* Right Section */}
       <div className="flex items-center gap-4">
         {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="w-64 pl-9 h-9 bg-secondary/50"
-          />
-        </div>
+        <button
+          onClick={onOpenSearch}
+          className="relative hidden md:flex items-center gap-2 w-64 h-9 px-3 rounded-md bg-secondary/50 text-muted-foreground text-sm hover:bg-secondary transition-colors"
+        >
+          <Search className="w-4 h-4" />
+          <span>Search...</span>
+          <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+            <span className="text-xs">⌘</span>K
+          </kbd>
+        </button>
 
         {/* Environment Switcher */}
         <div className="flex items-center rounded-full bg-secondary/50 p-1">
