@@ -24,6 +24,7 @@ import Rewards from "./pages/dashboard/mechanics/Rewards";
 import Users from "./pages/dashboard/Users";
 import Analytics from "./pages/dashboard/Analytics";
 import Integrations from "./pages/dashboard/Integrations";
+import AuditLogs from "./pages/dashboard/AuditLogs";
 import Settings from "./pages/dashboard/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -59,6 +60,7 @@ const App = () => (
                 <Route path="users" element={<Users />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="integrations" element={<Integrations />} />
+                <Route path="audit-logs" element={<AuditLogs />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               
