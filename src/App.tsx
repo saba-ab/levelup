@@ -26,6 +26,7 @@ import Analytics from "./pages/dashboard/Analytics";
 import Integrations from "./pages/dashboard/Integrations";
 import AuditLogs from "./pages/dashboard/AuditLogs";
 import Segments from "./pages/dashboard/Segments";
+import Notifications from "./pages/dashboard/Notifications";
 import Settings from "./pages/dashboard/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -63,6 +64,7 @@ const App = () => (
                 <Route path="integrations" element={<Integrations />} />
                 <Route path="audit-logs" element={<AuditLogs />} />
                 <Route path="segments" element={<Segments />} />
+                <Route path="notifications" element={<Notifications />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               
