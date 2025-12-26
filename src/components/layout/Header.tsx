@@ -120,7 +120,7 @@ export default function Header({ sidebarCollapsed, onOpenSearch }: HeaderProps) 
         </Button>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative" onClick={() => navigate('/notifications')}>
           <Bell className="w-5 h-5" />
           <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
         </Button>
