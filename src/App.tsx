@@ -17,6 +17,10 @@ import RuleBuilder from "./pages/dashboard/RuleBuilder";
 import Badges from "./pages/dashboard/mechanics/Badges";
 import Levels from "./pages/dashboard/mechanics/Levels";
 import Leaderboards from "./pages/dashboard/mechanics/Leaderboards";
+import Points from "./pages/dashboard/mechanics/Points";
+import Missions from "./pages/dashboard/mechanics/Missions";
+import Streaks from "./pages/dashboard/mechanics/Streaks";
+import Rewards from "./pages/dashboard/mechanics/Rewards";
 import Users from "./pages/dashboard/Users";
 import Settings from "./pages/dashboard/Settings";
 import NotFound from "./pages/NotFound";
@@ -43,9 +47,13 @@ const App = () => (
                 <Route path="programs" element={<Programs />} />
                 <Route path="rules" element={<Rules />} />
                 <Route path="rules/new" element={<RuleBuilder />} />
+                <Route path="mechanics/points" element={<Points />} />
                 <Route path="mechanics/badges" element={<Badges />} />
                 <Route path="mechanics/levels" element={<Levels />} />
+                <Route path="mechanics/missions" element={<Missions />} />
+                <Route path="mechanics/streaks" element={<Streaks />} />
                 <Route path="mechanics/leaderboards" element={<Leaderboards />} />
+                <Route path="mechanics/rewards" element={<Rewards />} />
                 <Route path="users" element={<Users />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
