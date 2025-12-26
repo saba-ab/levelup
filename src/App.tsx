@@ -22,6 +22,7 @@ import Missions from "./pages/dashboard/mechanics/Missions";
 import Streaks from "./pages/dashboard/mechanics/Streaks";
 import Rewards from "./pages/dashboard/mechanics/Rewards";
 import Users from "./pages/dashboard/Users";
+import Analytics from "./pages/dashboard/Analytics";
 import Settings from "./pages/dashboard/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -55,6 +56,7 @@ const App = () => (
                 <Route path="mechanics/leaderboards" element={<Leaderboards />} />
                 <Route path="mechanics/rewards" element={<Rewards />} />
                 <Route path="users" element={<Users />} />
+                <Route path="analytics" element={<Analytics />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               
