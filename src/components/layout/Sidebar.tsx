@@ -17,6 +17,7 @@ import {
   BarChart3,
   Plug,
   FileText,
+  Bell,
   Settings,
   ChevronDown,
   ChevronLeft,
@@ -51,8 +52,9 @@ const navItems: NavItem[] = [
   { label: 'Users', path: '/users', icon: <Users className="w-5 h-5" /> },
   { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" /> },
   { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" /> },
+  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" /> },
   { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" /> },
-  { label: 'Audit & Logs', path: '/logs', icon: <FileText className="w-5 h-5" /> },
+  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" /> },
   { label: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" /> },
 ];
 
