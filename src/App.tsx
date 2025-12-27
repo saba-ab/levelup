@@ -28,6 +28,10 @@ import AuditLogs from "./pages/dashboard/AuditLogs";
 import Segments from "./pages/dashboard/Segments";
 import Notifications from "./pages/dashboard/Notifications";
 import Settings from "./pages/dashboard/Settings";
+import DocsOverview from "./pages/dashboard/docs/DocsOverview";
+import ApiReference from "./pages/dashboard/docs/ApiReference";
+import UserGuides from "./pages/dashboard/docs/UserGuides";
+import DeveloperDocs from "./pages/dashboard/docs/DeveloperDocs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +69,10 @@ const App = () => (
                 <Route path="audit-logs" element={<AuditLogs />} />
                 <Route path="segments" element={<Segments />} />
                 <Route path="notifications" element={<Notifications />} />
+                <Route path="docs" element={<DocsOverview />} />
+                <Route path="docs/api" element={<ApiReference />} />
+                <Route path="docs/guides" element={<UserGuides />} />
+                <Route path="docs/developer" element={<DeveloperDocs />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               

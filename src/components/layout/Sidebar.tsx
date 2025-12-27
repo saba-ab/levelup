@@ -22,6 +22,10 @@ import {
   ChevronDown,
   ChevronLeft,
   Gamepad2,
+  BookOpen,
+  Code,
+  Book,
+  Terminal,
 } from 'lucide-react';
 
 interface NavItem {
@@ -54,6 +58,17 @@ const navItems: NavItem[] = [
   { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" /> },
   { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" /> },
   { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" /> },
+  {
+    label: 'Documentation',
+    path: '/docs',
+    icon: <BookOpen className="w-5 h-5" />,
+    children: [
+      { label: 'Overview', path: '/docs', icon: <Book className="w-4 h-4" /> },
+      { label: 'API Reference', path: '/docs/api', icon: <Code className="w-4 h-4" /> },
+      { label: 'User Guides', path: '/docs/guides', icon: <BookOpen className="w-4 h-4" /> },
+      { label: 'Developer Docs', path: '/docs/developer', icon: <Terminal className="w-4 h-4" /> },
+    ],
+  },
   { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" /> },
   { label: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" /> },
 ];
