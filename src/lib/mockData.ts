@@ -129,3 +129,12 @@ export const rewards = [
   { id: '3', name: 'Exclusive Merch', cost: 5000, stock: 50, redemptions: 23, image: '👕' },
   { id: '4', name: 'VIP Access', cost: 10000, stock: 10, redemptions: 5, image: '⭐' },
 ];
+
+export const notifications = [
+  { id: '1', title: 'New user milestone', message: 'Alex Chen reached Diamond tier', type: 'success', read: false, timestamp: '2 min ago' },
+  { id: '2', title: 'Rule triggered', message: 'First Purchase Bonus activated 150 times today', type: 'info', read: false, timestamp: '15 min ago' },
+  { id: '3', title: 'Webhook failure', message: 'analytics.myapp.com returned 500 error', type: 'error', read: false, timestamp: '32 min ago' },
+  { id: '4', title: 'Mission completed', message: '234 users completed "Welcome Journey"', type: 'success', read: true, timestamp: '1 hour ago' },
+  { id: '5', title: 'Low stock alert', message: 'Exclusive Merch reward has 5 items left', type: 'warning', read: true, timestamp: '2 hours ago' },
+  { id: '6', title: 'API usage spike', message: 'Sandbox API calls increased by 150%', type: 'info', read: true, timestamp: '3 hours ago' },
+];

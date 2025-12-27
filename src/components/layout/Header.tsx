@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, Settings } from 'lucide-react';
+import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, Settings, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import {
@@ -14,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { notifications } from '@/lib/mockData';
 
 const breadcrumbMap: Record<string, string> = {
   '/': 'Overview',
@@ -120,10 +120,60 @@ export default function Header({ sidebarCollapsed, onOpenSearch }: HeaderProps) 
         </Button>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative" onClick={() => navigate('/notifications')}>
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative">
+              <Bell className="w-5 h-5" />
+              {notifications.filter(n => !n.read).length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full px-1">
+                  {notifications.filter(n => !n.read).length}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuLabel className="flex items-center justify-between">
+              <span>Notifications</span>
+              <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground">
+                Mark all as read
+              </Button>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="max-h-[300px] overflow-y-auto">
+              {notifications.slice(0, 5).map((notification) => (
+                <DropdownMenuItem key={notification.id} className="flex items-start gap-3 p-3 cursor-pointer">
+                  <div className={cn(
+                    "mt-0.5 p-1 rounded-full shrink-0",
+                    notification.type === 'success' && "bg-green-500/20 text-green-500",
+                    notification.type === 'error' && "bg-destructive/20 text-destructive",
+                    notification.type === 'warning' && "bg-amber-500/20 text-amber-500",
+                    notification.type === 'info' && "bg-blue-500/20 text-blue-500"
+                  )}>
+                    {notification.type === 'success' && <CheckCircle className="w-3.5 h-3.5" />}
+                    {notification.type === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
+                    {notification.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5" />}
+                    {notification.type === 'info' && <Info className="w-3.5 h-3.5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={cn("text-sm font-medium truncate", !notification.read && "text-foreground")}>{notification.title}</p>
+                      {!notification.read && <span className="w-2 h-2 bg-primary rounded-full shrink-0" />}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{notification.message}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{notification.timestamp}</p>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              className="justify-center text-sm text-primary cursor-pointer"
+              onClick={() => navigate('/notifications')}
+            >
+              View all notifications
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* User Menu */}
         <DropdownMenu>
