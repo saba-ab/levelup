@@ -38,7 +38,7 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <CommandPalette />
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       <Header sidebarCollapsed={sidebarCollapsed} onOpenSearch={() => setSearchOpen(true)} />
       <main

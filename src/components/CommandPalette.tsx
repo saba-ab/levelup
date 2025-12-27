@@ -74,9 +74,17 @@ const mockRules = [
   { id: "4", name: "Daily Login Streak", trigger: "user.login" },
 ];
 
-export function CommandPalette() {
-  const [open, setOpen] = useState(false);
+interface CommandPaletteProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPaletteProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const navigate = useNavigate();
+  
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
