@@ -6,11 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { players, badges, recentActivity } from '@/lib/mockData';
+import { players, badges } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
 const playerStats = {
   usr_001: { currentStreak: 12, longestStreak: 45, missionsCompleted: 28, badgesEarned: 8, totalActions: 1247 },
@@ -70,6 +68,7 @@ export default function PlayerProfile() {
     if (!profileRef.current) return;
     setIsExporting(true);
     try {
+      const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(profileRef.current, {
         backgroundColor: '#0a0a0a',
         scale: 2,
@@ -90,6 +89,8 @@ export default function PlayerProfile() {
     if (!profileRef.current) return;
     setIsExporting(true);
     try {
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
       const canvas = await html2canvas(profileRef.current, {
         backgroundColor: '#0a0a0a',
         scale: 2,
