@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Gift, ShoppingCart, Package, Clock, MoreHorizontal, Pencil, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Search, Gift, ShoppingCart, Package, Clock, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,12 +15,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -31,14 +25,15 @@ import { rewards } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
+import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 
-const rewardsData = [
+const initialRewardsData = [
   { id: '1', name: 'Free Shipping', description: 'Free shipping on your next order', cost: 500, stock: 'unlimited', redemptions: 1234, image: '📦', category: 'shipping' },
   { id: '2', name: '10% Discount', description: '10% off your entire purchase', cost: 1000, stock: 'unlimited', redemptions: 890, image: '🏷️', category: 'discount' },
-  { id: '3', name: 'Exclusive Merch', description: 'Limited edition branded merchandise', cost: 5000, stock: 50, redemptions: 23, image: '👕', category: 'physical' },
-  { id: '4', name: 'VIP Access', description: 'Early access to new features', cost: 10000, stock: 10, redemptions: 5, image: '⭐', category: 'access' },
+  { id: '3', name: 'Exclusive Merch', description: 'Limited edition branded merchandise', cost: 5000, stock: '50', redemptions: 23, image: '👕', category: 'physical' },
+  { id: '4', name: 'VIP Access', description: 'Early access to new features', cost: 10000, stock: '10', redemptions: 5, image: '⭐', category: 'access' },
   { id: '5', name: 'Premium Upgrade', description: '1 month of premium subscription', cost: 7500, stock: 'unlimited', redemptions: 156, image: '💎', category: 'subscription' },
-  { id: '6', name: 'Gift Card $25', description: '$25 store gift card', cost: 2500, stock: 100, redemptions: 67, image: '🎁', category: 'gift' },
+  { id: '6', name: 'Gift Card $25', description: '$25 store gift card', cost: 2500, stock: '100', redemptions: 67, image: '🎁', category: 'gift' },
 ];
 
 const redemptionHistory = [
@@ -53,6 +48,8 @@ const redemptionHistory = [
 export default function Rewards() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [rewardsData, setRewardsData] = useState(initialRewardsData);
+  const [editingReward, setEditingReward] = useState<typeof initialRewardsData[0] | null>(null);
   const { toast } = useToast();
 
   const filteredRewards = rewardsData.filter(reward =>
@@ -62,10 +59,24 @@ export default function Rewards() {
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     toast({
-      title: 'Reward created',
-      description: 'New reward has been added to the catalog.',
+      title: editingReward ? 'Reward updated' : 'Reward created',
+      description: editingReward ? 'Reward has been updated successfully.' : 'New reward has been added to the catalog.',
     });
     setIsDialogOpen(false);
+    setEditingReward(null);
+  };
+
+  const handleEdit = (reward: typeof initialRewardsData[0]) => {
+    setEditingReward(reward);
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setRewardsData(prev => prev.filter(r => r.id !== id));
+    toast({
+      title: 'Reward deleted',
+      description: 'Reward has been removed successfully.',
+    });
   };
 
   // Connect this to your MySQL backend
@@ -106,26 +117,28 @@ export default function Rewards() {
             <DialogContent>
               <form onSubmit={handleCreate}>
                 <DialogHeader>
-                  <DialogTitle>Add New Reward</DialogTitle>
-                  <DialogDescription>Create a new reward for your users to redeem.</DialogDescription>
+                  <DialogTitle>{editingReward ? 'Edit Reward' : 'Add New Reward'}</DialogTitle>
+                  <DialogDescription>
+                    {editingReward ? 'Update the reward details.' : 'Create a new reward for your users to redeem.'}
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Reward Name</label>
-                    <Input placeholder="e.g., Free Shipping" required />
+                    <Input placeholder="e.g., Free Shipping" defaultValue={editingReward?.name} required />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Description</label>
-                    <Input placeholder="What does the user get?" />
+                    <Input placeholder="What does the user get?" defaultValue={editingReward?.description} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Cost (points)</label>
-                      <Input type="number" placeholder="1000" required />
+                      <Input type="number" placeholder="1000" defaultValue={editingReward?.cost} required />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Stock</label>
-                      <Select defaultValue="unlimited">
+                      <Select defaultValue={editingReward?.stock === 'unlimited' ? 'unlimited' : 'limited'}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unlimited">Unlimited</SelectItem>
@@ -136,7 +149,7 @@ export default function Rewards() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Category</label>
-                    <Select>
+                    <Select defaultValue={editingReward?.category}>
                       <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="discount">Discount</SelectItem>
@@ -149,12 +162,12 @@ export default function Rewards() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Icon (emoji)</label>
-                    <Input placeholder="e.g., 🎁" />
+                    <Input placeholder="e.g., 🎁" defaultValue={editingReward?.image} />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit" variant="glow">Add Reward</Button>
+                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setEditingReward(null); }}>Cancel</Button>
+                  <Button type="submit" variant="glow">{editingReward ? 'Save Changes' : 'Add Reward'}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -232,23 +245,12 @@ export default function Rewards() {
                     <div className="w-16 h-16 rounded-xl bg-secondary flex items-center justify-center text-3xl">
                       {reward.image}
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <ItemActionsMenu
+                      itemName={reward.name}
+                      onEdit={() => handleEdit(reward)}
+                      onDelete={() => handleDelete(reward.id)}
+                      showInGroup
+                    />
                   </div>
                   <h3 className="font-semibold text-lg mb-1">{reward.name}</h3>
                   <p className="text-sm text-muted-foreground mb-4">{reward.description}</p>

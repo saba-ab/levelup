@@ -26,6 +26,7 @@ import { missions } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
+import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 
 const missionDetails = [
   { 
@@ -310,17 +311,25 @@ export default function Missions() {
                     <CardDescription>{mission.description}</CardDescription>
                   </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "capitalize",
-                    mission.status === 'active'
-                      ? "border-green-500/50 text-green-500 bg-green-500/10"
-                      : "border-amber-500/50 text-amber-500 bg-amber-500/10"
-                  )}
-                >
-                  {mission.status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "capitalize",
+                      mission.status === 'active'
+                        ? "border-green-500/50 text-green-500 bg-green-500/10"
+                        : "border-amber-500/50 text-amber-500 bg-amber-500/10"
+                    )}
+                  >
+                    {mission.status}
+                  </Badge>
+                  <ItemActionsMenu
+                    itemName={mission.name}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                    showInGroup
+                  />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
