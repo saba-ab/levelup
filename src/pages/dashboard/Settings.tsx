@@ -10,9 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, MoreHorizontal, Pencil, Trash2, Shield, Crown, Code, BarChart3, Settings2, Users } from 'lucide-react';
-
-type TeamRole = 'owner' | 'super_admin' | 'admin' | 'analyst' | 'program_manager' | 'developer';
+import { UserPlus, MoreHorizontal, Pencil, Trash2, Shield, Crown, Code, BarChart3, Settings2, Users, Lock } from 'lucide-react';
+import { TeamRole } from '@/lib/permissions';
 
 interface TeamMember {
   id: string;
@@ -40,7 +39,7 @@ const initialTeamMembers: TeamMember[] = [
 ];
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { toast } = useToast();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(initialTeamMembers);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -49,6 +48,9 @@ export default function Settings() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<TeamRole>('developer');
+
+  const canManageTeam = hasPermission('manage:team');
+  const canManageSettings = hasPermission('manage:settings');
 
   const handleSave = () => {
     toast({ title: 'Settings saved', description: 'Your changes have been saved successfully.' });
@@ -103,7 +105,10 @@ export default function Settings() {
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="team" disabled={!canManageTeam} className="gap-2">
+            Team
+            {!canManageTeam && <Lock className="h-3 w-3" />}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -130,7 +135,7 @@ export default function Settings() {
                   </Select>
                 </div>
               </div>
-              <Button variant="glow" onClick={handleSave}>Save Changes</Button>
+              <Button variant="glow" onClick={handleSave} disabled={!canManageSettings}>Save Changes</Button>
             </CardContent>
           </Card>
         </TabsContent>

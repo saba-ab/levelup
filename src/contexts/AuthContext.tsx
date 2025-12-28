@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { TeamRole, Permission, hasPermission, canAccessRoute } from '@/lib/permissions';
 
 interface User {
   id: string;
@@ -6,6 +7,7 @@ interface User {
   firstName: string;
   lastName: string;
   tenantName: string;
+  role: TeamRole;
 }
 
 interface AuthContextType {
@@ -15,6 +17,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
+  hasPermission: (permission: Permission) => boolean;
+  canAccessRoute: (path: string) => boolean;
+  setUserRole: (role: TeamRole) => void;
 }
 
 interface RegisterData {
@@ -44,13 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Mock successful login
+    // Mock successful login - default to owner role for demo
     const mockUser: User = {
       id: 'usr_001',
       email,
       firstName: 'Demo',
       lastName: 'User',
       tenantName: 'Demo Company',
+      role: 'owner',
     };
     
     setUser(mockUser);
@@ -67,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       firstName: data.firstName,
       lastName: data.lastName,
       tenantName: data.tenantName,
+      role: 'owner', // New registrations are owners
     };
     
     setUser(newUser);
@@ -78,6 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('levelupos_user');
   };
 
+  const checkPermission = (permission: Permission): boolean => {
+    return hasPermission(user?.role, permission);
+  };
+
+  const checkRouteAccess = (path: string): boolean => {
+    return canAccessRoute(user?.role, path);
+  };
+
+  const setUserRole = (role: TeamRole) => {
+    if (user) {
+      const updatedUser = { ...user, role };
+      setUser(updatedUser);
+      localStorage.setItem('levelupos_user', JSON.stringify(updatedUser));
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -86,6 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      hasPermission: checkPermission,
+      canAccessRoute: checkRouteAccess,
+      setUserRole,
     }}>
       {children}
     </AuthContext.Provider>

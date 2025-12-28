@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, Settings, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, Settings, CheckCircle, AlertCircle, AlertTriangle, Info, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { TeamRole } from '@/lib/permissions';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { notifications } from '@/lib/mockData';
+import { Badge } from '@/components/ui/badge';
 
 const breadcrumbMap: Record<string, string> = {
   '/': 'Overview',
@@ -35,6 +37,15 @@ const breadcrumbMap: Record<string, string> = {
   '/settings': 'Settings',
 };
 
+const roleLabels: Record<TeamRole, string> = {
+  owner: 'Owner',
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  analyst: 'Analyst',
+  program_manager: 'Program Manager',
+  developer: 'Developer',
+};
+
 interface HeaderProps {
   sidebarCollapsed: boolean;
   onOpenSearch?: () => void;
@@ -42,7 +53,7 @@ interface HeaderProps {
 
 export default function Header({ sidebarCollapsed, onOpenSearch }: HeaderProps) {
   const [environment, setEnvironment] = useState<'sandbox' | 'production'>('sandbox');
-  const { user, logout } = useAuth();
+  const { user, logout, setUserRole } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,6 +94,31 @@ export default function Header({ sidebarCollapsed, onOpenSearch }: HeaderProps) 
             <span className="text-xs">⌘</span>K
           </kbd>
         </button>
+
+        {/* Role Switcher (Demo) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2 h-8">
+              <Shield className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-xs">{user?.role ? roleLabels[user.role] : 'Role'}</span>
+              <ChevronDown className="w-3 h-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Switch Role (Demo)</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {(Object.keys(roleLabels) as TeamRole[]).map((role) => (
+              <DropdownMenuItem 
+                key={role} 
+                onClick={() => setUserRole(role)}
+                className={cn(user?.role === role && "bg-primary/10")}
+              >
+                <span className="flex-1">{roleLabels[role]}</span>
+                {user?.role === role && <Badge variant="secondary" className="text-[10px] px-1.5">Active</Badge>}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Environment Switcher */}
         <div className="flex items-center rounded-full bg-secondary/50 p-1">
