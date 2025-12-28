@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Flame, Clock, Gift, Users, Zap } from 'lucide-react';
+import { Plus, Flame, Clock, Gift, Users, Zap, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 
 const streaks = [
   { 
@@ -89,6 +90,12 @@ export default function Streaks() {
     setIsDialogOpen(false);
   };
 
+  // Connect this to your MySQL backend
+  const handleAIGenerate = async (prompt: string): Promise<string> => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return `Generated Streak Idea:\n\n"${prompt}"\n\nName: Consistency Champion\nDescription: Reward users for maintaining consistent engagement.\n\nMilestones:\n- 7 days: 100 XP + "Getting Started" badge\n- 30 days: 500 XP + "Dedicated" badge\n- 90 days: 2000 XP + "Streak Master" exclusive badge\n\nGrace Period: 12 hours\nInterval: Daily`;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -96,63 +103,77 @@ export default function Streaks() {
           <h1 className="text-3xl font-bold">Streaks</h1>
           <p className="text-muted-foreground mt-1">Configure streak mechanics and milestone rewards.</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="glow">
-              <Plus className="w-4 h-4" />
-              Create Streak
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <form onSubmit={handleCreate}>
-              <DialogHeader>
-                <DialogTitle>Create New Streak</DialogTitle>
-                <DialogDescription>Define a new streak mechanic for your users.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Streak Name</label>
-                  <Input placeholder="e.g., Daily Challenge Streak" required />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Description</label>
-                  <Input placeholder="What action maintains the streak?" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+        <div className="flex gap-2">
+          <AIGenerateDialog
+            trigger={
+              <Button variant="outline" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Generate with AI
+              </Button>
+            }
+            title="Generate Streak Ideas"
+            placeholder="E.g., Create a streak mechanic that encourages daily app usage with escalating rewards..."
+            context="Generate streak names, milestones, intervals, and reward structures"
+            onGenerate={handleAIGenerate}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="glow">
+                <Plus className="w-4 h-4" />
+                Create Streak
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleCreate}>
+                <DialogHeader>
+                  <DialogTitle>Create New Streak</DialogTitle>
+                  <DialogDescription>Define a new streak mechanic for your users.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Interval</label>
-                    <Select defaultValue="daily">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <label className="text-sm font-medium">Streak Name</label>
+                    <Input placeholder="e.g., Daily Challenge Streak" required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Description</label>
+                    <Input placeholder="What action maintains the streak?" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Interval</label>
+                      <Select defaultValue="daily">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Grace Period (hours)</label>
+                      <Input type="number" placeholder="12" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Trigger Event</label>
+                    <Select>
+                      <SelectTrigger><SelectValue placeholder="Select event" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="user_login">User Login</SelectItem>
+                        <SelectItem value="purchase_completed">Purchase Completed</SelectItem>
+                        <SelectItem value="workout_logged">Workout Logged</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Grace Period (hours)</label>
-                    <Input type="number" placeholder="12" />
-                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Trigger Event</label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Select event" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user_login">User Login</SelectItem>
-                      <SelectItem value="purchase_completed">Purchase Completed</SelectItem>
-                      <SelectItem value="workout_logged">Workout Logged</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" variant="glow">Create Streak</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit" variant="glow">Create Streak</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Stats Overview */}
