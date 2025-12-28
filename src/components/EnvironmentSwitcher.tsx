@@ -11,6 +11,7 @@ import {
 import { Server, ChevronUp, Check, Plus, Trash2, Globe, Code, TestTube, Laptop } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEnvironment, EnvironmentType } from '@/contexts/EnvironmentContext';
+import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 
 const envTypeConfig: Record<EnvironmentType, { icon: React.ReactNode; color: string }> = {
   production: { icon: <Globe className="h-3.5 w-3.5" />, color: 'bg-green-500/20 text-green-400 border-green-500/30' },
@@ -54,7 +55,8 @@ export default function EnvironmentSwitcher() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50">
+    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
+      <ConnectionStatusIndicator showLatency />
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
