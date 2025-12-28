@@ -34,6 +34,7 @@ import DocsOverview from "./pages/dashboard/docs/DocsOverview";
 import ApiReference from "./pages/dashboard/docs/ApiReference";
 import UserGuides from "./pages/dashboard/docs/UserGuides";
 import DeveloperDocs from "./pages/dashboard/docs/DeveloperDocs";
+import AIHub from "./pages/dashboard/AIHub";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +56,7 @@ const App = () => (
               {/* Dashboard Routes */}
               <Route path="/" element={<DashboardLayout />}>
                 <Route index element={<Overview />} />
+                <Route path="ai-hub" element={<AIHub />} />
                 <Route path="programs" element={<Programs />} />
                 <Route path="rules" element={<Rules />} />
                 <Route path="rules/new" element={<RuleBuilder />} />

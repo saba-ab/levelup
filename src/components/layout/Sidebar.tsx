@@ -26,6 +26,7 @@ import {
   Code,
   Book,
   Terminal,
+  Sparkles,
 } from 'lucide-react';
 
 interface NavItem {
@@ -33,10 +34,12 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   children?: { label: string; path: string; icon: React.ReactNode }[];
+  highlight?: boolean;
 }
 
 const navItems: NavItem[] = [
   { label: 'Overview', path: '/', icon: <LayoutDashboard className="w-5 h-5" /> },
+  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true },
   { label: 'Programs', path: '/programs', icon: <FolderOpen className="w-5 h-5" /> },
   { label: 'Rules', path: '/rules', icon: <GitBranch className="w-5 h-5" /> },
   {
@@ -168,12 +171,18 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   className={cn(
                     "nav-item",
                     collapsed && "justify-center",
-                    isActive(item.path) && "active"
+                    isActive(item.path) && "active",
+                    item.highlight && !isActive(item.path) && "text-primary"
                   )}
                   title={collapsed ? item.label : undefined}
                 >
                   {item.icon}
                   {!collapsed && <span>{item.label}</span>}
+                  {!collapsed && item.highlight && (
+                    <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                      NEW
+                    </span>
+                  )}
                 </Link>
               )}
             </li>
