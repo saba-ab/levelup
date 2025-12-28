@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trophy, Flame, Target, Calendar, TrendingUp, Award } from 'lucide-react';
+import { ArrowLeft, Trophy, Flame, Target, Calendar, TrendingUp, Award, Download, ImageIcon, FileText, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { players, badges, recentActivity } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const playerStats = {
   usr_001: { currentStreak: 12, longestStreak: 45, missionsCompleted: 28, badgesEarned: 8, totalActions: 1247 },
@@ -54,11 +58,57 @@ const playerActivity = {
 export default function PlayerProfile() {
   const { playerId } = useParams();
   const navigate = useNavigate();
+  const profileRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const player = players.find(p => p.id === playerId);
   const stats = playerStats[playerId as keyof typeof playerStats];
   const earnedBadgeIds = playerBadges[playerId as keyof typeof playerBadges] || [];
   const activity = playerActivity[playerId as keyof typeof playerActivity] || [];
+
+  const exportAsImage = async () => {
+    if (!profileRef.current) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(profileRef.current, {
+        backgroundColor: '#0a0a0a',
+        scale: 2,
+      });
+      const link = document.createElement('a');
+      link.download = `player-${playerId}-profile.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toast.success('Profile exported as image');
+    } catch (error) {
+      toast.error('Failed to export image');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportAsPDF = async () => {
+    if (!profileRef.current) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(profileRef.current, {
+        backgroundColor: '#0a0a0a',
+        scale: 2,
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`player-${playerId}-profile.pdf`);
+      toast.success('Profile exported as PDF');
+    } catch (error) {
+      toast.error('Failed to export PDF');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (!player) {
     return (
@@ -111,27 +161,48 @@ export default function PlayerProfile() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <Button variant="ghost" onClick={() => navigate('/players')} className="gap-2">
-        <ArrowLeft className="w-4 h-4" />
-        Back to Players
-      </Button>
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" onClick={() => navigate('/players')} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Players
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="gap-2" disabled={isExporting}>
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={exportAsImage} className="gap-2 cursor-pointer">
+              <ImageIcon className="w-4 h-4" />
+              Export as Image
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={exportAsPDF} className="gap-2 cursor-pointer">
+              <FileText className="w-4 h-4" />
+              Export as PDF
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-      {/* Player Header */}
-      <div className="flex items-start gap-6">
-        <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center text-3xl font-bold">
-          {player.email[0].toUpperCase()}
-        </div>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold">{player.email}</h1>
-          <p className="text-muted-foreground font-mono text-sm mt-1">{player.id}</p>
-          <div className="flex items-center gap-4 mt-3">
-            <Badge variant="outline" className={cn("capitalize text-sm px-3 py-1", getLevelColor(player.level))}>
-              {player.level}
-            </Badge>
-            <span className="text-muted-foreground text-sm">Last active: {player.lastActive}</span>
+      <div ref={profileRef} className="space-y-6 p-4 -m-4">
+        {/* Player Header */}
+        <div className="flex items-start gap-6">
+          <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center text-3xl font-bold">
+            {player.email[0].toUpperCase()}
+          </div>
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold">{player.email}</h1>
+            <p className="text-muted-foreground font-mono text-sm mt-1">{player.id}</p>
+            <div className="flex items-center gap-4 mt-3">
+              <Badge variant="outline" className={cn("capitalize text-sm px-3 py-1", getLevelColor(player.level))}>
+                {player.level}
+              </Badge>
+              <span className="text-muted-foreground text-sm">Last active: {player.lastActive}</span>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* XP Progress */}
       <Card>
@@ -251,6 +322,7 @@ export default function PlayerProfile() {
             )}
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   );
