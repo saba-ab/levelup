@@ -1,13 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { levels } from '@/lib/mockData';
-import { TrendingUp, Users, Sparkles } from 'lucide-react';
+import { TrendingUp, Users, Sparkles, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Levels() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
+
   const getTierColor = (tier: string) => {
     switch (tier) {
       case 'bronze': return 'bg-amber-700';
@@ -21,13 +42,17 @@ export default function Levels() {
 
   const totalUsers = levels.reduce((sum, level) => sum + level.usersCount, 0);
 
+  const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    toast({
+      title: 'Level created',
+      description: 'New level has been added successfully.',
+    });
+    setIsDialogOpen(false);
+  };
+
   // Connect this to your MySQL backend
   const handleAIGenerate = async (prompt: string): Promise<string> => {
-    // Replace with your API call to MySQL backend
-    // Example: const response = await fetch('/api/ai/generate', { method: 'POST', body: JSON.stringify({ prompt, type: 'level' }) });
-    // return response.json();
-    
-    // Placeholder for demo
     await new Promise(resolve => setTimeout(resolve, 1500));
     return `Generated Level Description:\n\n"${prompt}"\n\nThis tier rewards dedicated players who have shown consistent engagement. Members enjoy exclusive perks including early access to new features, special badges, and priority support.`;
   };
@@ -40,18 +65,73 @@ export default function Levels() {
           <h1 className="text-3xl font-bold">Levels & Tiers</h1>
           <p className="text-muted-foreground mt-1">Define progression levels for your users.</p>
         </div>
-        <AIGenerateDialog
-          trigger={
-            <Button className="gap-2">
-              <Sparkles className="w-4 h-4" />
-              Generate with AI
-            </Button>
-          }
-          title="Generate Level Content"
-          placeholder="E.g., Create a description for a Diamond tier level that makes players feel elite..."
-          context="Generate level descriptions, tier benefits, or progression milestones"
-          onGenerate={handleAIGenerate}
-        />
+        <div className="flex gap-2">
+          <AIGenerateDialog
+            trigger={
+              <Button variant="outline" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Generate with AI
+              </Button>
+            }
+            title="Generate Level Content"
+            placeholder="E.g., Create a description for a Diamond tier level that makes players feel elite..."
+            context="Generate level descriptions, tier benefits, or progression milestones"
+            onGenerate={handleAIGenerate}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="glow">
+                <Plus className="w-4 h-4" />
+                Create Level
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleCreate}>
+                <DialogHeader>
+                  <DialogTitle>Create New Level</DialogTitle>
+                  <DialogDescription>
+                    Define a new progression level for your users.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Level Name</label>
+                    <Input placeholder="e.g., Elite Champion" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Tier</label>
+                      <Select>
+                        <SelectTrigger><SelectValue placeholder="Select tier" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bronze">Bronze</SelectItem>
+                          <SelectItem value="silver">Silver</SelectItem>
+                          <SelectItem value="gold">Gold</SelectItem>
+                          <SelectItem value="platinum">Platinum</SelectItem>
+                          <SelectItem value="diamond">Diamond</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">XP Threshold</label>
+                      <Input type="number" placeholder="5000" required />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Description</label>
+                    <Input placeholder="What benefits does this level unlock?" />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="glow">Create Level</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Level Progression Visualization */}
