@@ -13,26 +13,43 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { badges } from '@/lib/mockData';
+import { badges as initialBadges } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
+import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 
 export default function Badges() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [badgesList, setBadgesList] = useState(initialBadges);
+  const [editingBadge, setEditingBadge] = useState<typeof initialBadges[0] | null>(null);
   const { toast } = useToast();
 
-  const filteredBadges = badges.filter(badge =>
+  const filteredBadges = badgesList.filter(badge =>
     badge.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     toast({
-      title: 'Badge created',
-      description: 'New badge has been created successfully.',
+      title: editingBadge ? 'Badge updated' : 'Badge created',
+      description: editingBadge ? 'Badge has been updated successfully.' : 'New badge has been created successfully.',
     });
     setIsDialogOpen(false);
+    setEditingBadge(null);
+  };
+
+  const handleEdit = (badge: typeof initialBadges[0]) => {
+    setEditingBadge(badge);
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setBadgesList(prev => prev.filter(b => b.id !== id));
+    toast({
+      title: 'Badge deleted',
+      description: 'Badge has been removed successfully.',
+    });
   };
 
   // Connect this to your MySQL backend
@@ -62,7 +79,7 @@ export default function Badges() {
             context="Generate badge names, descriptions, and icon suggestions"
             onGenerate={handleAIGenerate}
           />
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setEditingBadge(null); }}>
             <DialogTrigger asChild>
               <Button variant="glow">
                 <Plus className="w-4 h-4" />
@@ -72,30 +89,30 @@ export default function Badges() {
             <DialogContent>
               <form onSubmit={handleCreate}>
                 <DialogHeader>
-                  <DialogTitle>Create New Badge</DialogTitle>
+                  <DialogTitle>{editingBadge ? 'Edit Badge' : 'Create New Badge'}</DialogTitle>
                   <DialogDescription>
-                    Design a new achievement badge for your users.
+                    {editingBadge ? 'Update the badge details.' : 'Design a new achievement badge for your users.'}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Badge Name</label>
-                    <Input placeholder="e.g., Super Achiever" required />
+                    <Input placeholder="e.g., Super Achiever" defaultValue={editingBadge?.name} required />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Description</label>
-                    <Input placeholder="What does the user need to do?" />
+                    <Input placeholder="What does the user need to do?" defaultValue={editingBadge?.description} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Icon (emoji)</label>
-                    <Input placeholder="e.g., 🏆" />
+                    <Input placeholder="e.g., 🏆" defaultValue={editingBadge?.icon} />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setEditingBadge(null); }}>
                     Cancel
                   </Button>
-                  <Button type="submit" variant="glow">Create Badge</Button>
+                  <Button type="submit" variant="glow">{editingBadge ? 'Save Changes' : 'Create Badge'}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -119,10 +136,18 @@ export default function Badges() {
         {filteredBadges.map((badge, index) => (
           <Card
             key={badge.id}
-            className="stat-card group cursor-pointer"
+            className="stat-card group"
             style={{ animationDelay: `${index * 50}ms` }}
           >
-            <CardContent className="p-6 text-center">
+            <CardContent className="p-6 text-center relative">
+              <div className="absolute top-2 right-2">
+                <ItemActionsMenu
+                  itemName={badge.name}
+                  onEdit={() => handleEdit(badge)}
+                  onDelete={() => handleDelete(badge.id)}
+                  showInGroup
+                />
+              </div>
               <div
                 className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl transition-transform group-hover:scale-110"
                 style={{ backgroundColor: `${badge.color}20` }}

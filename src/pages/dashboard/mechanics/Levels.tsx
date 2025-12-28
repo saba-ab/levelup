@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { levels } from '@/lib/mockData';
+import { levels as initialLevels } from '@/lib/mockData';
 import { TrendingUp, Users, Sparkles, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
+import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,8 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function Levels() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [levelsList, setLevelsList] = useState(initialLevels);
+  const [editingLevel, setEditingLevel] = useState<typeof initialLevels[0] | null>(null);
   const { toast } = useToast();
 
   const getTierColor = (tier: string) => {
@@ -40,15 +43,29 @@ export default function Levels() {
     }
   };
 
-  const totalUsers = levels.reduce((sum, level) => sum + level.usersCount, 0);
+  const totalUsers = levelsList.reduce((sum, level) => sum + level.usersCount, 0);
 
   const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     toast({
-      title: 'Level created',
-      description: 'New level has been added successfully.',
+      title: editingLevel ? 'Level updated' : 'Level created',
+      description: editingLevel ? 'Level has been updated successfully.' : 'New level has been added successfully.',
     });
     setIsDialogOpen(false);
+    setEditingLevel(null);
+  };
+
+  const handleEdit = (level: typeof initialLevels[0]) => {
+    setEditingLevel(level);
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setLevelsList(prev => prev.filter(l => l.id !== id));
+    toast({
+      title: 'Level deleted',
+      description: 'Level has been removed successfully.',
+    });
   };
 
   // Connect this to your MySQL backend
@@ -78,7 +95,7 @@ export default function Levels() {
             context="Generate level descriptions, tier benefits, or progression milestones"
             onGenerate={handleAIGenerate}
           />
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setEditingLevel(null); }}>
             <DialogTrigger asChild>
               <Button variant="glow">
                 <Plus className="w-4 h-4" />
@@ -88,20 +105,20 @@ export default function Levels() {
             <DialogContent>
               <form onSubmit={handleCreate}>
                 <DialogHeader>
-                  <DialogTitle>Create New Level</DialogTitle>
+                  <DialogTitle>{editingLevel ? 'Edit Level' : 'Create New Level'}</DialogTitle>
                   <DialogDescription>
-                    Define a new progression level for your users.
+                    {editingLevel ? 'Update the level details.' : 'Define a new progression level for your users.'}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Level Name</label>
-                    <Input placeholder="e.g., Elite Champion" required />
+                    <Input placeholder="e.g., Elite Champion" defaultValue={editingLevel?.name} required />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Tier</label>
-                      <Select>
+                      <Select defaultValue={editingLevel?.tier}>
                         <SelectTrigger><SelectValue placeholder="Select tier" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="bronze">Bronze</SelectItem>
@@ -114,7 +131,7 @@ export default function Levels() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">XP Threshold</label>
-                      <Input type="number" placeholder="5000" required />
+                      <Input type="number" placeholder="5000" defaultValue={editingLevel?.xpThreshold} required />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -123,10 +140,10 @@ export default function Levels() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setEditingLevel(null); }}>
                     Cancel
                   </Button>
-                  <Button type="submit" variant="glow">Create Level</Button>
+                  <Button type="submit" variant="glow">{editingLevel ? 'Save Changes' : 'Create Level'}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -144,7 +161,7 @@ export default function Levels() {
             {/* Progress Track */}
             <div className="h-3 bg-secondary rounded-full overflow-hidden">
               <div className="h-full flex">
-                {levels.map((level, index) => (
+                {levelsList.map((level, index) => (
                   <div
                     key={level.id}
                     className={cn("h-full", getTierColor(level.tier))}
@@ -156,7 +173,7 @@ export default function Levels() {
             
             {/* Level Markers */}
             <div className="flex justify-between mt-4">
-              {levels.map((level) => (
+              {levelsList.map((level) => (
                 <div key={level.id} className="text-center">
                   <div
                     className={cn(
@@ -187,11 +204,12 @@ export default function Levels() {
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">XP Threshold</th>
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Users</th>
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Distribution</th>
+                  <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {levels.map((level) => (
-                  <tr key={level.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                {levelsList.map((level) => (
+                  <tr key={level.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div
@@ -233,6 +251,14 @@ export default function Levels() {
                       <span className="text-xs text-muted-foreground">
                         {((level.usersCount / totalUsers) * 100).toFixed(1)}%
                       </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      <ItemActionsMenu
+                        itemName={level.name}
+                        onEdit={() => handleEdit(level)}
+                        onDelete={() => handleDelete(level.id)}
+                        showInGroup
+                      />
                     </td>
                   </tr>
                 ))}

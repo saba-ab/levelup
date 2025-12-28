@@ -23,6 +23,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
+import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 
 const streaks = [
   { 
@@ -236,7 +237,15 @@ export default function Streaks() {
                       <CardDescription>{streak.description}</CardDescription>
                     </div>
                   </div>
-                  <Badge variant="outline" className="capitalize">{streak.interval}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="capitalize">{streak.interval}</Badge>
+                    <ItemActionsMenu
+                      itemName={streak.name}
+                      onEdit={() => {}}
+                      onDelete={() => {}}
+                      showInGroup
+                    />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
