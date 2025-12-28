@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users as UsersIcon } from 'lucide-react';
+import { Search, Users as UsersIcon, GitCompare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { players } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
 export default function Players() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const navigate = useNavigate();
 
   const filteredPlayers = players.filter(player =>
@@ -26,11 +29,42 @@ export default function Players() {
     }
   };
 
+  const togglePlayerSelection = (playerId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedPlayers(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], playerId];
+      }
+      return [...prev, playerId];
+    });
+  };
+
+  const handleCompare = () => {
+    if (selectedPlayers.length === 2) {
+      navigate(`/players/compare?players=${selectedPlayers.join(',')}`);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold">Players</h1>
-        <p className="text-muted-foreground mt-1">View and manage your platform players.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Players</h1>
+          <p className="text-muted-foreground mt-1">View and manage your platform players.</p>
+        </div>
+        {selectedPlayers.length > 0 && (
+          <Button 
+            onClick={handleCompare} 
+            disabled={selectedPlayers.length !== 2}
+            className="gap-2"
+          >
+            <GitCompare className="w-4 h-4" />
+            Compare ({selectedPlayers.length}/2)
+          </Button>
+        )}
       </div>
 
       <div className="relative max-w-md">
@@ -43,6 +77,7 @@ export default function Players() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
+                <th className="w-12 p-4"></th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Player</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Level</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Total XP</th>
@@ -56,6 +91,13 @@ export default function Players() {
                   className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer"
                   onClick={() => navigate(`/players/${player.id}`)}
                 >
+                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox 
+                      checked={selectedPlayers.includes(player.id)}
+                      onCheckedChange={() => {}}
+                      onClick={(e) => togglePlayerSelection(player.id, e)}
+                    />
+                  </td>
                   <td className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
