@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
       { label: 'Rewards', path: '/mechanics/rewards', icon: <Gift className="w-4 h-4" /> },
     ],
   },
-  { label: 'Users', path: '/users', icon: <Users className="w-5 h-5" /> },
+  { label: 'Players', path: '/players', icon: <Users className="w-5 h-5" /> },
   { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" /> },
   { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" /> },
   { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" /> },

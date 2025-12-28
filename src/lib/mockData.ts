@@ -91,7 +91,7 @@ export const eventTypesData = [
   { name: 'Other', value: 10, color: '#64748B' },
 ];
 
-export const users = [
+export const players = [
   { id: 'usr_001', email: 'alex.chen@email.com', level: 'Diamond', totalXp: 125400, lastActive: '2024-03-20' },
   { id: 'usr_002', email: 'sarah.miller@email.com', level: 'Platinum', totalXp: 48200, lastActive: '2024-03-20' },
   { id: 'usr_003', email: 'james.wilson@email.com', level: 'Gold', totalXp: 12800, lastActive: '2024-03-19' },
