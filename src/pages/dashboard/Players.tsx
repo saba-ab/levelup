@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Users as UsersIcon } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { cn } from '@/lib/utils';
 
 export default function Players() {
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
 
   const filteredPlayers = players.filter(player =>
     player.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -49,7 +51,11 @@ export default function Players() {
             </thead>
             <tbody>
               {filteredPlayers.map((player) => (
-                <tr key={player.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
+                <tr 
+                  key={player.id} 
+                  className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/players/${player.id}`)}
+                >
                   <td className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
