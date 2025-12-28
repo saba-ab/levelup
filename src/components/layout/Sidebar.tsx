@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { Permission } from '@/lib/permissions';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -33,47 +35,50 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
-  children?: { label: string; path: string; icon: React.ReactNode }[];
+  permission: Permission;
+  children?: { label: string; path: string; icon: React.ReactNode; permission: Permission }[];
   highlight?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { label: 'Overview', path: '/', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true },
-  { label: 'Programs', path: '/programs', icon: <FolderOpen className="w-5 h-5" /> },
-  { label: 'Rules', path: '/rules', icon: <GitBranch className="w-5 h-5" /> },
+  { label: 'Overview', path: '/', icon: <LayoutDashboard className="w-5 h-5" />, permission: 'view:overview' },
+  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true, permission: 'view:ai-hub' },
+  { label: 'Programs', path: '/programs', icon: <FolderOpen className="w-5 h-5" />, permission: 'view:programs' },
+  { label: 'Rules', path: '/rules', icon: <GitBranch className="w-5 h-5" />, permission: 'view:rules' },
   {
     label: 'Mechanics',
     path: '/mechanics',
     icon: <Gamepad2 className="w-5 h-5" />,
+    permission: 'view:mechanics',
     children: [
-      { label: 'Points & Wallets', path: '/mechanics/points', icon: <Coins className="w-4 h-4" /> },
-      { label: 'Badges', path: '/mechanics/badges', icon: <Award className="w-4 h-4" /> },
-      { label: 'Levels', path: '/mechanics/levels', icon: <TrendingUp className="w-4 h-4" /> },
-      { label: 'Missions', path: '/mechanics/missions', icon: <Target className="w-4 h-4" /> },
-      { label: 'Streaks', path: '/mechanics/streaks', icon: <Flame className="w-4 h-4" /> },
-      { label: 'Leaderboards', path: '/mechanics/leaderboards', icon: <Trophy className="w-4 h-4" /> },
-      { label: 'Rewards', path: '/mechanics/rewards', icon: <Gift className="w-4 h-4" /> },
+      { label: 'Points & Wallets', path: '/mechanics/points', icon: <Coins className="w-4 h-4" />, permission: 'view:mechanics' },
+      { label: 'Badges', path: '/mechanics/badges', icon: <Award className="w-4 h-4" />, permission: 'view:mechanics' },
+      { label: 'Levels', path: '/mechanics/levels', icon: <TrendingUp className="w-4 h-4" />, permission: 'view:mechanics' },
+      { label: 'Missions', path: '/mechanics/missions', icon: <Target className="w-4 h-4" />, permission: 'view:mechanics' },
+      { label: 'Streaks', path: '/mechanics/streaks', icon: <Flame className="w-4 h-4" />, permission: 'view:mechanics' },
+      { label: 'Leaderboards', path: '/mechanics/leaderboards', icon: <Trophy className="w-4 h-4" />, permission: 'view:mechanics' },
+      { label: 'Rewards', path: '/mechanics/rewards', icon: <Gift className="w-4 h-4" />, permission: 'view:mechanics' },
     ],
   },
-  { label: 'Players', path: '/players', icon: <Users className="w-5 h-5" /> },
-  { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" /> },
-  { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" /> },
-  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" /> },
-  { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" /> },
+  { label: 'Players', path: '/players', icon: <Users className="w-5 h-5" />, permission: 'view:players' },
+  { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" />, permission: 'view:segments' },
+  { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" />, permission: 'view:analytics' },
+  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" />, permission: 'view:notifications' },
+  { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" />, permission: 'view:integrations' },
   {
     label: 'Documentation',
     path: '/docs',
     icon: <BookOpen className="w-5 h-5" />,
+    permission: 'view:docs',
     children: [
-      { label: 'Overview', path: '/docs', icon: <Book className="w-4 h-4" /> },
-      { label: 'API Reference', path: '/docs/api', icon: <Code className="w-4 h-4" /> },
-      { label: 'User Guides', path: '/docs/guides', icon: <BookOpen className="w-4 h-4" /> },
-      { label: 'Developer Docs', path: '/docs/developer', icon: <Terminal className="w-4 h-4" /> },
+      { label: 'Overview', path: '/docs', icon: <Book className="w-4 h-4" />, permission: 'view:docs' },
+      { label: 'API Reference', path: '/docs/api', icon: <Code className="w-4 h-4" />, permission: 'view:docs' },
+      { label: 'User Guides', path: '/docs/guides', icon: <BookOpen className="w-4 h-4" />, permission: 'view:docs' },
+      { label: 'Developer Docs', path: '/docs/developer', icon: <Terminal className="w-4 h-4" />, permission: 'view:docs' },
     ],
   },
-  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" /> },
-  { label: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" /> },
+  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" />, permission: 'view:audit-logs' },
+  { label: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" />, permission: 'view:settings' },
 ];
 
 interface SidebarProps {
@@ -83,6 +88,7 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
+  const { hasPermission } = useAuth();
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Mechanics']);
 
   const toggleMenu = (label: string) => {
@@ -97,6 +103,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
+
+  // Filter nav items based on permissions
+  const filteredNavItems = navItems.filter(item => hasPermission(item.permission));
 
   return (
     <aside
@@ -121,72 +130,77 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2">
         <ul className="space-y-1">
-          {navItems.map((item) => (
-            <li key={item.label}>
-              {item.children ? (
-                <div>
-                  <button
-                    onClick={() => !collapsed && toggleMenu(item.label)}
+          {filteredNavItems.map((item) => {
+            // Filter children based on permissions
+            const filteredChildren = item.children?.filter(child => hasPermission(child.permission));
+            
+            return (
+              <li key={item.label}>
+                {filteredChildren && filteredChildren.length > 0 ? (
+                  <div>
+                    <button
+                      onClick={() => !collapsed && toggleMenu(item.label)}
+                      className={cn(
+                        "w-full nav-item",
+                        collapsed ? "justify-center" : "justify-between",
+                        isActive(item.path) && "active"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        {item.icon}
+                        {!collapsed && <span>{item.label}</span>}
+                      </div>
+                      {!collapsed && (
+                        <ChevronDown
+                          className={cn(
+                            "w-4 h-4 transition-transform",
+                            expandedMenus.includes(item.label) && "rotate-180"
+                          )}
+                        />
+                      )}
+                    </button>
+                    {!collapsed && expandedMenus.includes(item.label) && (
+                      <ul className="mt-1 ml-4 border-l border-border/50 pl-3 space-y-1">
+                        {filteredChildren.map((child) => (
+                          <li key={child.path}>
+                            <Link
+                              to={child.path}
+                              className={cn(
+                                "nav-item text-sm",
+                                isActive(child.path) && "active"
+                              )}
+                            >
+                              {child.icon}
+                              <span>{child.label}</span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : !item.children ? (
+                  <Link
+                    to={item.path}
                     className={cn(
-                      "w-full nav-item",
-                      collapsed ? "justify-center" : "justify-between",
-                      isActive(item.path) && "active"
+                      "nav-item",
+                      collapsed && "justify-center",
+                      isActive(item.path) && "active",
+                      item.highlight && !isActive(item.path) && "text-primary"
                     )}
+                    title={collapsed ? item.label : undefined}
                   >
-                    <div className="flex items-center gap-3">
-                      {item.icon}
-                      {!collapsed && <span>{item.label}</span>}
-                    </div>
-                    {!collapsed && (
-                      <ChevronDown
-                        className={cn(
-                          "w-4 h-4 transition-transform",
-                          expandedMenus.includes(item.label) && "rotate-180"
-                        )}
-                      />
+                    {item.icon}
+                    {!collapsed && <span>{item.label}</span>}
+                    {!collapsed && item.highlight && (
+                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                        NEW
+                      </span>
                     )}
-                  </button>
-                  {!collapsed && expandedMenus.includes(item.label) && (
-                    <ul className="mt-1 ml-4 border-l border-border/50 pl-3 space-y-1">
-                      {item.children.map((child) => (
-                        <li key={child.path}>
-                          <Link
-                            to={child.path}
-                            className={cn(
-                              "nav-item text-sm",
-                              isActive(child.path) && "active"
-                            )}
-                          >
-                            {child.icon}
-                            <span>{child.label}</span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : (
-                <Link
-                  to={item.path}
-                  className={cn(
-                    "nav-item",
-                    collapsed && "justify-center",
-                    isActive(item.path) && "active",
-                    item.highlight && !isActive(item.path) && "text-primary"
-                  )}
-                  title={collapsed ? item.label : undefined}
-                >
-                  {item.icon}
-                  {!collapsed && <span>{item.label}</span>}
-                  {!collapsed && item.highlight && (
-                    <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                      NEW
-                    </span>
-                  )}
-                </Link>
-              )}
-            </li>
-          ))}
+                  </Link>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
