@@ -1,9 +1,11 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { levels } from '@/lib/mockData';
-import { TrendingUp, Users } from 'lucide-react';
+import { TrendingUp, Users, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 
 export default function Levels() {
   const getTierColor = (tier: string) => {
@@ -19,6 +21,17 @@ export default function Levels() {
 
   const totalUsers = levels.reduce((sum, level) => sum + level.usersCount, 0);
 
+  // Connect this to your MySQL backend
+  const handleAIGenerate = async (prompt: string): Promise<string> => {
+    // Replace with your API call to MySQL backend
+    // Example: const response = await fetch('/api/ai/generate', { method: 'POST', body: JSON.stringify({ prompt, type: 'level' }) });
+    // return response.json();
+    
+    // Placeholder for demo
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return `Generated Level Description:\n\n"${prompt}"\n\nThis tier rewards dedicated players who have shown consistent engagement. Members enjoy exclusive perks including early access to new features, special badges, and priority support.`;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
@@ -27,6 +40,18 @@ export default function Levels() {
           <h1 className="text-3xl font-bold">Levels & Tiers</h1>
           <p className="text-muted-foreground mt-1">Define progression levels for your users.</p>
         </div>
+        <AIGenerateDialog
+          trigger={
+            <Button className="gap-2">
+              <Sparkles className="w-4 h-4" />
+              Generate with AI
+            </Button>
+          }
+          title="Generate Level Content"
+          placeholder="E.g., Create a description for a Diamond tier level that makes players feel elite..."
+          context="Generate level descriptions, tier benefits, or progression milestones"
+          onGenerate={handleAIGenerate}
+        />
       </div>
 
       {/* Level Progression Visualization */}
