@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Target, Calendar, Users, ChevronRight, Check } from 'lucide-react';
+import { Plus, Search, Target, Calendar, Users, ChevronRight, Check, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
 import { missions } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 
 const missionDetails = [
   { 
@@ -96,6 +97,12 @@ export default function Missions() {
     setWizardStep(1);
   };
 
+  // Connect this to your MySQL backend
+  const handleAIGenerate = async (prompt: string): Promise<string> => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return `Generated Mission Idea:\n\n"${prompt}"\n\nName: Challenge Champion\nDescription: A multi-step mission that drives engagement.\n\nObjectives:\n1. Complete your daily check-in\n2. Engage with 3 community posts\n3. Refer a friend to the platform\n\nSuggested Rewards:\n- 750 XP\n- Exclusive "Champion" badge`;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -103,158 +110,172 @@ export default function Missions() {
           <h1 className="text-3xl font-bold">Missions</h1>
           <p className="text-muted-foreground mt-1">Create and manage user missions and objectives.</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setWizardStep(1); }}>
-          <DialogTrigger asChild>
-            <Button variant="glow">
-              <Plus className="w-4 h-4" />
-              Create Mission
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Create New Mission</DialogTitle>
-              <DialogDescription>Step {wizardStep} of 4</DialogDescription>
-            </DialogHeader>
-            
-            {/* Progress Steps */}
-            <div className="flex items-center justify-center gap-2 py-4">
-              {[1, 2, 3, 4].map((step) => (
-                <React.Fragment key={step}>
-                  <div className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all",
-                    step < wizardStep ? "bg-primary text-primary-foreground" :
-                    step === wizardStep ? "bg-primary text-primary-foreground" :
-                    "bg-secondary text-muted-foreground"
-                  )}>
-                    {step < wizardStep ? <Check className="w-5 h-5" /> : step}
-                  </div>
-                  {step < 4 && (
-                    <div className={cn(
-                      "w-12 h-1 rounded-full transition-all",
-                      step < wizardStep ? "bg-primary" : "bg-secondary"
-                    )} />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-
-            <div className="py-4">
-              {wizardStep === 1 && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Basic Information</h3>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Mission Name</label>
-                    <Input placeholder="e.g., Spring Challenge" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Description</label>
-                    <Textarea placeholder="Describe what users need to do..." rows={3} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Mission Type</label>
-                    <Select defaultValue="one-time">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="one-time">One-time</SelectItem>
-                        <SelectItem value="recurring">Recurring</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {wizardStep === 2 && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Objectives</h3>
-                  <p className="text-sm text-muted-foreground">Define what users need to complete.</p>
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <Input placeholder="Objective 1: e.g., Complete your profile" className="flex-1" />
-                      <Button variant="ghost" size="icon"><Plus className="w-4 h-4" /></Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input placeholder="Objective 2: e.g., Make a purchase" className="flex-1" />
-                      <Button variant="ghost" size="icon"><Plus className="w-4 h-4" /></Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input placeholder="Objective 3: e.g., Invite a friend" className="flex-1" />
-                      <Button variant="ghost" size="icon"><Plus className="w-4 h-4" /></Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {wizardStep === 3 && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Rewards</h3>
-                  <p className="text-sm text-muted-foreground">Set rewards for completing the mission.</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">XP Reward</label>
-                      <Input type="number" placeholder="500" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Coins Reward</label>
-                      <Input type="number" placeholder="100" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Badge Reward (Optional)</label>
-                    <Select>
-                      <SelectTrigger><SelectValue placeholder="Select a badge" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="first_steps">First Steps</SelectItem>
-                        <SelectItem value="power_user">Power User</SelectItem>
-                        <SelectItem value="streak_master">Streak Master</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {wizardStep === 4 && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Schedule</h3>
-                  <p className="text-sm text-muted-foreground">Set when the mission is available.</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Start Date</label>
-                      <Input type="date" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">End Date</label>
-                      <Input type="date" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Timezone</label>
-                    <Select defaultValue="UTC">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="UTC">UTC</SelectItem>
-                        <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                        <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              {wizardStep > 1 && (
-                <Button type="button" variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>
-                  Back
-                </Button>
-              )}
-              <Button type="button" variant="outline" onClick={resetWizard}>Cancel</Button>
-              <Button type="button" variant="glow" onClick={handleCreate}>
-                {wizardStep === 4 ? 'Create Mission' : 'Continue'}
-                {wizardStep < 4 && <ChevronRight className="w-4 h-4 ml-1" />}
+        <div className="flex gap-2">
+          <AIGenerateDialog
+            trigger={
+              <Button variant="outline" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Generate with AI
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            }
+            title="Generate Mission Ideas"
+            placeholder="E.g., Create a weekly mission that encourages social engagement..."
+            context="Generate mission names, objectives, and reward structures"
+            onGenerate={handleAIGenerate}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setWizardStep(1); }}>
+            <DialogTrigger asChild>
+              <Button variant="glow">
+                <Plus className="w-4 h-4" />
+                Create Mission
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Create New Mission</DialogTitle>
+                <DialogDescription>Step {wizardStep} of 4</DialogDescription>
+              </DialogHeader>
+              
+              {/* Progress Steps */}
+              <div className="flex items-center justify-center gap-2 py-4">
+                {[1, 2, 3, 4].map((step) => (
+                  <React.Fragment key={step}>
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all",
+                      step < wizardStep ? "bg-primary text-primary-foreground" :
+                      step === wizardStep ? "bg-primary text-primary-foreground" :
+                      "bg-secondary text-muted-foreground"
+                    )}>
+                      {step < wizardStep ? <Check className="w-5 h-5" /> : step}
+                    </div>
+                    {step < 4 && (
+                      <div className={cn(
+                        "w-12 h-1 rounded-full transition-all",
+                        step < wizardStep ? "bg-primary" : "bg-secondary"
+                      )} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              <div className="py-4">
+                {wizardStep === 1 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Basic Information</h3>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Mission Name</label>
+                      <Input placeholder="e.g., Spring Challenge" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Description</label>
+                      <Textarea placeholder="Describe what users need to do..." rows={3} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Mission Type</label>
+                      <Select defaultValue="one-time">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="one-time">One-time</SelectItem>
+                          <SelectItem value="recurring">Recurring</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {wizardStep === 2 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Objectives</h3>
+                    <p className="text-sm text-muted-foreground">Define what users need to complete.</p>
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Input placeholder="Objective 1: e.g., Complete your profile" className="flex-1" />
+                        <Button variant="ghost" size="icon"><Plus className="w-4 h-4" /></Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input placeholder="Objective 2: e.g., Make a purchase" className="flex-1" />
+                        <Button variant="ghost" size="icon"><Plus className="w-4 h-4" /></Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input placeholder="Objective 3: e.g., Invite a friend" className="flex-1" />
+                        <Button variant="ghost" size="icon"><Plus className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {wizardStep === 3 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Rewards</h3>
+                    <p className="text-sm text-muted-foreground">Set rewards for completing the mission.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">XP Reward</label>
+                        <Input type="number" placeholder="500" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Coins Reward</label>
+                        <Input type="number" placeholder="100" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Badge Reward (Optional)</label>
+                      <Select>
+                        <SelectTrigger><SelectValue placeholder="Select a badge" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="first_steps">First Steps</SelectItem>
+                          <SelectItem value="power_user">Power User</SelectItem>
+                          <SelectItem value="streak_master">Streak Master</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {wizardStep === 4 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Schedule</h3>
+                    <p className="text-sm text-muted-foreground">Set when the mission is available.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Start Date</label>
+                        <Input type="date" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">End Date</label>
+                        <Input type="date" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Timezone</label>
+                      <Select defaultValue="UTC">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="UTC">UTC</SelectItem>
+                          <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                          <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                {wizardStep > 1 && (
+                  <Button type="button" variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>
+                    Back
+                  </Button>
+                )}
+                <Button type="button" variant="outline" onClick={resetWizard}>Cancel</Button>
+                <Button type="button" variant="glow" onClick={handleCreate}>
+                  {wizardStep === 4 ? 'Create Mission' : 'Continue'}
+                  {wizardStep < 4 && <ChevronRight className="w-4 h-4 ml-1" />}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search */}

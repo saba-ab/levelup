@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Gift, ShoppingCart, Package, Clock, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Gift, ShoppingCart, Package, Clock, MoreHorizontal, Pencil, Trash2, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ import {
 import { rewards } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 
 const rewardsData = [
   { id: '1', name: 'Free Shipping', description: 'Free shipping on your next order', cost: 500, stock: 'unlimited', redemptions: 1234, image: '📦', category: 'shipping' },
@@ -67,6 +68,12 @@ export default function Rewards() {
     setIsDialogOpen(false);
   };
 
+  // Connect this to your MySQL backend
+  const handleAIGenerate = async (prompt: string): Promise<string> => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return `Generated Reward Idea:\n\n"${prompt}"\n\nName: Exclusive Perk\nDescription: A unique reward that drives user engagement.\nSuggested cost: 2,500 points\nCategory: Access/Perks\nIcon: ✨`;
+  };
+
   const totalRedemptions = rewardsData.reduce((sum, r) => sum + r.redemptions, 0);
 
   return (
@@ -76,69 +83,83 @@ export default function Rewards() {
           <h1 className="text-3xl font-bold">Rewards Catalog</h1>
           <p className="text-muted-foreground mt-1">Manage rewards and track redemptions.</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="glow">
-              <Plus className="w-4 h-4" />
-              Add Reward
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <form onSubmit={handleCreate}>
-              <DialogHeader>
-                <DialogTitle>Add New Reward</DialogTitle>
-                <DialogDescription>Create a new reward for your users to redeem.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Reward Name</label>
-                  <Input placeholder="e.g., Free Shipping" required />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Description</label>
-                  <Input placeholder="What does the user get?" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+        <div className="flex gap-2">
+          <AIGenerateDialog
+            trigger={
+              <Button variant="outline" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Generate with AI
+              </Button>
+            }
+            title="Generate Reward Ideas"
+            placeholder="E.g., Create a reward for loyal customers that feels exclusive..."
+            context="Generate reward names, descriptions, pricing, and categories"
+            onGenerate={handleAIGenerate}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="glow">
+                <Plus className="w-4 h-4" />
+                Add Reward
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleCreate}>
+                <DialogHeader>
+                  <DialogTitle>Add New Reward</DialogTitle>
+                  <DialogDescription>Create a new reward for your users to redeem.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Cost (points)</label>
-                    <Input type="number" placeholder="1000" required />
+                    <label className="text-sm font-medium">Reward Name</label>
+                    <Input placeholder="e.g., Free Shipping" required />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Stock</label>
-                    <Select defaultValue="unlimited">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <label className="text-sm font-medium">Description</label>
+                    <Input placeholder="What does the user get?" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Cost (points)</label>
+                      <Input type="number" placeholder="1000" required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Stock</label>
+                      <Select defaultValue="unlimited">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unlimited">Unlimited</SelectItem>
+                          <SelectItem value="limited">Limited</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Category</label>
+                    <Select>
+                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="unlimited">Unlimited</SelectItem>
-                        <SelectItem value="limited">Limited</SelectItem>
+                        <SelectItem value="discount">Discount</SelectItem>
+                        <SelectItem value="shipping">Shipping</SelectItem>
+                        <SelectItem value="physical">Physical Item</SelectItem>
+                        <SelectItem value="access">Access/Perks</SelectItem>
+                        <SelectItem value="gift">Gift Card</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Icon (emoji)</label>
+                    <Input placeholder="e.g., 🎁" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Category</label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="discount">Discount</SelectItem>
-                      <SelectItem value="shipping">Shipping</SelectItem>
-                      <SelectItem value="physical">Physical Item</SelectItem>
-                      <SelectItem value="access">Access/Perks</SelectItem>
-                      <SelectItem value="gift">Gift Card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Icon (emoji)</label>
-                  <Input placeholder="e.g., 🎁" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" variant="glow">Add Reward</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit" variant="glow">Add Reward</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Stats */}

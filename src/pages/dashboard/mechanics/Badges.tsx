@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Award } from 'lucide-react';
+import { Plus, Search, Award, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { badges } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 
 export default function Badges() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,6 +35,12 @@ export default function Badges() {
     setIsDialogOpen(false);
   };
 
+  // Connect this to your MySQL backend
+  const handleAIGenerate = async (prompt: string): Promise<string> => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return `Generated Badge Idea:\n\n"${prompt}"\n\nName: Achievement Unlocked\nDescription: Awarded to users who demonstrate exceptional dedication.\nIcon suggestion: 🏆\nRarity: Rare`;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
@@ -42,44 +49,58 @@ export default function Badges() {
           <h1 className="text-3xl font-bold">Badges</h1>
           <p className="text-muted-foreground mt-1">Create and manage achievement badges for your users.</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="glow">
-              <Plus className="w-4 h-4" />
-              Create Badge
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <form onSubmit={handleCreate}>
-              <DialogHeader>
-                <DialogTitle>Create New Badge</DialogTitle>
-                <DialogDescription>
-                  Design a new achievement badge for your users.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Badge Name</label>
-                  <Input placeholder="e.g., Super Achiever" required />
+        <div className="flex gap-2">
+          <AIGenerateDialog
+            trigger={
+              <Button variant="outline" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Generate with AI
+              </Button>
+            }
+            title="Generate Badge Ideas"
+            placeholder="E.g., Create a badge for users who complete 100 purchases..."
+            context="Generate badge names, descriptions, and icon suggestions"
+            onGenerate={handleAIGenerate}
+          />
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="glow">
+                <Plus className="w-4 h-4" />
+                Create Badge
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleCreate}>
+                <DialogHeader>
+                  <DialogTitle>Create New Badge</DialogTitle>
+                  <DialogDescription>
+                    Design a new achievement badge for your users.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Badge Name</label>
+                    <Input placeholder="e.g., Super Achiever" required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Description</label>
+                    <Input placeholder="What does the user need to do?" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Icon (emoji)</label>
+                    <Input placeholder="e.g., 🏆" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Description</label>
-                  <Input placeholder="What does the user need to do?" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Icon (emoji)</label>
-                  <Input placeholder="e.g., 🏆" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="glow">Create Badge</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="glow">Create Badge</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search */}
