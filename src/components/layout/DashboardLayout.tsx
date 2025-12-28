@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { CommandPalette } from '@/components/CommandPalette';
+import EnvironmentSwitcher from '@/components/EnvironmentSwitcher';
 import { cn } from '@/lib/utils';
 
 export default function DashboardLayout() {
@@ -51,6 +52,7 @@ export default function DashboardLayout() {
           <Outlet />
         </div>
       </main>
+      <EnvironmentSwitcher />
     </div>
   );
 }
