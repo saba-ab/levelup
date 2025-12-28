@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -10,24 +10,9 @@ import {
 } from '@/components/ui/popover';
 import { Server, ChevronUp, Check, Plus, Trash2, Globe, Code, TestTube, Laptop } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
+import { useEnvironment, EnvironmentType } from '@/contexts/EnvironmentContext';
 
-interface Environment {
-  id: string;
-  name: string;
-  url: string;
-  type: 'production' | 'staging' | 'develop' | 'localhost' | 'custom';
-  isDefault?: boolean;
-}
-
-const defaultEnvironments: Environment[] = [
-  { id: 'prod', name: 'Production', url: 'https://api.levelupos.com', type: 'production', isDefault: true },
-  { id: 'staging', name: 'Staging', url: 'https://staging-api.levelupos.com', type: 'staging' },
-  { id: 'develop', name: 'Development', url: 'https://dev-api.levelupos.com', type: 'develop' },
-  { id: 'localhost', name: 'Localhost', url: 'http://localhost:3001', type: 'localhost' },
-];
-
-const envTypeConfig: Record<Environment['type'], { icon: React.ReactNode; color: string }> = {
+const envTypeConfig: Record<EnvironmentType, { icon: React.ReactNode; color: string }> = {
   production: { icon: <Globe className="h-3.5 w-3.5" />, color: 'bg-green-500/20 text-green-400 border-green-500/30' },
   staging: { icon: <TestTube className="h-3.5 w-3.5" />, color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
   develop: { icon: <Code className="h-3.5 w-3.5" />, color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
@@ -36,78 +21,31 @@ const envTypeConfig: Record<Environment['type'], { icon: React.ReactNode; color:
 };
 
 export default function EnvironmentSwitcher() {
-  const { toast } = useToast();
+  const { 
+    environments, 
+    activeEnvironment, 
+    isProduction, 
+    setActiveEnvironment, 
+    addEnvironment, 
+    removeEnvironment 
+  } = useEnvironment();
+  
   const [isOpen, setIsOpen] = useState(false);
-  const [environments, setEnvironments] = useState<Environment[]>(() => {
-    const stored = localStorage.getItem('levelupos_environments');
-    return stored ? JSON.parse(stored) : defaultEnvironments;
-  });
-  const [activeEnvId, setActiveEnvId] = useState<string>(() => {
-    return localStorage.getItem('levelupos_active_env') || 'prod';
-  });
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEnvName, setNewEnvName] = useState('');
   const [newEnvUrl, setNewEnvUrl] = useState('');
 
-  const activeEnv = environments.find(e => e.id === activeEnvId) || environments[0];
-  const isProduction = activeEnv?.type === 'production';
-
-  // Save environments to localStorage
-  useEffect(() => {
-    localStorage.setItem('levelupos_environments', JSON.stringify(environments));
-  }, [environments]);
-
-  // Save active environment to localStorage
-  useEffect(() => {
-    localStorage.setItem('levelupos_active_env', activeEnvId);
-  }, [activeEnvId]);
-
-  const handleSelectEnvironment = (env: Environment) => {
-    if (env.type === 'production') {
-      toast({
-        title: 'Production Mode',
-        description: 'Environment switching is disabled in production.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    setActiveEnvId(env.id);
-    toast({
-      title: 'Environment Changed',
-      description: `Now connected to ${env.name} (${env.url})`,
-    });
+  const handleSelectEnvironment = (envId: string) => {
+    setActiveEnvironment(envId);
     setIsOpen(false);
   };
 
   const handleAddEnvironment = () => {
-    if (!newEnvName.trim() || !newEnvUrl.trim()) {
-      toast({ title: 'Error', description: 'Please fill in all fields.', variant: 'destructive' });
-      return;
-    }
-    const newEnv: Environment = {
-      id: `custom_${Date.now()}`,
-      name: newEnvName.trim(),
-      url: newEnvUrl.trim(),
-      type: 'custom',
-    };
-    setEnvironments([...environments, newEnv]);
+    if (!newEnvName.trim() || !newEnvUrl.trim()) return;
+    addEnvironment(newEnvName, newEnvUrl);
     setNewEnvName('');
     setNewEnvUrl('');
     setShowAddForm(false);
-    toast({ title: 'Environment Added', description: `${newEnv.name} has been added.` });
-  };
-
-  const handleRemoveEnvironment = (envId: string) => {
-    const env = environments.find(e => e.id === envId);
-    if (env?.isDefault) {
-      toast({ title: 'Cannot Remove', description: 'Default environments cannot be removed.', variant: 'destructive' });
-      return;
-    }
-    setEnvironments(environments.filter(e => e.id !== envId));
-    if (activeEnvId === envId) {
-      setActiveEnvId('prod');
-    }
-    toast({ title: 'Environment Removed', description: 'Custom environment has been removed.' });
   };
 
   // Don't render in actual production build
@@ -124,11 +62,11 @@ export default function EnvironmentSwitcher() {
             size="sm"
             className={cn(
               "gap-2 shadow-lg border-2 bg-background/95 backdrop-blur-sm hover:bg-background",
-              envTypeConfig[activeEnv.type].color
+              envTypeConfig[activeEnvironment.type].color
             )}
           >
-            {envTypeConfig[activeEnv.type].icon}
-            <span className="hidden sm:inline">{activeEnv.name}</span>
+            {envTypeConfig[activeEnvironment.type].icon}
+            <span className="hidden sm:inline">{activeEnvironment.name}</span>
             <ChevronUp className={cn("h-3 w-3 transition-transform", isOpen && "rotate-180")} />
           </Button>
         </PopoverTrigger>
@@ -155,12 +93,12 @@ export default function EnvironmentSwitcher() {
                 key={env.id}
                 className={cn(
                   "flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors group",
-                  activeEnvId === env.id 
+                  activeEnvironment.id === env.id 
                     ? "bg-primary/10" 
                     : "hover:bg-secondary/50",
                   isProduction && env.type !== 'production' && "opacity-50 cursor-not-allowed"
                 )}
-                onClick={() => !isProduction && handleSelectEnvironment(env)}
+                onClick={() => !isProduction && handleSelectEnvironment(env.id)}
               >
                 <div className={cn(
                   "p-1.5 rounded-md",
@@ -171,7 +109,7 @@ export default function EnvironmentSwitcher() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{env.name}</span>
-                    {activeEnvId === env.id && (
+                    {activeEnvironment.id === env.id && (
                       <Check className="h-3.5 w-3.5 text-primary" />
                     )}
                   </div>
@@ -184,7 +122,7 @@ export default function EnvironmentSwitcher() {
                     className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleRemoveEnvironment(env.id);
+                      removeEnvironment(env.id);
                     }}
                   >
                     <Trash2 className="h-3 w-3 text-destructive" />
@@ -241,7 +179,7 @@ export default function EnvironmentSwitcher() {
 
           <div className="p-2 border-t bg-muted/30">
             <p className="text-[10px] text-muted-foreground text-center">
-              Current: <code className="px-1 py-0.5 bg-background rounded text-[10px]">{activeEnv.url}</code>
+              Current: <code className="px-1 py-0.5 bg-background rounded text-[10px]">{activeEnvironment.url}</code>
             </p>
           </div>
         </PopoverContent>
