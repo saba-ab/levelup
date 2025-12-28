@@ -21,7 +21,7 @@ import Points from "./pages/dashboard/mechanics/Points";
 import Missions from "./pages/dashboard/mechanics/Missions";
 import Streaks from "./pages/dashboard/mechanics/Streaks";
 import Rewards from "./pages/dashboard/mechanics/Rewards";
-import Users from "./pages/dashboard/Users";
+import Players from "./pages/dashboard/Players";
 import Analytics from "./pages/dashboard/Analytics";
 import Integrations from "./pages/dashboard/Integrations";
 import AuditLogs from "./pages/dashboard/AuditLogs";
@@ -63,7 +63,7 @@ const App = () => (
                 <Route path="mechanics/streaks" element={<Streaks />} />
                 <Route path="mechanics/leaderboards" element={<Leaderboards />} />
                 <Route path="mechanics/rewards" element={<Rewards />} />
-                <Route path="users" element={<Users />} />
+                <Route path="players" element={<Players />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="integrations" element={<Integrations />} />
                 <Route path="audit-logs" element={<AuditLogs />} />
