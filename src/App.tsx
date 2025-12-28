@@ -23,6 +23,7 @@ import Streaks from "./pages/dashboard/mechanics/Streaks";
 import Rewards from "./pages/dashboard/mechanics/Rewards";
 import Players from "./pages/dashboard/Players";
 import PlayerProfile from "./pages/dashboard/PlayerProfile";
+import PlayerComparison from "./pages/dashboard/PlayerComparison";
 import Analytics from "./pages/dashboard/Analytics";
 import Integrations from "./pages/dashboard/Integrations";
 import AuditLogs from "./pages/dashboard/AuditLogs";
@@ -65,6 +66,7 @@ const App = () => (
                 <Route path="mechanics/leaderboards" element={<Leaderboards />} />
                 <Route path="mechanics/rewards" element={<Rewards />} />
                 <Route path="players" element={<Players />} />
+                <Route path="players/compare" element={<PlayerComparison />} />
                 <Route path="players/:playerId" element={<PlayerProfile />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="integrations" element={<Integrations />} />
