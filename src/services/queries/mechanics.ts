@@ -33,7 +33,7 @@ export function useBadgesQuery(filters?: MechanicsFilters) {
   });
 }
 
-export function useBadgeQuery(badgeId: string) {
+export function useBadgeQuery(badgeId: number) {
   const { getBadge } = useMechanicsService();
 
   return useQuery({
@@ -44,6 +44,20 @@ export function useBadgeQuery(badgeId: string) {
       return response.data!;
     },
     enabled: !!badgeId,
+  });
+}
+
+export function usePlayerBadgesQuery(playerId: number) {
+  const { getPlayerBadges } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.badges.playerBadges(playerId),
+    queryFn: async () => {
+      const response = await getPlayerBadges(playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player badges');
+      return response.data!;
+    },
+    enabled: !!playerId,
   });
 }
 
@@ -68,7 +82,7 @@ export function useUpdateBadgeMutation() {
   const { updateBadge } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ badgeId, data }: { badgeId: string; data: Partial<CreateBadgeData> }) => {
+    mutationFn: async ({ badgeId, data }: { badgeId: number; data: Partial<CreateBadgeData> }) => {
       const response = await updateBadge(badgeId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update badge');
       return response.data!;
@@ -100,7 +114,7 @@ export function useDeleteBadgeMutation() {
   const { deleteBadge } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (badgeId: string) => {
+    mutationFn: async (badgeId: number) => {
       const response = await deleteBadge(badgeId);
       if (!response.success) throw new Error(response.error || 'Failed to delete badge');
       return badgeId;
@@ -113,20 +127,20 @@ export function useDeleteBadgeMutation() {
 
 // ==================== LEVELS ====================
 
-export function useLevelsQuery() {
+export function useLevelsQuery(filters?: MechanicsFilters) {
   const { listLevels } = useMechanicsService();
 
   return useQuery({
     queryKey: queryKeys.levels.list(),
     queryFn: async () => {
-      const response = await listLevels();
+      const response = await listLevels(filters);
       if (!response.success) throw new Error(response.error || 'Failed to fetch levels');
       return response.data!;
     },
   });
 }
 
-export function useLevelQuery(levelId: string) {
+export function useLevelQuery(levelId: number) {
   const { getLevel } = useMechanicsService();
 
   return useQuery({
@@ -161,7 +175,7 @@ export function useUpdateLevelMutation() {
   const { updateLevel } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ levelId, data }: { levelId: string; data: Partial<CreateLevelData> }) => {
+    mutationFn: async ({ levelId, data }: { levelId: number; data: Partial<CreateLevelData> }) => {
       const response = await updateLevel(levelId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update level');
       return response.data!;
@@ -192,26 +206,10 @@ export function useDeleteLevelMutation() {
   const { deleteLevel } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (levelId: string) => {
+    mutationFn: async (levelId: number) => {
       const response = await deleteLevel(levelId);
       if (!response.success) throw new Error(response.error || 'Failed to delete level');
       return levelId;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.levels.all });
-    },
-  });
-}
-
-export function useReorderLevelsMutation() {
-  const queryClient = useQueryClient();
-  const { reorderLevels } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async (levelIds: string[]) => {
-      const response = await reorderLevels(levelIds);
-      if (!response.success) throw new Error(response.error || 'Failed to reorder levels');
-      return response.data!;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.levels.all });
@@ -234,7 +232,7 @@ export function useMissionsQuery(filters?: MechanicsFilters) {
   });
 }
 
-export function useMissionQuery(missionId: string) {
+export function useMissionQuery(missionId: number) {
   const { getMission } = useMechanicsService();
 
   return useQuery({
@@ -269,7 +267,7 @@ export function useUpdateMissionMutation() {
   const { updateMission } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ missionId, data }: { missionId: string; data: Partial<CreateMissionData> }) => {
+    mutationFn: async ({ missionId, data }: { missionId: number; data: Partial<CreateMissionData> }) => {
       const response = await updateMission(missionId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update mission');
       return response.data!;
@@ -285,7 +283,7 @@ export function useDeleteMissionMutation() {
   const { deleteMission } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (missionId: string) => {
+    mutationFn: async (missionId: number) => {
       const response = await deleteMission(missionId);
       if (!response.success) throw new Error(response.error || 'Failed to delete mission');
       return missionId;
@@ -332,7 +330,7 @@ export function useUpdateStreakMutation() {
   const { updateStreak } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ streakId, data }: { streakId: string; data: Partial<CreateStreakData> }) => {
+    mutationFn: async ({ streakId, data }: { streakId: number; data: Partial<CreateStreakData> }) => {
       const response = await updateStreak(streakId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update streak');
       return response.data!;
@@ -348,7 +346,7 @@ export function useDeleteStreakMutation() {
   const { deleteStreak } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (streakId: string) => {
+    mutationFn: async (streakId: number) => {
       const response = await deleteStreak(streakId);
       if (!response.success) throw new Error(response.error || 'Failed to delete streak');
       return streakId;
@@ -374,7 +372,7 @@ export function useLeaderboardsQuery() {
   });
 }
 
-export function useLeaderboardEntriesQuery(leaderboardId: string, limit = 100, offset = 0) {
+export function useLeaderboardEntriesQuery(leaderboardId: number, limit = 100, offset = 0) {
   const { getLeaderboardEntries } = useMechanicsService();
 
   return useQuery({
@@ -409,7 +407,7 @@ export function useDeleteLeaderboardMutation() {
   const { deleteLeaderboard } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (leaderboardId: string) => {
+    mutationFn: async (leaderboardId: number) => {
       const response = await deleteLeaderboard(leaderboardId);
       if (!response.success) throw new Error(response.error || 'Failed to delete leaderboard');
       return leaderboardId;
@@ -435,7 +433,7 @@ export function useRewardsQuery(filters?: MechanicsFilters) {
   });
 }
 
-export function useRewardQuery(rewardId: string) {
+export function useRewardQuery(rewardId: number) {
   const { getReward } = useMechanicsService();
 
   return useQuery({
@@ -470,7 +468,7 @@ export function useUpdateRewardMutation() {
   const { updateReward } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ rewardId, data }: { rewardId: string; data: Partial<CreateRewardData> }) => {
+    mutationFn: async ({ rewardId, data }: { rewardId: number; data: Partial<CreateRewardData> }) => {
       const response = await updateReward(rewardId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update reward');
       return response.data!;
@@ -501,7 +499,7 @@ export function useDeleteRewardMutation() {
   const { deleteReward } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (rewardId: string) => {
+    mutationFn: async (rewardId: number) => {
       const response = await deleteReward(rewardId);
       if (!response.success) throw new Error(response.error || 'Failed to delete reward');
       return rewardId;
@@ -517,15 +515,14 @@ export function useRedeemRewardMutation() {
   const { redeemReward } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ playerId, rewardId }: { playerId: string; rewardId: string }) => {
+    mutationFn: async ({ playerId, rewardId }: { playerId: number; rewardId: number }) => {
       const response = await redeemReward(playerId, rewardId);
       if (!response.success) throw new Error(response.error || 'Failed to redeem reward');
       return response.data!;
     },
     onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(playerId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.stats(playerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.redemptions() });
     },
   });
 }
@@ -566,7 +563,7 @@ export function useDeletePointWalletMutation() {
   const { deletePointWallet } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (walletId: string) => {
+    mutationFn: async (walletId: number) => {
       const response = await deletePointWallet(walletId);
       if (!response.success) throw new Error(response.error || 'Failed to delete point wallet');
       return walletId;

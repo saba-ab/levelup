@@ -7,17 +7,16 @@ export { queryKeys } from './keys';
 export {
   usePlayersQuery,
   usePlayerQuery,
-  usePlayerStatsQuery,
   usePlayerBadgesQuery,
   usePlayerMissionsQuery,
   usePlayerStreaksQuery,
+  usePlayerLevelQuery,
   useCreatePlayerMutation,
   useUpdatePlayerMutation,
   useDeletePlayerMutation,
   useAwardBadgeMutation,
   useRevokeBadgeMutation,
-  useAwardPointsMutation,
-  useDeductPointsMutation,
+  useGrantXpMutation,
 } from './players';
 
 // Mechanics queries and mutations
@@ -25,6 +24,7 @@ export {
   // Badges
   useBadgesQuery,
   useBadgeQuery,
+  usePlayerBadgesQuery as useMechanicsPlayerBadgesQuery,
   useCreateBadgeMutation,
   useUpdateBadgeMutation,
   useDeleteBadgeMutation,
@@ -34,7 +34,6 @@ export {
   useCreateLevelMutation,
   useUpdateLevelMutation,
   useDeleteLevelMutation,
-  useReorderLevelsMutation,
   // Missions
   useMissionsQuery,
   useMissionQuery,
