@@ -80,6 +80,16 @@ export function useProgramsService() {
     return api.post(`/programs/${programId}/players`, { player_id: playerId });
   }, [api]);
 
+  const addPlayersToProgram = useCallback(async (programId: number, playerIds: number[]) => {
+    // Bulk add - send multiple requests in parallel
+    const results = await Promise.allSettled(
+      playerIds.map(playerId => api.post(`/programs/${programId}/players`, { player_id: playerId }))
+    );
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+    return { success: true, data: { successful, failed, total: playerIds.length } };
+  }, [api]);
+
   const removePlayerFromProgram = useCallback(async (programId: number, playerId: number) => {
     return api.delete(`/programs/${programId}/players/${playerId}`);
   }, [api]);
@@ -140,6 +150,7 @@ export function useProgramsService() {
     getProgramStats,
     getProgramPlayers,
     addPlayerToProgram,
+    addPlayersToProgram,
     removePlayerFromProgram,
     // Segments
     listSegments,

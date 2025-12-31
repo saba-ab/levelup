@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink, Zap, Award } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
