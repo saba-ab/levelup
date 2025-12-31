@@ -22,25 +22,87 @@ interface EnvironmentContextType {
   getApiUrl: (path: string) => string;
 }
 
+// Get environment variables with fallbacks
+const getEnvVar = (key: string, fallback: string): string => {
+  return import.meta.env[key] || fallback;
+};
+
 const defaultEnvironments: Environment[] = [
-  { id: 'prod', name: 'Production', url: 'https://api.levelupos.com', type: 'production', isDefault: true },
-  { id: 'staging', name: 'Staging', url: 'https://staging-api.levelupos.com', type: 'staging' },
-  { id: 'develop', name: 'Development', url: 'https://dev-api.levelupos.com', type: 'develop' },
-  { id: 'localhost', name: 'Localhost', url: 'http://localhost:3001', type: 'localhost' },
+  {
+    id: 'prod',
+    name: 'Production',
+    url: getEnvVar('VITE_API_URL_PRODUCTION', 'https://api.levelupos.com'),
+    type: 'production',
+    isDefault: true
+  },
+  {
+    id: 'staging',
+    name: 'Staging',
+    url: getEnvVar('VITE_API_URL_STAGING', 'https://staging-api.levelupos.com'),
+    type: 'staging'
+  },
+  {
+    id: 'develop',
+    name: 'Development',
+    url: getEnvVar('VITE_API_URL_DEVELOPMENT', 'https://dev-api.levelupos.com'),
+    type: 'develop'
+  },
+  {
+    id: 'localhost',
+    name: 'Localhost',
+    url: getEnvVar('VITE_API_URL_LOCALHOST', 'http://127.0.0.1:8000/api/v1'),
+    type: 'localhost'
+  },
 ];
 
 const EnvironmentContext = createContext<EnvironmentContextType | undefined>(undefined);
 
 export function EnvironmentProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  
+
   const [environments, setEnvironments] = useState<Environment[]>(() => {
     const stored = localStorage.getItem('levelupos_environments');
-    return stored ? JSON.parse(stored) : defaultEnvironments;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // If environment variables have changed, update the URLs in stored environments
+        const updated = parsed.map((env: Environment) => {
+          const defaultEnv = defaultEnvironments.find(e => e.id === env.id);
+          if (defaultEnv && defaultEnv.url !== env.url) {
+            // Update URL from environment variable if it exists
+            return { ...env, url: defaultEnv.url };
+          }
+          return env;
+        });
+        return updated;
+      } catch {
+        return defaultEnvironments;
+      }
+    }
+    return defaultEnvironments;
   });
 
   const [activeEnvId, setActiveEnvId] = useState<string>(() => {
-    return localStorage.getItem('levelupos_active_env') || 'prod';
+    // Check environment variable first (takes precedence)
+    const envDefault = getEnvVar('VITE_DEFAULT_ENVIRONMENT', '');
+
+    // If environment variable is set, use it (and clear localStorage to respect it)
+    if (envDefault) {
+      const stored = localStorage.getItem('levelupos_active_env');
+      // Only use localStorage if it matches the env var, otherwise use env var
+      if (stored === envDefault) {
+        return envDefault;
+      }
+      // Clear localStorage if env var is different, so env var takes precedence
+      if (stored && stored !== envDefault) {
+        localStorage.removeItem('levelupos_active_env');
+      }
+      return envDefault;
+    }
+
+    // Fallback to localStorage if no env var is set
+    const stored = localStorage.getItem('levelupos_active_env');
+    return stored || 'prod';
   });
 
   const activeEnvironment = environments.find(e => e.id === activeEnvId) || environments[0];

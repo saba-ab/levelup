@@ -1,8 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @layer base {
   :root {
@@ -26,7 +27,7 @@
     --input: 240 5.9% 90%;
     --ring: 262 83% 58%;
     --radius: 0.625rem;
-    
+
     --chart-1: 262 83% 58%;
     --chart-2: 234 89% 74%;
     --chart-3: 173 80% 40%;
@@ -54,7 +55,7 @@
     --border: 240 4% 16%;
     --input: 240 4% 16%;
     --ring: 262 83% 58%;
-    
+
     --chart-1: 262 83% 58%;
     --chart-2: 234 89% 74%;
     --chart-3: 173 80% 40%;
@@ -133,7 +134,7 @@
   }
 
   .bg-grid {
-    background-image: 
+    background-image:
       linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px);
     background-size: 24px 24px;

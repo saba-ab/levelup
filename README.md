@@ -60,6 +60,75 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Environment Variables
+
+This project uses environment variables for API configuration. All environment variables must be prefixed with `VITE_` to be accessible in the client.
+
+### Setup
+
+1. Copy the example environment file:
+   ```sh
+   cp .env.example .env
+   ```
+
+2. Update the `.env` file with your API URLs:
+   ```env
+   # Production API URL
+   VITE_API_URL_PRODUCTION=https://api.levelupos.com
+
+   # Staging API URL
+   VITE_API_URL_STAGING=https://staging-api.levelupos.com
+
+   # Development API URL
+   VITE_API_URL_DEVELOPMENT=https://dev-api.levelupos.com
+
+   # Localhost API URL (for local development)
+   VITE_API_URL_LOCALHOST=http://127.0.0.1:8000/api/v1
+
+   # Default API URL (used as fallback)
+   VITE_API_URL_DEFAULT=https://api.levelupos.com
+
+   # Default Environment (prod, staging, develop, localhost)
+   # Set to 'localhost' to use local API by default
+   VITE_DEFAULT_ENVIRONMENT=localhost
+
+   # App Configuration
+   VITE_APP_NAME=LevelUpOS Manager
+   VITE_APP_ENV=development
+   ```
+
+3. Restart the development server after making changes to `.env`:
+   ```sh
+   npm run dev
+   ```
+
+### Available Environment Variables
+
+- `VITE_API_URL_PRODUCTION` - Production API endpoint
+- `VITE_API_URL_STAGING` - Staging API endpoint
+- `VITE_API_URL_DEVELOPMENT` - Development API endpoint
+- `VITE_API_URL_LOCALHOST` - Local development API endpoint
+- `VITE_API_URL_DEFAULT` - Default API URL (fallback)
+- `VITE_DEFAULT_ENVIRONMENT` - Default active environment (`prod`, `staging`, `develop`, or `localhost`)
+- `VITE_APP_NAME` - Application name
+- `VITE_APP_ENV` - Application environment (development/production)
+
+The application uses these environment variables in the `EnvironmentContext` to configure API endpoints for different environments.
+
+### Using Local Environment
+
+To use the local API by default, set the following in your `.env` file:
+
+```env
+# Set default environment to localhost
+VITE_DEFAULT_ENVIRONMENT=localhost
+
+# Ensure localhost URL points to your local backend
+VITE_API_URL_LOCALHOST=http://127.0.0.1:8000/api/v1
+```
+
+**Note:** After changing environment variables, you must restart the development server for changes to take effect.
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 const endpoints = [
   {
@@ -59,6 +60,7 @@ const methodColors: Record<string, string> = {
 };
 
 export default function ApiReference() {
+  const { baseUrl } = useEnvironment();
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [selectedEndpoint, setSelectedEndpoint] = useState(endpoints[0].items[0]);
 
@@ -84,13 +86,13 @@ export default function ApiReference() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-3">
-            <code className="text-sm flex-1">https://api.levelupos.com</code>
+            <code className="text-sm flex-1">{baseUrl}</code>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => copyToClipboard('https://api.levelupos.com')}
+              onClick={() => copyToClipboard(baseUrl)}
             >
-              {copiedPath === 'https://api.levelupos.com' ? (
+              {copiedPath === baseUrl ? (
                 <Check className="w-4 h-4 text-green-500" />
               ) : (
                 <Copy className="w-4 h-4" />
@@ -176,7 +178,7 @@ export default function ApiReference() {
               </TabsList>
               <TabsContent value="request" className="mt-4">
                 <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                  <code>{`curl -X ${selectedEndpoint.method} https://api.levelupos.com${selectedEndpoint.path} \\
+                  <code>{`curl -X ${selectedEndpoint.method} ${baseUrl}${selectedEndpoint.path} \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json"${selectedEndpoint.method === 'POST' ? ` \\
   -d '{
