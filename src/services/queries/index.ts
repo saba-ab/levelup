@@ -9,7 +9,7 @@ export {
   usePlayerQuery,
   usePlayerBadgesQuery,
   usePlayerMissionsQuery,
-  usePlayerStreaksQuery,
+  usePlayerStreaksQuery as usePlayersStreaksQuery,
   usePlayerLevelQuery,
   useCreatePlayerMutation,
   useUpdatePlayerMutation,
@@ -37,31 +37,65 @@ export {
   // Missions
   useMissionsQuery,
   useMissionQuery,
+  usePlayerMissionsQuery as useMechanicsPlayerMissionsQuery,
   useCreateMissionMutation,
   useUpdateMissionMutation,
   useDeleteMissionMutation,
+  useStartMissionMutation,
+  useUpdateMissionProgressMutation,
+  useCompleteMissionMutation,
   // Streaks
   useStreaksQuery,
+  useStreakQuery,
+  usePlayerStreakQuery,
+  usePlayerStreaksQuery,
   useCreateStreakMutation,
   useUpdateStreakMutation,
   useDeleteStreakMutation,
+  useRecordStreakActivityMutation,
+  useResetStreakMutation,
   // Leaderboards
   useLeaderboardsQuery,
+  useLeaderboardQuery,
   useLeaderboardEntriesQuery,
+  usePlayerRankQuery,
   useCreateLeaderboardMutation,
+  useUpdateLeaderboardMutation,
   useDeleteLeaderboardMutation,
   // Rewards
   useRewardsQuery,
   useRewardQuery,
+  usePlayerRewardsQuery,
   useCreateRewardMutation,
   useUpdateRewardMutation,
   useDeleteRewardMutation,
+  useClaimRewardMutation,
   useRedeemRewardMutation,
-  // Point Wallets
-  usePointWalletsQuery,
-  useCreatePointWalletMutation,
-  useDeletePointWalletMutation,
+  // Wallets
+  usePlayerWalletQuery,
+  useWalletTransactionsQuery,
+  useCreditWalletMutation,
+  useDebitWalletMutation,
+  useTransferPointsMutation,
+  // Rules
+  useRulesQuery,
+  useRuleQuery,
+  useRuleExecutionsQuery,
+  useCreateRuleMutation,
+  useUpdateRuleMutation,
+  useDeleteRuleMutation,
+  useCreateRuleVersionMutation,
+  useExecuteRulesMutation,
 } from './mechanics';
+
+// Users queries and mutations
+export {
+  useUsersQuery,
+  useUserQuery,
+  useCreateUserMutation,
+  useUpdateUserMutation,
+  useDeleteUserMutation,
+} from './users';
 
 // Programs and Segments queries and mutations
 export {

@@ -1,7 +1,7 @@
 // Query key factory for consistent cache key management
 // IDs are numbers to match Laravel backend
 
-import { PlayerFilters, MechanicsFilters, ProgramFilters } from '../api/types';
+import { PlayerFilters, MechanicsFilters, ProgramFilters, WalletTransactionFilters, RuleExecutionFilters, PaginationParams } from '../api/types';
 
 export const queryKeys = {
   // Players
@@ -13,9 +13,11 @@ export const queryKeys = {
     detail: (id: number) => [...queryKeys.players.details(), id] as const,
     stats: (id: number) => [...queryKeys.players.detail(id), 'stats'] as const,
     badges: (id: number) => [...queryKeys.players.detail(id), 'badges'] as const,
-    missions: (id: number, status?: string) => [...queryKeys.players.detail(id), 'missions', status] as const,
+    missions: (id: number) => [...queryKeys.players.detail(id), 'missions'] as const,
     streaks: (id: number) => [...queryKeys.players.detail(id), 'streaks'] as const,
-    transactions: (id: number, walletId?: number) => [...queryKeys.players.detail(id), 'transactions', walletId] as const,
+    rewards: (id: number) => [...queryKeys.players.detail(id), 'rewards'] as const,
+    wallet: (id: number) => [...queryKeys.players.detail(id), 'wallet'] as const,
+    transactions: (id: number, filters?: WalletTransactionFilters) => [...queryKeys.players.detail(id), 'transactions', filters] as const,
     level: (id: number) => [...queryKeys.players.detail(id), 'level'] as const,
   },
 
@@ -32,7 +34,8 @@ export const queryKeys = {
   // Levels
   levels: {
     all: ['levels'] as const,
-    list: () => [...queryKeys.levels.all, 'list'] as const,
+    lists: () => [...queryKeys.levels.all, 'list'] as const,
+    list: (filters?: MechanicsFilters) => [...queryKeys.levels.lists(), filters] as const,
     details: () => [...queryKeys.levels.all, 'detail'] as const,
     detail: (id: number) => [...queryKeys.levels.details(), id] as const,
   },
@@ -44,6 +47,7 @@ export const queryKeys = {
     list: (filters?: MechanicsFilters) => [...queryKeys.missions.lists(), filters] as const,
     details: () => [...queryKeys.missions.all, 'detail'] as const,
     detail: (id: number) => [...queryKeys.missions.details(), id] as const,
+    playerMissions: (playerId: number) => [...queryKeys.missions.all, 'player', playerId] as const,
   },
 
   // Streaks
@@ -53,6 +57,8 @@ export const queryKeys = {
     list: (filters?: MechanicsFilters) => [...queryKeys.streaks.lists(), filters] as const,
     details: () => [...queryKeys.streaks.all, 'detail'] as const,
     detail: (id: number) => [...queryKeys.streaks.details(), id] as const,
+    playerStreak: (playerId: number, streakId: number) => [...queryKeys.streaks.all, 'player', playerId, streakId] as const,
+    playerStreaks: (playerId: number) => [...queryKeys.streaks.all, 'player', playerId, 'all'] as const,
   },
 
   // Leaderboards
@@ -72,15 +78,33 @@ export const queryKeys = {
     list: (filters?: MechanicsFilters) => [...queryKeys.rewards.lists(), filters] as const,
     details: () => [...queryKeys.rewards.all, 'detail'] as const,
     detail: (id: number) => [...queryKeys.rewards.details(), id] as const,
-    redemptions: (status?: string) => [...queryKeys.rewards.all, 'redemptions', status] as const,
+    playerRewards: (playerId: number) => [...queryKeys.rewards.all, 'player', playerId] as const,
   },
 
-  // Point Wallets
-  pointWallets: {
-    all: ['pointWallets'] as const,
-    list: () => [...queryKeys.pointWallets.all, 'list'] as const,
-    details: () => [...queryKeys.pointWallets.all, 'detail'] as const,
-    detail: (id: number) => [...queryKeys.pointWallets.details(), id] as const,
+  // Wallets
+  wallets: {
+    all: ['wallets'] as const,
+    player: (playerId: number) => [...queryKeys.wallets.all, 'player', playerId] as const,
+    transactions: (playerId: number, filters?: WalletTransactionFilters) => [...queryKeys.wallets.player(playerId), 'transactions', filters] as const,
+  },
+
+  // Rules
+  rules: {
+    all: ['rules'] as const,
+    lists: () => [...queryKeys.rules.all, 'list'] as const,
+    list: (filters?: MechanicsFilters) => [...queryKeys.rules.lists(), filters] as const,
+    details: () => [...queryKeys.rules.all, 'detail'] as const,
+    detail: (id: number) => [...queryKeys.rules.details(), id] as const,
+    executions: (filters?: RuleExecutionFilters) => [...queryKeys.rules.all, 'executions', filters] as const,
+  },
+
+  // Users
+  users: {
+    all: ['users'] as const,
+    lists: () => [...queryKeys.users.all, 'list'] as const,
+    list: (filters?: PaginationParams) => [...queryKeys.users.lists(), filters] as const,
+    details: () => [...queryKeys.users.all, 'detail'] as const,
+    detail: (id: number) => [...queryKeys.users.details(), id] as const,
   },
 
   // Programs
@@ -101,5 +125,13 @@ export const queryKeys = {
     details: () => [...queryKeys.segments.all, 'detail'] as const,
     detail: (id: number) => [...queryKeys.segments.details(), id] as const,
     players: (id: number, page?: number) => [...queryKeys.segments.detail(id), 'players', page] as const,
+  },
+
+  // Point Wallets (legacy - keeping for backwards compatibility)
+  pointWallets: {
+    all: ['pointWallets'] as const,
+    list: () => [...queryKeys.pointWallets.all, 'list'] as const,
+    details: () => [...queryKeys.pointWallets.all, 'detail'] as const,
+    detail: (id: number) => [...queryKeys.pointWallets.details(), id] as const,
   },
 };

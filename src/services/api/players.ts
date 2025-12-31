@@ -5,6 +5,7 @@ import {
   PlayerBadge,
   PlayerMission,
   PlayerStreak,
+  PlayerReward,
   CreatePlayerData,
   UpdatePlayerData,
   PaginatedResponse,
@@ -58,15 +59,19 @@ export function usePlayersService() {
     return api.get<PlayerBadge[]>(`/badges/players/${playerId}/badges`);
   }, [api]);
 
-  // Get player missions
-  const getPlayerMissions = useCallback(async (playerId: number, status?: string) => {
-    const query = status ? `?status=${status}` : '';
-    return api.get<PlayerMission[]>(`/players/${playerId}/missions${query}`);
+  // Get player missions (via missions endpoint per API spec)
+  const getPlayerMissions = useCallback(async (playerId: number) => {
+    return api.get<PlayerMission[]>(`/missions/players/${playerId}/missions`);
   }, [api]);
 
-  // Get player streaks
+  // Get player streaks (via streaks endpoint per API spec)
   const getPlayerStreaks = useCallback(async (playerId: number) => {
-    return api.get<PlayerStreak[]>(`/players/${playerId}/streaks`);
+    return api.get<PlayerStreak[]>(`/streaks/players/${playerId}/streaks`);
+  }, [api]);
+
+  // Get player rewards (via rewards endpoint per API spec)
+  const getPlayerRewards = useCallback(async (playerId: number) => {
+    return api.get<PlayerReward[]>(`/rewards/players/${playerId}/rewards`);
   }, [api]);
 
   return {
@@ -79,5 +84,6 @@ export function usePlayersService() {
     getPlayerBadges,
     getPlayerMissions,
     getPlayerStreaks,
+    getPlayerRewards,
   };
 }

@@ -14,8 +14,19 @@ import {
   CreateLeaderboardData,
   Reward,
   CreateRewardData,
+  Rule,
+  CreateRuleData,
   MechanicsFilters,
-  PaginatedResponse,
+  WalletTransactionFilters,
+  RuleExecutionFilters,
+  StartMissionData,
+  UpdateMissionProgressData,
+  RecordStreakActivityData,
+  ClaimRewardData,
+  CreditWalletData,
+  DebitWalletData,
+  TransferPointsData,
+  ExecuteRulesData,
 } from '../api/types';
 
 // ==================== BADGES ====================
@@ -131,7 +142,7 @@ export function useLevelsQuery(filters?: MechanicsFilters) {
   const { listLevels } = useMechanicsService();
 
   return useQuery({
-    queryKey: queryKeys.levels.list(),
+    queryKey: queryKeys.levels.list(filters),
     queryFn: async () => {
       const response = await listLevels(filters);
       if (!response.success) throw new Error(response.error || 'Failed to fetch levels');
@@ -165,7 +176,7 @@ export function useCreateLevelMutation() {
       return response.data!;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.levels.list() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.levels.lists() });
     },
   });
 }
@@ -246,6 +257,20 @@ export function useMissionQuery(missionId: number) {
   });
 }
 
+export function usePlayerMissionsQuery(playerId: number) {
+  const { getPlayerMissions } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.missions.playerMissions(playerId),
+    queryFn: async () => {
+      const response = await getPlayerMissions(playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player missions');
+      return response.data!;
+    },
+    enabled: !!playerId,
+  });
+}
+
 export function useCreateMissionMutation() {
   const queryClient = useQueryClient();
   const { createMission } = useMechanicsService();
@@ -294,6 +319,56 @@ export function useDeleteMissionMutation() {
   });
 }
 
+export function useStartMissionMutation() {
+  const queryClient = useQueryClient();
+  const { startMission } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: StartMissionData) => {
+      const response = await startMission(data);
+      if (!response.success) throw new Error(response.error || 'Failed to start mission');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(player_id) });
+    },
+  });
+}
+
+export function useUpdateMissionProgressMutation() {
+  const queryClient = useQueryClient();
+  const { updateMissionProgress } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ playerId, missionId, data }: { playerId: number; missionId: number; data: UpdateMissionProgressData }) => {
+      const response = await updateMissionProgress(playerId, missionId, data);
+      if (!response.success) throw new Error(response.error || 'Failed to update mission progress');
+      return response.data!;
+    },
+    onSuccess: (data, { playerId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(playerId) });
+    },
+  });
+}
+
+export function useCompleteMissionMutation() {
+  const queryClient = useQueryClient();
+  const { completeMission } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ playerId, missionId }: { playerId: number; missionId: number }) => {
+      const response = await completeMission(playerId, missionId);
+      if (!response.success) throw new Error(response.error || 'Failed to complete mission');
+      return response.data!;
+    },
+    onSuccess: (data, { playerId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(playerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(playerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.level(playerId) });
+    },
+  });
+}
+
 // ==================== STREAKS ====================
 
 export function useStreaksQuery(filters?: MechanicsFilters) {
@@ -306,6 +381,48 @@ export function useStreaksQuery(filters?: MechanicsFilters) {
       if (!response.success) throw new Error(response.error || 'Failed to fetch streaks');
       return response.data!;
     },
+  });
+}
+
+export function useStreakQuery(streakId: number) {
+  const { getStreak } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.streaks.detail(streakId),
+    queryFn: async () => {
+      const response = await getStreak(streakId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch streak');
+      return response.data!;
+    },
+    enabled: !!streakId,
+  });
+}
+
+export function usePlayerStreakQuery(playerId: number, streakId: number) {
+  const { getPlayerStreak } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.streaks.playerStreak(playerId, streakId),
+    queryFn: async () => {
+      const response = await getPlayerStreak(playerId, streakId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player streak');
+      return response.data!;
+    },
+    enabled: !!playerId && !!streakId,
+  });
+}
+
+export function usePlayerStreaksQuery(playerId: number) {
+  const { getPlayerStreaks } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.streaks.playerStreaks(playerId),
+    queryFn: async () => {
+      const response = await getPlayerStreaks(playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player streaks');
+      return response.data!;
+    },
+    enabled: !!playerId,
   });
 }
 
@@ -357,6 +474,40 @@ export function useDeleteStreakMutation() {
   });
 }
 
+export function useRecordStreakActivityMutation() {
+  const queryClient = useQueryClient();
+  const { recordStreakActivity } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: RecordStreakActivityData) => {
+      const response = await recordStreakActivity(data);
+      if (!response.success) throw new Error(response.error || 'Failed to record streak activity');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.playerStreaks(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+    },
+  });
+}
+
+export function useResetStreakMutation() {
+  const queryClient = useQueryClient();
+  const { resetStreak } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ playerId, streakId }: { playerId: number; streakId: number }) => {
+      const response = await resetStreak(playerId, streakId);
+      if (!response.success) throw new Error(response.error || 'Failed to reset streak');
+      return response.data!;
+    },
+    onSuccess: (data, { playerId, streakId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.playerStreak(playerId, streakId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.playerStreaks(playerId) });
+    },
+  });
+}
+
 // ==================== LEADERBOARDS ====================
 
 export function useLeaderboardsQuery() {
@@ -369,6 +520,20 @@ export function useLeaderboardsQuery() {
       if (!response.success) throw new Error(response.error || 'Failed to fetch leaderboards');
       return response.data!;
     },
+  });
+}
+
+export function useLeaderboardQuery(leaderboardId: number) {
+  const { getLeaderboard } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.leaderboards.detail(leaderboardId),
+    queryFn: async () => {
+      const response = await getLeaderboard(leaderboardId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch leaderboard');
+      return response.data!;
+    },
+    enabled: !!leaderboardId,
   });
 }
 
@@ -386,6 +551,20 @@ export function useLeaderboardEntriesQuery(leaderboardId: number, limit = 100, o
   });
 }
 
+export function usePlayerRankQuery(leaderboardId: number, playerId: number) {
+  const { getPlayerRank } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.leaderboards.playerRank(leaderboardId, playerId),
+    queryFn: async () => {
+      const response = await getPlayerRank(leaderboardId, playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player rank');
+      return response.data!;
+    },
+    enabled: !!leaderboardId && !!playerId,
+  });
+}
+
 export function useCreateLeaderboardMutation() {
   const queryClient = useQueryClient();
   const { createLeaderboard } = useMechanicsService();
@@ -398,6 +577,22 @@ export function useCreateLeaderboardMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.list() });
+    },
+  });
+}
+
+export function useUpdateLeaderboardMutation() {
+  const queryClient = useQueryClient();
+  const { updateLeaderboard } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ leaderboardId, data }: { leaderboardId: number; data: Partial<CreateLeaderboardData> }) => {
+      const response = await updateLeaderboard(leaderboardId, data);
+      if (!response.success) throw new Error(response.error || 'Failed to update leaderboard');
+      return response.data!;
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all });
     },
   });
 }
@@ -444,6 +639,20 @@ export function useRewardQuery(rewardId: number) {
       return response.data!;
     },
     enabled: !!rewardId,
+  });
+}
+
+export function usePlayerRewardsQuery(playerId: number) {
+  const { getPlayerRewards } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.rewards.playerRewards(playerId),
+    queryFn: async () => {
+      const response = await getPlayerRewards(playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player rewards');
+      return response.data!;
+    },
+    enabled: !!playerId,
   });
 }
 
@@ -510,6 +719,23 @@ export function useDeleteRewardMutation() {
   });
 }
 
+export function useClaimRewardMutation() {
+  const queryClient = useQueryClient();
+  const { claimReward } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: ClaimRewardData) => {
+      const response = await claimReward(data);
+      if (!response.success) throw new Error(response.error || 'Failed to claim reward');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.playerRewards(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+    },
+  });
+}
+
 export function useRedeemRewardMutation() {
   const queryClient = useQueryClient();
   const { redeemReward } = useMechanicsService();
@@ -521,55 +747,229 @@ export function useRedeemRewardMutation() {
       return response.data!;
     },
     onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(playerId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.redemptions() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.playerRewards(playerId) });
     },
   });
 }
 
-// ==================== POINT WALLETS ====================
+// ==================== WALLETS ====================
 
-export function usePointWalletsQuery() {
-  const { listPointWallets } = useMechanicsService();
+export function usePlayerWalletQuery(playerId: number) {
+  const { getPlayerWallet } = useMechanicsService();
 
   return useQuery({
-    queryKey: queryKeys.pointWallets.list(),
+    queryKey: queryKeys.wallets.player(playerId),
     queryFn: async () => {
-      const response = await listPointWallets();
-      if (!response.success) throw new Error(response.error || 'Failed to fetch point wallets');
+      const response = await getPlayerWallet(playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player wallet');
+      return response.data!;
+    },
+    enabled: !!playerId,
+  });
+}
+
+export function useWalletTransactionsQuery(playerId: number, filters?: WalletTransactionFilters) {
+  const { getWalletTransactions } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.wallets.transactions(playerId, filters),
+    queryFn: async () => {
+      const response = await getWalletTransactions(playerId, filters);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch wallet transactions');
+      return response.data!;
+    },
+    enabled: !!playerId,
+  });
+}
+
+export function useCreditWalletMutation() {
+  const queryClient = useQueryClient();
+  const { creditWallet } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: CreditWalletData) => {
+      const response = await creditWallet(data);
+      if (!response.success) throw new Error(response.error || 'Failed to credit wallet');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+    },
+  });
+}
+
+export function useDebitWalletMutation() {
+  const queryClient = useQueryClient();
+  const { debitWallet } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: DebitWalletData) => {
+      const response = await debitWallet(data);
+      if (!response.success) throw new Error(response.error || 'Failed to debit wallet');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+    },
+  });
+}
+
+export function useTransferPointsMutation() {
+  const queryClient = useQueryClient();
+  const { transferPoints } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: TransferPointsData) => {
+      const response = await transferPoints(data);
+      if (!response.success) throw new Error(response.error || 'Failed to transfer points');
+      return response.data!;
+    },
+    onSuccess: (data, { from_player_id, to_player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(from_player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(to_player_id) });
+    },
+  });
+}
+
+// ==================== RULES ====================
+
+export function useRulesQuery(filters?: MechanicsFilters) {
+  const { listRules } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.rules.list(filters),
+    queryFn: async () => {
+      const response = await listRules(filters);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch rules');
       return response.data!;
     },
   });
 }
 
-export function useCreatePointWalletMutation() {
-  const queryClient = useQueryClient();
-  const { createPointWallet } = useMechanicsService();
+export function useRuleQuery(ruleId: number) {
+  const { getRule } = useMechanicsService();
 
-  return useMutation({
-    mutationFn: async (data: { name: string; description?: string; currency?: string }) => {
-      const response = await createPointWallet(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create point wallet');
+  return useQuery({
+    queryKey: queryKeys.rules.detail(ruleId),
+    queryFn: async () => {
+      const response = await getRule(ruleId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch rule');
       return response.data!;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.pointWallets.list() });
+    enabled: !!ruleId,
+  });
+}
+
+export function useRuleExecutionsQuery(filters?: RuleExecutionFilters) {
+  const { getRuleExecutions } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.rules.executions(filters),
+    queryFn: async () => {
+      const response = await getRuleExecutions(filters);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch rule executions');
+      return response.data!;
     },
   });
 }
 
-export function useDeletePointWalletMutation() {
+export function useCreateRuleMutation() {
   const queryClient = useQueryClient();
-  const { deletePointWallet } = useMechanicsService();
+  const { createRule } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (walletId: number) => {
-      const response = await deletePointWallet(walletId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete point wallet');
-      return walletId;
+    mutationFn: async (data: CreateRuleData) => {
+      const response = await createRule(data);
+      if (!response.success) throw new Error(response.error || 'Failed to create rule');
+      return response.data!;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.pointWallets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rules.lists() });
+    },
+  });
+}
+
+export function useUpdateRuleMutation() {
+  const queryClient = useQueryClient();
+  const { updateRule } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ ruleId, data }: { ruleId: number; data: Partial<CreateRuleData> }) => {
+      const response = await updateRule(ruleId, data);
+      if (!response.success) throw new Error(response.error || 'Failed to update rule');
+      return response.data!;
+    },
+    onMutate: async ({ ruleId, data }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.rules.detail(ruleId) });
+      const previousRule = queryClient.getQueryData<Rule>(queryKeys.rules.detail(ruleId));
+
+      if (previousRule) {
+        queryClient.setQueryData<Rule>(queryKeys.rules.detail(ruleId), { ...previousRule, ...data });
+      }
+
+      return { previousRule };
+    },
+    onError: (err, { ruleId }, context) => {
+      if (context?.previousRule) {
+        queryClient.setQueryData(queryKeys.rules.detail(ruleId), context.previousRule);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rules.all });
+    },
+  });
+}
+
+export function useDeleteRuleMutation() {
+  const queryClient = useQueryClient();
+  const { deleteRule } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (ruleId: number) => {
+      const response = await deleteRule(ruleId);
+      if (!response.success) throw new Error(response.error || 'Failed to delete rule');
+      return ruleId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rules.all });
+    },
+  });
+}
+
+export function useCreateRuleVersionMutation() {
+  const queryClient = useQueryClient();
+  const { createRuleVersion } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ ruleId, data }: { ruleId: number; data: CreateRuleData }) => {
+      const response = await createRuleVersion(ruleId, data);
+      if (!response.success) throw new Error(response.error || 'Failed to create rule version');
+      return response.data!;
+    },
+    onSuccess: (data, { ruleId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rules.detail(ruleId) });
+    },
+  });
+}
+
+export function useExecuteRulesMutation() {
+  const queryClient = useQueryClient();
+  const { executeRules } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: ExecuteRulesData) => {
+      const response = await executeRules(data);
+      if (!response.success) throw new Error(response.error || 'Failed to execute rules');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      // Invalidate all player-related queries since rules can affect anything
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.level(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.rules.executions() });
     },
   });
 }
