@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
@@ -53,19 +53,27 @@ const statusColors: Record<ProgramStatus, string> = {
 
 export default function Programs() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<ProgramStatus | 'all'>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [deletingProgram, setDeletingProgram] = useState<Program | null>(null);
 
   const { toast } = useToast();
 
-  // Queries
-  const { data: programsData, isLoading, error } = useProgramsQuery({
-    search: searchQuery || undefined,
-    status: statusFilter !== 'all' ? (statusFilter as ProgramStatus) : undefined,
-  });
+  // Build filters for API
+  const filters = useMemo(() => {
+    const apiFilters: { search?: string; status?: ProgramStatus } = {};
+    if (searchQuery) {
+      apiFilters.search = searchQuery;
+    }
+    if (statusFilter !== 'all') {
+      apiFilters.status = statusFilter;
+    }
+    return apiFilters;
+  }, [searchQuery, statusFilter]);
 
+  // Queries
+  const { data: programsData, isLoading, error, refetch } = useProgramsQuery(filters);
   // Mutations
   const createMutation = useCreateProgramMutation();
   const updateMutation = useUpdateProgramMutation();
@@ -214,7 +222,7 @@ export default function Programs() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ProgramStatus | 'all')}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -263,7 +271,15 @@ export default function Programs() {
                 ) : error ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center">
-                      <p className="text-destructive">Failed to load programs. Please try again.</p>
+                      <div className="flex flex-col items-center gap-3">
+                        <p className="text-destructive font-medium">Failed to load programs</p>
+                        <p className="text-sm text-muted-foreground">
+                          {error instanceof Error ? error.message : 'An error occurred'}
+                        </p>
+                        <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2">
+                          Retry
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ) : programs.length === 0 ? (
@@ -276,7 +292,9 @@ export default function Programs() {
                         <div>
                           <p className="font-medium">No programs found</p>
                           <p className="text-sm text-muted-foreground">
-                            Create your first program to get started.
+                            {searchQuery || statusFilter !== 'all'
+                              ? 'Try adjusting your filters'
+                              : 'Create your first program to get started.'}
                           </p>
                         </div>
                       </div>
