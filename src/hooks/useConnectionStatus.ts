@@ -17,7 +17,7 @@ interface UseConnectionStatusOptions {
 const DEFAULT_OPTIONS: UseConnectionStatusOptions = {
   pingInterval: 30000, // 30 seconds
   pingTimeout: 5000, // 5 seconds
-  pingEndpoint: '/api/health', // Laravel health check endpoint
+  pingEndpoint: '/api/v1/ping', // Laravel ping endpoint
 };
 
 export function useConnectionStatus(options: UseConnectionStatusOptions = {}) {
