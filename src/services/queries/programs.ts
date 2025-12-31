@@ -234,6 +234,42 @@ export function useDuplicateProgramMutation() {
   });
 }
 
+export function useAddPlayerToProgramMutation() {
+  const queryClient = useQueryClient();
+  const { addPlayerToProgram } = useProgramsService();
+
+  return useMutation({
+    mutationFn: async ({ programId, playerId }: { programId: number; playerId: number }) => {
+      const response = await addPlayerToProgram(programId, playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to add player to program');
+      return response.data;
+    },
+    onSuccess: (_, { programId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.players(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.detail(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.stats(programId) });
+    },
+  });
+}
+
+export function useRemovePlayerFromProgramMutation() {
+  const queryClient = useQueryClient();
+  const { removePlayerFromProgram } = useProgramsService();
+
+  return useMutation({
+    mutationFn: async ({ programId, playerId }: { programId: number; playerId: number }) => {
+      const response = await removePlayerFromProgram(programId, playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to remove player from program');
+      return playerId;
+    },
+    onSuccess: (_, { programId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.players(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.detail(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.stats(programId) });
+    },
+  });
+}
+
 // ==================== SEGMENTS ====================
 
 export function useSegmentsQuery() {

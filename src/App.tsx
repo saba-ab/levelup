@@ -14,6 +14,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import Overview from "./pages/dashboard/Overview";
 import Programs from "./pages/dashboard/Programs";
+import ProgramDetail from "./pages/dashboard/ProgramDetail";
 import Rules from "./pages/dashboard/Rules";
 import RuleBuilder from "./pages/dashboard/RuleBuilder";
 import Badges from "./pages/dashboard/mechanics/Badges";
@@ -61,6 +62,7 @@ const App = () => (
                   <Route index element={<ProtectedRoute permission="view:overview"><Overview /></ProtectedRoute>} />
                   <Route path="ai-hub" element={<ProtectedRoute permission="view:ai-hub"><AIHub /></ProtectedRoute>} />
                   <Route path="programs" element={<ProtectedRoute permission="view:programs"><Programs /></ProtectedRoute>} />
+                  <Route path="programs/:programId" element={<ProtectedRoute permission="view:programs"><ProgramDetail /></ProtectedRoute>} />
                   <Route path="rules" element={<ProtectedRoute permission="view:rules"><Rules /></ProtectedRoute>} />
                   <Route path="rules/new" element={<ProtectedRoute permission="manage:rules"><RuleBuilder /></ProtectedRoute>} />
                   <Route path="mechanics/points" element={<ProtectedRoute permission="view:mechanics"><Points /></ProtectedRoute>} />
