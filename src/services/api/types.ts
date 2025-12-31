@@ -607,6 +607,7 @@ export interface Program extends Timestamps {
   end_date?: string;
   settings?: ProgramSettings;
   mechanics?: ProgramMechanics;
+  metadata?: Record<string, unknown>;
   player_count: number;
 }
 
@@ -617,6 +618,7 @@ export interface CreateProgramData {
   end_date?: string;
   settings?: Partial<ProgramSettings>;
   mechanics?: Partial<ProgramMechanics>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface UpdateProgramData {
@@ -627,6 +629,7 @@ export interface UpdateProgramData {
   end_date?: string;
   settings?: Partial<ProgramSettings>;
   mechanics?: Partial<ProgramMechanics>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ProgramFilters extends PaginationParams {
