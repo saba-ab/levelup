@@ -56,13 +56,13 @@ export function usePlayerBadgesQuery(playerId: number) {
   });
 }
 
-export function usePlayerMissionsQuery(playerId: number, status?: string) {
+export function usePlayerMissionsQuery(playerId: number) {
   const { getPlayerMissions } = usePlayersService();
 
   return useQuery({
-    queryKey: queryKeys.players.missions(playerId, status),
+    queryKey: queryKeys.players.missions(playerId),
     queryFn: async () => {
-      const response = await getPlayerMissions(playerId, status);
+      const response = await getPlayerMissions(playerId);
       if (!response.success) throw new Error(response.error || 'Failed to fetch player missions');
       return response.data!;
     },

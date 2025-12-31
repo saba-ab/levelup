@@ -13,15 +13,33 @@ import {
   GrantXpResponse,
   Mission,
   CreateMissionData,
+  PlayerMission,
+  StartMissionData,
+  UpdateMissionProgressData,
   Streak,
   CreateStreakData,
+  PlayerStreak,
+  RecordStreakActivityData,
+  RecordStreakActivityResponse,
   Leaderboard,
   LeaderboardEntry,
   CreateLeaderboardData,
   Reward,
   CreateRewardData,
-  RewardRedemption,
-  PointWallet,
+  PlayerReward,
+  ClaimRewardData,
+  Wallet,
+  WalletTransaction,
+  CreditWalletData,
+  DebitWalletData,
+  TransferPointsData,
+  WalletTransactionFilters,
+  Rule,
+  CreateRuleData,
+  RuleVersion,
+  ExecuteRulesData,
+  RuleExecution,
+  RuleExecutionFilters,
   PaginatedResponse,
   MechanicsFilters,
 } from './types';
@@ -60,17 +78,14 @@ export function useMechanicsService() {
     return api.delete(`/badges/${badgeId}`);
   }, [api]);
 
-  // Award badge to player
   const awardBadge = useCallback(async (data: AwardBadgeData) => {
     return api.post<PlayerBadge>('/badges/award', data);
   }, [api]);
 
-  // Revoke badge from player
   const revokeBadge = useCallback(async (data: RevokeBadgeData) => {
     return api.post<{ message: string }>('/badges/revoke', data);
   }, [api]);
 
-  // Get player's badges
   const getPlayerBadges = useCallback(async (playerId: number) => {
     return api.get<PlayerBadge[]>(`/badges/players/${playerId}/badges`);
   }, [api]);
@@ -106,12 +121,10 @@ export function useMechanicsService() {
     return api.delete(`/levels/${levelId}`);
   }, [api]);
 
-  // Grant XP to player
   const grantXp = useCallback(async (data: GrantXpData) => {
     return api.post<GrantXpResponse>('/levels/xp', data);
   }, [api]);
 
-  // Get player's current level
   const getPlayerLevel = useCallback(async (playerId: number) => {
     return api.get<PlayerLevel>(`/levels/players/${playerId}/level`);
   }, [api]);
@@ -147,6 +160,22 @@ export function useMechanicsService() {
     return api.delete(`/missions/${missionId}`);
   }, [api]);
 
+  const startMission = useCallback(async (data: StartMissionData) => {
+    return api.post<PlayerMission>('/missions/start', data);
+  }, [api]);
+
+  const updateMissionProgress = useCallback(async (playerId: number, missionId: number, data: UpdateMissionProgressData) => {
+    return api.put<PlayerMission>(`/missions/players/${playerId}/missions/${missionId}/progress`, data);
+  }, [api]);
+
+  const completeMission = useCallback(async (playerId: number, missionId: number) => {
+    return api.post<PlayerMission>(`/missions/players/${playerId}/missions/${missionId}/complete`);
+  }, [api]);
+
+  const getPlayerMissions = useCallback(async (playerId: number) => {
+    return api.get<PlayerMission[]>(`/missions/players/${playerId}/missions`);
+  }, [api]);
+
   // ==================== STREAKS ====================
 
   const listStreaks = useCallback(async (filters?: MechanicsFilters) => {
@@ -176,6 +205,22 @@ export function useMechanicsService() {
 
   const deleteStreak = useCallback(async (streakId: number) => {
     return api.delete(`/streaks/${streakId}`);
+  }, [api]);
+
+  const recordStreakActivity = useCallback(async (data: RecordStreakActivityData) => {
+    return api.post<RecordStreakActivityResponse>('/streaks/activity', data);
+  }, [api]);
+
+  const getPlayerStreak = useCallback(async (playerId: number, streakId: number) => {
+    return api.get<PlayerStreak>(`/streaks/players/${playerId}/streaks/${streakId}`);
+  }, [api]);
+
+  const getPlayerStreaks = useCallback(async (playerId: number) => {
+    return api.get<PlayerStreak[]>(`/streaks/players/${playerId}/streaks`);
+  }, [api]);
+
+  const resetStreak = useCallback(async (playerId: number, streakId: number) => {
+    return api.post<PlayerStreak>(`/streaks/players/${playerId}/streaks/${streakId}/reset`);
   }, [api]);
 
   // ==================== LEADERBOARDS ====================
@@ -239,43 +284,99 @@ export function useMechanicsService() {
     return api.delete(`/rewards/${rewardId}`);
   }, [api]);
 
+  const claimReward = useCallback(async (data: ClaimRewardData) => {
+    return api.post<PlayerReward>('/rewards/claim', data);
+  }, [api]);
+
   const redeemReward = useCallback(async (playerId: number, rewardId: number) => {
-    return api.post<RewardRedemption>('/rewards/redeem', { player_id: playerId, reward_id: rewardId });
+    return api.post<PlayerReward>(`/rewards/players/${playerId}/rewards/${rewardId}/redeem`);
   }, [api]);
 
-  const listRedemptions = useCallback(async (status?: string) => {
-    const query = status ? `?status=${status}` : '';
-    return api.get<PaginatedResponse<RewardRedemption>>(`/rewards/redemptions${query}`);
+  const getPlayerRewards = useCallback(async (playerId: number) => {
+    return api.get<PlayerReward[]>(`/rewards/players/${playerId}/rewards`);
   }, [api]);
 
-  const fulfillRedemption = useCallback(async (redemptionId: number) => {
-    return api.post<RewardRedemption>(`/rewards/redemptions/${redemptionId}/fulfill`);
+  // ==================== WALLETS ====================
+
+  const getPlayerWallet = useCallback(async (playerId: number) => {
+    return api.get<Wallet>(`/wallets/players/${playerId}/wallet`);
   }, [api]);
 
-  const cancelRedemption = useCallback(async (redemptionId: number, reason?: string) => {
-    return api.post<RewardRedemption>(`/rewards/redemptions/${redemptionId}/cancel`, { reason });
+  const creditWallet = useCallback(async (data: CreditWalletData) => {
+    return api.post<WalletTransaction>('/wallets/credit', data);
   }, [api]);
 
-  // ==================== POINT WALLETS ====================
-
-  const listPointWallets = useCallback(async () => {
-    return api.get<PointWallet[]>('/point-wallets');
+  const debitWallet = useCallback(async (data: DebitWalletData) => {
+    return api.post<WalletTransaction>('/wallets/debit', data);
   }, [api]);
 
-  const getPointWallet = useCallback(async (walletId: number) => {
-    return api.get<PointWallet>(`/point-wallets/${walletId}`);
+  const transferPoints = useCallback(async (data: TransferPointsData) => {
+    return api.post<WalletTransaction[]>('/wallets/transfer', data);
   }, [api]);
 
-  const createPointWallet = useCallback(async (data: { name: string; description?: string; currency?: string }) => {
-    return api.post<PointWallet>('/point-wallets', data);
+  const getWalletTransactions = useCallback(async (playerId: number, filters?: WalletTransactionFilters) => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    return api.get<PaginatedResponse<WalletTransaction>>(`/wallets/players/${playerId}/transactions${query ? `?${query}` : ''}`);
   }, [api]);
 
-  const updatePointWallet = useCallback(async (walletId: number, data: { name?: string; description?: string }) => {
-    return api.put<PointWallet>(`/point-wallets/${walletId}`, data);
+  // ==================== RULES ====================
+
+  const listRules = useCallback(async (filters?: MechanicsFilters) => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    return api.get<PaginatedResponse<Rule>>(`/rules${query ? `?${query}` : ''}`);
   }, [api]);
 
-  const deletePointWallet = useCallback(async (walletId: number) => {
-    return api.delete(`/point-wallets/${walletId}`);
+  const getRule = useCallback(async (ruleId: number) => {
+    return api.get<Rule>(`/rules/${ruleId}`);
+  }, [api]);
+
+  const createRule = useCallback(async (data: CreateRuleData) => {
+    return api.post<Rule>('/rules', data);
+  }, [api]);
+
+  const updateRule = useCallback(async (ruleId: number, data: Partial<CreateRuleData>) => {
+    return api.put<Rule>(`/rules/${ruleId}`, data);
+  }, [api]);
+
+  const deleteRule = useCallback(async (ruleId: number) => {
+    return api.delete(`/rules/${ruleId}`);
+  }, [api]);
+
+  const createRuleVersion = useCallback(async (ruleId: number, data: CreateRuleData) => {
+    return api.post<RuleVersion>(`/rules/${ruleId}/versions`, data);
+  }, [api]);
+
+  const executeRules = useCallback(async (data: ExecuteRulesData) => {
+    return api.post<RuleExecution[]>('/rules/execute', data);
+  }, [api]);
+
+  const getRuleExecutions = useCallback(async (filters?: RuleExecutionFilters) => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    return api.get<PaginatedResponse<RuleExecution>>(`/rules/executions${query ? `?${query}` : ''}`);
   }, [api]);
 
   return {
@@ -302,12 +403,20 @@ export function useMechanicsService() {
     createMission,
     updateMission,
     deleteMission,
+    startMission,
+    updateMissionProgress,
+    completeMission,
+    getPlayerMissions,
     // Streaks
     listStreaks,
     getStreak,
     createStreak,
     updateStreak,
     deleteStreak,
+    recordStreakActivity,
+    getPlayerStreak,
+    getPlayerStreaks,
+    resetStreak,
     // Leaderboards
     listLeaderboards,
     getLeaderboard,
@@ -322,15 +431,23 @@ export function useMechanicsService() {
     createReward,
     updateReward,
     deleteReward,
+    claimReward,
     redeemReward,
-    listRedemptions,
-    fulfillRedemption,
-    cancelRedemption,
-    // Point Wallets
-    listPointWallets,
-    getPointWallet,
-    createPointWallet,
-    updatePointWallet,
-    deletePointWallet,
+    getPlayerRewards,
+    // Wallets
+    getPlayerWallet,
+    creditWallet,
+    debitWallet,
+    transferPoints,
+    getWalletTransactions,
+    // Rules
+    listRules,
+    getRule,
+    createRule,
+    updateRule,
+    deleteRule,
+    createRuleVersion,
+    executeRules,
+    getRuleExecutions,
   };
 }
