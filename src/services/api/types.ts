@@ -1,6 +1,6 @@
-// Common API types and interfaces
+// Common API types matching Laravel backend
 
-// Pagination
+// Pagination (Laravel format)
 export interface PaginatedResponse<T> {
   data: T[];
   meta: {
@@ -22,8 +22,6 @@ export interface PaginatedResponse<T> {
 export interface PaginationParams {
   page?: number;
   per_page?: number;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
 }
 
 // Timestamps
@@ -32,138 +30,185 @@ export interface Timestamps {
   updated_at: string;
 }
 
-// Player types
-export interface Player extends Timestamps {
-  id: string;
-  external_id: string;
-  email: string;
+// ==================== AUTH ====================
+
+export interface AuthUser {
+  id: number;
   name: string;
-  avatar_url?: string;
-  metadata?: Record<string, unknown>;
-  total_points: number;
-  level_id: string;
-  level?: Level;
-  badges?: Badge[];
-  segments?: Segment[];
+  email: string;
+  email_verified_at?: string;
+  tenant_id?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface PlayerStats {
-  total_points: number;
-  badges_earned: number;
-  missions_completed: number;
-  current_streak: number;
-  rank: number;
+export interface AuthResponse {
+  access_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
+  user: AuthUser;
+}
+
+export interface RegisterData {
+  tenant_name: string;
+  email: string;
+  password: string;
+  password_confirmation: string;
+}
+
+export interface LoginData {
+  email: string;
+  password: string;
+}
+
+// ==================== PLAYERS ====================
+
+export interface Player extends Timestamps {
+  id: number;
+  tenant_id: number;
+  external_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  avatar_url?: string;
+  metadata?: Record<string, unknown>;
+  is_active: boolean;
+  created_by: number;
 }
 
 export interface CreatePlayerData {
   external_id: string;
-  email: string;
-  name: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
   avatar_url?: string;
   metadata?: Record<string, unknown>;
 }
 
 export interface UpdatePlayerData {
   email?: string;
-  name?: string;
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
   avatar_url?: string;
   metadata?: Record<string, unknown>;
+  is_active?: boolean;
 }
 
-// Points types
-export interface PointWallet extends Timestamps {
-  id: string;
-  name: string;
-  description?: string;
-  balance: number;
-  lifetime_earned: number;
-  currency?: string;
+export interface PlayerFilters extends PaginationParams {
+  search?: string;
+  is_active?: boolean;
 }
 
-export interface PointTransaction extends Timestamps {
-  id: string;
-  wallet_id: string;
-  amount: number;
-  type: 'credit' | 'debit';
-  reason: string;
-  reference_type?: string;
-  reference_id?: string;
-}
+// ==================== BADGES ====================
 
-export interface AwardPointsData {
-  player_id: string;
-  wallet_id: string;
-  amount: number;
-  reason: string;
-  reference_type?: string;
-  reference_id?: string;
-}
+export type BadgeTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+export type BadgeCategory = 'achievement' | 'milestone' | 'skill' | 'social' | 'exploration' | 'collection' | 'special' | 'seasonal';
 
-// Badge types
 export interface Badge extends Timestamps {
-  id: string;
+  id: number;
+  tenant_id: number;
   name: string;
   description?: string;
-  image_url?: string;
-  criteria?: string;
+  tier: BadgeTier;
+  category: BadgeCategory;
   points_value: number;
+  is_stackable: boolean;
+  max_awards?: number;
   is_active: boolean;
-  category?: string;
+  is_secret: boolean;
+  requirements?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CreateBadgeData {
   name: string;
   description?: string;
-  image_url?: string;
-  criteria?: string;
+  tier: BadgeTier;
+  category: BadgeCategory;
   points_value?: number;
-  category?: string;
+  is_stackable?: boolean;
+  max_awards?: number;
+  is_active?: boolean;
+  is_secret?: boolean;
+  requirements?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PlayerBadge extends Timestamps {
-  id: string;
-  player_id: string;
-  badge_id: string;
-  badge: Badge;
-  awarded_at: string;
-  awarded_reason?: string;
+  id: number;
+  player_id: number;
+  badge_id: number;
+  badge?: Badge;
+  earned_count: number;
+  metadata?: Record<string, unknown>;
 }
 
-// Level types
+export interface AwardBadgeData {
+  player_id: number;
+  badge_id: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RevokeBadgeData {
+  player_id: number;
+  badge_id: number;
+}
+
+// ==================== LEVELS ====================
+
 export interface Level extends Timestamps {
-  id: string;
+  id: number;
+  tenant_id: number;
+  number: number;
   name: string;
   description?: string;
-  min_points: number;
-  max_points?: number;
+  xp_required: number;
+  points_reward: number;
+  badge_reward_id?: number;
+  badge_reward?: Badge;
   icon_url?: string;
-  benefits?: string[];
-  order: number;
+  color?: string;
 }
 
 export interface CreateLevelData {
-  name: string;
+  number: number;
+  name?: string;
   description?: string;
-  min_points: number;
-  max_points?: number;
+  xp_required: number;
+  points_reward?: number;
+  badge_reward_id?: number;
   icon_url?: string;
-  benefits?: string[];
+  color?: string;
 }
 
-// Mission types
-export interface Mission extends Timestamps {
-  id: string;
-  name: string;
-  description?: string;
-  type: 'one_time' | 'recurring' | 'challenge';
-  points_reward: number;
-  badge_reward_id?: string;
-  badge_reward?: Badge;
-  requirements: MissionRequirement[];
-  start_date?: string;
-  end_date?: string;
-  is_active: boolean;
+export interface PlayerLevel extends Timestamps {
+  id: number;
+  player_id: number;
+  level_id: number;
+  level?: Level;
+  current_xp: number;
+  total_xp: number;
 }
+
+export interface GrantXpData {
+  player_id: number;
+  amount: number;
+  source?: string;
+  source_id?: number;
+}
+
+export interface GrantXpResponse {
+  player_level: PlayerLevel;
+  leveled_up: boolean;
+  levels_gained: number;
+}
+
+// ==================== MISSIONS ====================
+
+export type MissionType = 'one_time' | 'recurring' | 'challenge';
 
 export interface MissionRequirement {
   type: string;
@@ -171,102 +216,134 @@ export interface MissionRequirement {
   description: string;
 }
 
-export interface CreateMissionData {
+export interface Mission extends Timestamps {
+  id: number;
+  tenant_id: number;
   name: string;
   description?: string;
-  type: 'one_time' | 'recurring' | 'challenge';
+  type: MissionType;
   points_reward: number;
-  badge_reward_id?: string;
+  badge_reward_id?: number;
+  badge_reward?: Badge;
   requirements: MissionRequirement[];
   start_date?: string;
   end_date?: string;
+  is_active: boolean;
+}
+
+export interface CreateMissionData {
+  name: string;
+  description?: string;
+  type: MissionType;
+  points_reward: number;
+  badge_reward_id?: number;
+  requirements?: MissionRequirement[];
+  start_date?: string;
+  end_date?: string;
+  is_active?: boolean;
 }
 
 export interface PlayerMission extends Timestamps {
-  id: string;
-  player_id: string;
-  mission_id: string;
-  mission: Mission;
+  id: number;
+  player_id: number;
+  mission_id: number;
+  mission?: Mission;
   progress: number;
   status: 'in_progress' | 'completed' | 'failed';
   completed_at?: string;
 }
 
-// Streak types
-export interface Streak extends Timestamps {
-  id: string;
-  name: string;
-  description?: string;
-  activity_type: string;
-  target_frequency: 'daily' | 'weekly';
-  reward_per_streak: number;
-  milestone_rewards?: StreakMilestone[];
-  is_active: boolean;
-}
+// ==================== STREAKS ====================
+
+export type StreakFrequency = 'daily' | 'weekly';
 
 export interface StreakMilestone {
   days: number;
   reward_points: number;
-  badge_id?: string;
+  badge_id?: number;
+}
+
+export interface Streak extends Timestamps {
+  id: number;
+  tenant_id: number;
+  name: string;
+  description?: string;
+  activity_type: string;
+  target_frequency: StreakFrequency;
+  reward_per_streak: number;
+  milestone_rewards?: StreakMilestone[];
+  is_active: boolean;
 }
 
 export interface CreateStreakData {
   name: string;
   description?: string;
   activity_type: string;
-  target_frequency: 'daily' | 'weekly';
+  target_frequency: StreakFrequency;
   reward_per_streak: number;
   milestone_rewards?: StreakMilestone[];
+  is_active?: boolean;
 }
 
 export interface PlayerStreak extends Timestamps {
-  id: string;
-  player_id: string;
-  streak_id: string;
-  streak: Streak;
+  id: number;
+  player_id: number;
+  streak_id: number;
+  streak?: Streak;
   current_count: number;
   longest_count: number;
   last_activity_at: string;
 }
 
-// Leaderboard types
+// ==================== LEADERBOARDS ====================
+
+export type LeaderboardType = 'points' | 'badges' | 'missions' | 'custom';
+export type LeaderboardScope = 'global' | 'segment' | 'program';
+export type ResetFrequency = 'daily' | 'weekly' | 'monthly' | 'never';
+
 export interface Leaderboard extends Timestamps {
-  id: string;
+  id: number;
+  tenant_id: number;
   name: string;
   description?: string;
-  type: 'points' | 'badges' | 'missions' | 'custom';
-  scope: 'global' | 'segment' | 'program';
-  scope_id?: string;
-  reset_frequency?: 'daily' | 'weekly' | 'monthly' | 'never';
+  type: LeaderboardType;
+  scope: LeaderboardScope;
+  scope_id?: number;
+  reset_frequency?: ResetFrequency;
   is_active: boolean;
 }
 
 export interface LeaderboardEntry {
   rank: number;
-  player_id: string;
-  player: Pick<Player, 'id' | 'name' | 'avatar_url'>;
+  player_id: number;
+  player: Pick<Player, 'id' | 'display_name' | 'avatar_url'>;
   score: number;
-  change: number; // Rank change since last period
+  change: number;
 }
 
 export interface CreateLeaderboardData {
   name: string;
   description?: string;
-  type: 'points' | 'badges' | 'missions' | 'custom';
-  scope: 'global' | 'segment' | 'program';
-  scope_id?: string;
-  reset_frequency?: 'daily' | 'weekly' | 'monthly' | 'never';
+  type: LeaderboardType;
+  scope: LeaderboardScope;
+  scope_id?: number;
+  reset_frequency?: ResetFrequency;
+  is_active?: boolean;
 }
 
-// Reward types
+// ==================== REWARDS ====================
+
+export type RewardType = 'digital' | 'physical' | 'discount' | 'experience';
+
 export interface Reward extends Timestamps {
-  id: string;
+  id: number;
+  tenant_id: number;
   name: string;
   description?: string;
   image_url?: string;
   points_cost: number;
   stock?: number;
-  type: 'digital' | 'physical' | 'discount' | 'experience';
+  type: RewardType;
   redemption_instructions?: string;
   is_active: boolean;
 }
@@ -277,36 +354,60 @@ export interface CreateRewardData {
   image_url?: string;
   points_cost: number;
   stock?: number;
-  type: 'digital' | 'physical' | 'discount' | 'experience';
+  type: RewardType;
   redemption_instructions?: string;
+  is_active?: boolean;
 }
 
 export interface RewardRedemption extends Timestamps {
-  id: string;
-  player_id: string;
-  reward_id: string;
-  reward: Reward;
+  id: number;
+  player_id: number;
+  reward_id: number;
+  reward?: Reward;
   status: 'pending' | 'fulfilled' | 'cancelled';
   fulfilled_at?: string;
 }
 
-// Program types
-export interface Program extends Timestamps {
-  id: string;
+// ==================== POINT WALLETS ====================
+
+export interface PointWallet extends Timestamps {
+  id: number;
+  tenant_id: number;
+  player_id: number;
   name: string;
   description?: string;
-  status: 'draft' | 'active' | 'paused' | 'ended';
-  start_date?: string;
-  end_date?: string;
-  settings: ProgramSettings;
-  mechanics: ProgramMechanics;
-  player_count: number;
+  balance: number;
+  lifetime_earned: number;
+  currency?: string;
 }
+
+export interface PointTransaction extends Timestamps {
+  id: number;
+  wallet_id: number;
+  amount: number;
+  type: 'credit' | 'debit';
+  reason: string;
+  reference_type?: string;
+  reference_id?: number;
+}
+
+export interface AwardPointsData {
+  player_id: number;
+  wallet_id?: number;
+  amount: number;
+  reason: string;
+  reference_type?: string;
+  reference_id?: number;
+}
+
+// ==================== PROGRAMS ====================
+
+export type ProgramStatus = 'draft' | 'active' | 'paused' | 'ended';
 
 export interface ProgramSettings {
   allow_public_signup: boolean;
   require_email_verification: boolean;
-  default_level_id?: string;
+  default_level_id?: number;
   welcome_points?: number;
 }
 
@@ -318,6 +419,19 @@ export interface ProgramMechanics {
   streaks_enabled: boolean;
   leaderboards_enabled: boolean;
   rewards_enabled: boolean;
+}
+
+export interface Program extends Timestamps {
+  id: number;
+  tenant_id: number;
+  name: string;
+  description?: string;
+  status: ProgramStatus;
+  start_date?: string;
+  end_date?: string;
+  settings?: ProgramSettings;
+  mechanics?: ProgramMechanics;
+  player_count: number;
 }
 
 export interface CreateProgramData {
@@ -332,22 +446,21 @@ export interface CreateProgramData {
 export interface UpdateProgramData {
   name?: string;
   description?: string;
-  status?: 'draft' | 'active' | 'paused' | 'ended';
+  status?: ProgramStatus;
   start_date?: string;
   end_date?: string;
   settings?: Partial<ProgramSettings>;
   mechanics?: Partial<ProgramMechanics>;
 }
 
-// Segment types
-export interface Segment extends Timestamps {
-  id: string;
-  name: string;
-  description?: string;
-  type: 'static' | 'dynamic';
-  rules?: SegmentRule[];
-  player_count: number;
+export interface ProgramFilters extends PaginationParams {
+  search?: string;
+  status?: ProgramStatus;
 }
+
+// ==================== SEGMENTS ====================
+
+export type SegmentType = 'static' | 'dynamic';
 
 export interface SegmentRule {
   field: string;
@@ -355,22 +468,24 @@ export interface SegmentRule {
   value: unknown;
 }
 
+export interface Segment extends Timestamps {
+  id: number;
+  tenant_id: number;
+  name: string;
+  description?: string;
+  type: SegmentType;
+  rules?: SegmentRule[];
+  player_count: number;
+}
+
 export interface CreateSegmentData {
   name: string;
   description?: string;
-  type: 'static' | 'dynamic';
+  type: SegmentType;
   rules?: SegmentRule[];
 }
 
-// Filter params for list endpoints
-export interface PlayerFilters extends PaginationParams {
-  search?: string;
-  segment_id?: string;
-  level_id?: string;
-  has_badge?: string;
-  min_points?: number;
-  max_points?: number;
-}
+// ==================== FILTER TYPES ====================
 
 export interface MechanicsFilters extends PaginationParams {
   search?: string;
@@ -378,7 +493,12 @@ export interface MechanicsFilters extends PaginationParams {
   category?: string;
 }
 
-export interface ProgramFilters extends PaginationParams {
-  search?: string;
-  status?: 'draft' | 'active' | 'paused' | 'ended';
+// ==================== STATS ====================
+
+export interface PlayerStats {
+  total_points: number;
+  badges_earned: number;
+  missions_completed: number;
+  current_streak: number;
+  rank: number;
 }

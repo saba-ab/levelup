@@ -9,7 +9,6 @@ import {
   CreateSegmentData,
   ProgramFilters,
   PaginatedResponse,
-  Player,
 } from '../api/types';
 
 // ==================== PROGRAMS ====================
@@ -27,7 +26,7 @@ export function useProgramsQuery(filters?: ProgramFilters) {
   });
 }
 
-export function useProgramQuery(programId: string) {
+export function useProgramQuery(programId: number) {
   const { getProgram } = useProgramsService();
 
   return useQuery({
@@ -41,7 +40,7 @@ export function useProgramQuery(programId: string) {
   });
 }
 
-export function useProgramStatsQuery(programId: string) {
+export function useProgramStatsQuery(programId: number) {
   const { getProgramStats } = useProgramsService();
 
   return useQuery({
@@ -55,7 +54,7 @@ export function useProgramStatsQuery(programId: string) {
   });
 }
 
-export function useProgramPlayersQuery(programId: string, page = 1, perPage = 20) {
+export function useProgramPlayersQuery(programId: number, page = 1, perPage = 20) {
   const { getProgramPlayers } = useProgramsService();
 
   return useQuery({
@@ -90,7 +89,7 @@ export function useUpdateProgramMutation() {
   const { updateProgram } = useProgramsService();
 
   return useMutation({
-    mutationFn: async ({ programId, data }: { programId: string; data: UpdateProgramData }) => {
+    mutationFn: async ({ programId, data }: { programId: number; data: UpdateProgramData }) => {
       const response = await updateProgram(programId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update program');
       return response.data!;
@@ -131,7 +130,7 @@ export function useDeleteProgramMutation() {
   const { deleteProgram } = useProgramsService();
 
   return useMutation({
-    mutationFn: async (programId: string) => {
+    mutationFn: async (programId: number) => {
       const response = await deleteProgram(programId);
       if (!response.success) throw new Error(response.error || 'Failed to delete program');
       return programId;
@@ -173,7 +172,7 @@ export function useActivateProgramMutation() {
   const { activateProgram } = useProgramsService();
 
   return useMutation({
-    mutationFn: async (programId: string) => {
+    mutationFn: async (programId: number) => {
       const response = await activateProgram(programId);
       if (!response.success) throw new Error(response.error || 'Failed to activate program');
       return response.data!;
@@ -190,7 +189,7 @@ export function usePauseProgramMutation() {
   const { pauseProgram } = useProgramsService();
 
   return useMutation({
-    mutationFn: async (programId: string) => {
+    mutationFn: async (programId: number) => {
       const response = await pauseProgram(programId);
       if (!response.success) throw new Error(response.error || 'Failed to pause program');
       return response.data!;
@@ -207,7 +206,7 @@ export function useEndProgramMutation() {
   const { endProgram } = useProgramsService();
 
   return useMutation({
-    mutationFn: async (programId: string) => {
+    mutationFn: async (programId: number) => {
       const response = await endProgram(programId);
       if (!response.success) throw new Error(response.error || 'Failed to end program');
       return response.data!;
@@ -224,7 +223,7 @@ export function useDuplicateProgramMutation() {
   const { duplicateProgram } = useProgramsService();
 
   return useMutation({
-    mutationFn: async ({ programId, newName }: { programId: string; newName: string }) => {
+    mutationFn: async ({ programId, newName }: { programId: number; newName: string }) => {
       const response = await duplicateProgram(programId, newName);
       if (!response.success) throw new Error(response.error || 'Failed to duplicate program');
       return response.data!;
@@ -250,7 +249,7 @@ export function useSegmentsQuery() {
   });
 }
 
-export function useSegmentQuery(segmentId: string) {
+export function useSegmentQuery(segmentId: number) {
   const { getSegment } = useProgramsService();
 
   return useQuery({
@@ -264,7 +263,7 @@ export function useSegmentQuery(segmentId: string) {
   });
 }
 
-export function useSegmentPlayersQuery(segmentId: string, page = 1, perPage = 20) {
+export function useSegmentPlayersQuery(segmentId: number, page = 1, perPage = 20) {
   const { getSegmentPlayers } = useProgramsService();
 
   return useQuery({
@@ -299,7 +298,7 @@ export function useUpdateSegmentMutation() {
   const { updateSegment } = useProgramsService();
 
   return useMutation({
-    mutationFn: async ({ segmentId, data }: { segmentId: string; data: Partial<CreateSegmentData> }) => {
+    mutationFn: async ({ segmentId, data }: { segmentId: number; data: Partial<CreateSegmentData> }) => {
       const response = await updateSegment(segmentId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update segment');
       return response.data!;
@@ -333,7 +332,7 @@ export function useDeleteSegmentMutation() {
   const { deleteSegment } = useProgramsService();
 
   return useMutation({
-    mutationFn: async (segmentId: string) => {
+    mutationFn: async (segmentId: number) => {
       const response = await deleteSegment(segmentId);
       if (!response.success) throw new Error(response.error || 'Failed to delete segment');
       return segmentId;
@@ -349,7 +348,7 @@ export function useRefreshDynamicSegmentMutation() {
   const { refreshDynamicSegment } = useProgramsService();
 
   return useMutation({
-    mutationFn: async (segmentId: string) => {
+    mutationFn: async (segmentId: number) => {
       const response = await refreshDynamicSegment(segmentId);
       if (!response.success) throw new Error(response.error || 'Failed to refresh segment');
       return response.data!;

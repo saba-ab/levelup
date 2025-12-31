@@ -1,13 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePlayersService } from '../api/players';
+import { useMechanicsService } from '../api/mechanics';
 import { queryKeys } from './keys';
 import {
   Player,
   PlayerFilters,
   CreatePlayerData,
   UpdatePlayerData,
-  AwardPointsData,
   PaginatedResponse,
+  AwardBadgeData,
+  RevokeBadgeData,
+  GrantXpData,
 } from '../api/types';
 
 // ==================== QUERIES ====================
@@ -25,7 +28,7 @@ export function usePlayersQuery(filters?: PlayerFilters) {
   });
 }
 
-export function usePlayerQuery(playerId: string) {
+export function usePlayerQuery(playerId: number) {
   const { getPlayer } = usePlayersService();
 
   return useQuery({
@@ -39,21 +42,7 @@ export function usePlayerQuery(playerId: string) {
   });
 }
 
-export function usePlayerStatsQuery(playerId: string) {
-  const { getPlayerStats } = usePlayersService();
-
-  return useQuery({
-    queryKey: queryKeys.players.stats(playerId),
-    queryFn: async () => {
-      const response = await getPlayerStats(playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player stats');
-      return response.data!;
-    },
-    enabled: !!playerId,
-  });
-}
-
-export function usePlayerBadgesQuery(playerId: string) {
+export function usePlayerBadgesQuery(playerId: number) {
   const { getPlayerBadges } = usePlayersService();
 
   return useQuery({
@@ -67,7 +56,7 @@ export function usePlayerBadgesQuery(playerId: string) {
   });
 }
 
-export function usePlayerMissionsQuery(playerId: string, status?: string) {
+export function usePlayerMissionsQuery(playerId: number, status?: string) {
   const { getPlayerMissions } = usePlayersService();
 
   return useQuery({
@@ -81,7 +70,7 @@ export function usePlayerMissionsQuery(playerId: string, status?: string) {
   });
 }
 
-export function usePlayerStreaksQuery(playerId: string) {
+export function usePlayerStreaksQuery(playerId: number) {
   const { getPlayerStreaks } = usePlayersService();
 
   return useQuery({
@@ -89,6 +78,20 @@ export function usePlayerStreaksQuery(playerId: string) {
     queryFn: async () => {
       const response = await getPlayerStreaks(playerId);
       if (!response.success) throw new Error(response.error || 'Failed to fetch player streaks');
+      return response.data!;
+    },
+    enabled: !!playerId,
+  });
+}
+
+export function usePlayerLevelQuery(playerId: number) {
+  const { getPlayerLevel } = useMechanicsService();
+
+  return useQuery({
+    queryKey: queryKeys.players.level(playerId),
+    queryFn: async () => {
+      const response = await getPlayerLevel(playerId);
+      if (!response.success) throw new Error(response.error || 'Failed to fetch player level');
       return response.data!;
     },
     enabled: !!playerId,
@@ -118,19 +121,15 @@ export function useUpdatePlayerMutation() {
   const { updatePlayer } = usePlayersService();
 
   return useMutation({
-    mutationFn: async ({ playerId, data }: { playerId: string; data: UpdatePlayerData }) => {
+    mutationFn: async ({ playerId, data }: { playerId: number; data: UpdatePlayerData }) => {
       const response = await updatePlayer(playerId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update player');
       return response.data!;
     },
     onMutate: async ({ playerId, data }) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: queryKeys.players.detail(playerId) });
-
-      // Snapshot previous value
       const previousPlayer = queryClient.getQueryData<Player>(queryKeys.players.detail(playerId));
 
-      // Optimistically update
       if (previousPlayer) {
         queryClient.setQueryData<Player>(queryKeys.players.detail(playerId), {
           ...previousPlayer,
@@ -141,7 +140,6 @@ export function useUpdatePlayerMutation() {
       return { previousPlayer };
     },
     onError: (err, { playerId }, context) => {
-      // Rollback on error
       if (context?.previousPlayer) {
         queryClient.setQueryData(queryKeys.players.detail(playerId), context.previousPlayer);
       }
@@ -158,7 +156,7 @@ export function useDeletePlayerMutation() {
   const { deletePlayer } = usePlayersService();
 
   return useMutation({
-    mutationFn: async (playerId: string) => {
+    mutationFn: async (playerId: number) => {
       const response = await deletePlayer(playerId);
       if (!response.success) throw new Error(response.error || 'Failed to delete player');
       return playerId;
@@ -166,7 +164,6 @@ export function useDeletePlayerMutation() {
     onMutate: async (playerId) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.players.lists() });
 
-      // Snapshot and optimistically remove from lists
       const previousLists = queryClient.getQueriesData<PaginatedResponse<Player>>({
         queryKey: queryKeys.players.lists(),
       });
@@ -186,7 +183,6 @@ export function useDeletePlayerMutation() {
       return { previousLists };
     },
     onError: (err, playerId, context) => {
-      // Restore previous lists
       context?.previousLists.forEach(([queryKey, data]) => {
         queryClient.setQueryData(queryKey, data);
       });
@@ -199,70 +195,50 @@ export function useDeletePlayerMutation() {
 
 export function useAwardBadgeMutation() {
   const queryClient = useQueryClient();
-  const { awardBadge } = usePlayersService();
+  const { awardBadge } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ playerId, badgeId, reason }: { playerId: string; badgeId: string; reason?: string }) => {
-      const response = await awardBadge(playerId, badgeId, reason);
+    mutationFn: async (data: AwardBadgeData) => {
+      const response = await awardBadge(data);
       if (!response.success) throw new Error(response.error || 'Failed to award badge');
       return response.data!;
     },
-    onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(playerId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.stats(playerId) });
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
     },
   });
 }
 
 export function useRevokeBadgeMutation() {
   const queryClient = useQueryClient();
-  const { revokeBadge } = usePlayersService();
+  const { revokeBadge } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ playerId, badgeId }: { playerId: string; badgeId: string }) => {
-      const response = await revokeBadge(playerId, badgeId);
+    mutationFn: async (data: RevokeBadgeData) => {
+      const response = await revokeBadge(data);
       if (!response.success) throw new Error(response.error || 'Failed to revoke badge');
     },
-    onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(playerId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.stats(playerId) });
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
     },
   });
 }
 
-export function useAwardPointsMutation() {
+export function useGrantXpMutation() {
   const queryClient = useQueryClient();
-  const { awardPoints } = usePlayersService();
+  const { grantXp } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (data: AwardPointsData) => {
-      const response = await awardPoints(data);
-      if (!response.success) throw new Error(response.error || 'Failed to award points');
+    mutationFn: async (data: GrantXpData) => {
+      const response = await grantXp(data);
+      if (!response.success) throw new Error(response.error || 'Failed to grant XP');
       return response.data!;
     },
     onSuccess: (result, { player_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.stats(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.transactions(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all });
-    },
-  });
-}
-
-export function useDeductPointsMutation() {
-  const queryClient = useQueryClient();
-  const { deductPoints } = usePlayersService();
-
-  return useMutation({
-    mutationFn: async (data: AwardPointsData) => {
-      const response = await deductPoints(data);
-      if (!response.success) throw new Error(response.error || 'Failed to deduct points');
-      return response.data!;
-    },
-    onSuccess: (result, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.stats(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.transactions(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.level(player_id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all });
     },
   });
