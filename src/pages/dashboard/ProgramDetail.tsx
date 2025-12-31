@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,25 +13,19 @@ import {
   Calendar,
   Settings,
   Zap,
-  Search,
   ChevronLeft,
   ChevronRight,
+  UsersRound,
+  Award,
+  Target,
+  Gift,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +42,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ProgramFormDialog } from '@/components/programs/ProgramFormDialog';
+import { BulkEnrollDialog } from '@/components/programs/BulkEnrollDialog';
 import {
   useProgramQuery,
   useProgramStatsQuery,
@@ -56,11 +51,10 @@ import {
   useActivateProgramMutation,
   usePauseProgramMutation,
   useEndProgramMutation,
-  useAddPlayerToProgramMutation,
   useRemovePlayerFromProgramMutation,
+  useBulkAddPlayersToProgramMutation,
 } from '@/services/queries/programs';
-import { usePlayersQuery } from '@/services/queries/players';
-import type { Program, ProgramStatus, Player, UpdateProgramData } from '@/services/api/types';
+import type { ProgramStatus, Player, UpdateProgramData } from '@/services/api/types';
 
 const statusColors: Record<ProgramStatus, string> = {
   draft: 'border-amber-500/50 text-amber-500 bg-amber-500/10',
@@ -76,28 +70,25 @@ export default function ProgramDetail() {
   const id = Number(programId);
 
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isAddPlayerOpen, setIsAddPlayerOpen] = useState(false);
+  const [isBulkEnrollOpen, setIsBulkEnrollOpen] = useState(false);
   const [removingPlayer, setRemovingPlayer] = useState<Player | null>(null);
-  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [playersPage, setPlayersPage] = useState(1);
 
   // Queries
   const { data: program, isLoading: programLoading, error: programError } = useProgramQuery(id);
   const { data: stats, isLoading: statsLoading } = useProgramStatsQuery(id);
   const { data: playersData, isLoading: playersLoading } = useProgramPlayersQuery(id, playersPage, 10);
-  const { data: allPlayersData, isLoading: allPlayersLoading } = usePlayersQuery({ search: playerSearchQuery, per_page: 20 });
 
   // Mutations
   const updateMutation = useUpdateProgramMutation();
   const activateMutation = useActivateProgramMutation();
   const pauseMutation = usePauseProgramMutation();
   const endMutation = useEndProgramMutation();
-  const addPlayerMutation = useAddPlayerToProgramMutation();
   const removePlayerMutation = useRemovePlayerFromProgramMutation();
+  const bulkAddMutation = useBulkAddPlayersToProgramMutation();
 
   const players = playersData?.data || [];
-  const allPlayers = allPlayersData?.data || [];
-  const enrolledPlayerIds = new Set(players.map(p => p.id));
+  const enrolledPlayerIds = useMemo(() => new Set(players.map(p => p.id)), [players]);
 
   const handleFormSubmit = async (data: UpdateProgramData) => {
     try {
@@ -140,12 +131,20 @@ export default function ProgramDetail() {
     }
   };
 
-  const handleAddPlayer = async (playerId: number) => {
+  const handleBulkEnroll = async (playerIds: number[]) => {
     try {
-      await addPlayerMutation.mutateAsync({ programId: id, playerId });
-      toast({ title: 'Player added', description: 'Player has been enrolled in the program.' });
+      const result = await bulkAddMutation.mutateAsync({ programId: id, playerIds });
+      toast({
+        title: 'Players enrolled',
+        description: `Successfully enrolled ${result?.successful || playerIds.length} players.`,
+      });
+      setIsBulkEnrollOpen(false);
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to add player', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to enroll players',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -165,8 +164,8 @@ export default function ProgramDetail() {
     activateMutation.isPending ||
     pauseMutation.isPending ||
     endMutation.isPending ||
-    addPlayerMutation.isPending ||
-    removePlayerMutation.isPending;
+    removePlayerMutation.isPending ||
+    bulkAddMutation.isPending;
 
   if (programLoading) {
     return (
@@ -253,7 +252,7 @@ export default function ProgramDetail() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -262,7 +261,7 @@ export default function ProgramDetail() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_players?.toLocaleString() || 0}</p>
-                <p className="text-sm text-muted-foreground">Total Players</p>
+                <p className="text-xs text-muted-foreground">Total Players</p>
               </div>
             </div>
           </CardContent>
@@ -271,15 +270,71 @@ export default function ProgramDetail() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-green-500" />
+                <UsersRound className="w-5 h-5 text-green-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_points_awarded?.toLocaleString() || 0}</p>
-                <p className="text-sm text-muted-foreground">Points Awarded</p>
+                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.active_players?.toLocaleString() || 0}</p>
+                <p className="text-xs text-muted-foreground">Active Players</p>
               </div>
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_points_awarded?.toLocaleString() || 0}</p>
+                <p className="text-xs text-muted-foreground">Points Awarded</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Award className="w-5 h-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_badges_awarded?.toLocaleString() || 0}</p>
+                <p className="text-xs text-muted-foreground">Badges Awarded</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Target className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_missions_completed?.toLocaleString() || 0}</p>
+                <p className="text-xs text-muted-foreground">Missions Done</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center">
+                <Gift className="w-5 h-5 text-pink-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_rewards_redeemed?.toLocaleString() || 0}</p>
+                <p className="text-xs text-muted-foreground">Rewards Redeemed</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Date Info */}
+      <div className="grid grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -332,9 +387,9 @@ export default function ProgramDetail() {
                 <CardTitle>Enrolled Players</CardTitle>
                 <CardDescription>Manage players in this program</CardDescription>
               </div>
-              <Button onClick={() => setIsAddPlayerOpen(true)} disabled={program.status === 'ended'}>
+              <Button onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status === 'ended'}>
                 <UserPlus className="w-4 h-4 mr-2" />
-                Add Player
+                Add Players
               </Button>
             </CardHeader>
             <CardContent>
@@ -354,7 +409,7 @@ export default function ProgramDetail() {
                 <div className="text-center py-12">
                   <Users className="w-12 h-12 mx-auto text-muted-foreground/50" />
                   <p className="mt-4 text-muted-foreground">No players enrolled yet</p>
-                  <Button className="mt-4" onClick={() => setIsAddPlayerOpen(true)} disabled={program.status === 'ended'}>
+                  <Button className="mt-4" onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status === 'ended'}>
                     <UserPlus className="w-4 h-4 mr-2" />
                     Add First Player
                   </Button>
@@ -493,82 +548,15 @@ export default function ProgramDetail() {
         isLoading={updateMutation.isPending}
       />
 
-      {/* Add Player Dialog */}
-      <Dialog open={isAddPlayerOpen} onOpenChange={setIsAddPlayerOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Player to Program</DialogTitle>
-            <DialogDescription>Search and select a player to enroll</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search players..."
-                className="pl-9"
-                value={playerSearchQuery}
-                onChange={(e) => setPlayerSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="max-h-[300px] overflow-y-auto space-y-2">
-              {allPlayersLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-14 w-full" />
-                  ))}
-                </div>
-              ) : allPlayers.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No players found</p>
-              ) : (
-                allPlayers.map((player) => {
-                  const isEnrolled = enrolledPlayerIds.has(player.id);
-                  return (
-                    <div
-                      key={player.id}
-                      className={cn(
-                        'flex items-center justify-between p-3 border rounded-lg transition-colors',
-                        isEnrolled ? 'opacity-50 bg-muted' : 'hover:bg-secondary/30 cursor-pointer'
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage src={player.avatar_url} />
-                          <AvatarFallback className="text-xs">
-                            {player.display_name?.substring(0, 2).toUpperCase() || player.external_id.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium text-sm">{player.display_name || player.external_id}</p>
-                          <p className="text-xs text-muted-foreground">{player.email}</p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={isEnrolled ? 'secondary' : 'default'}
-                        disabled={isEnrolled || addPlayerMutation.isPending}
-                        onClick={() => handleAddPlayer(player.id)}
-                      >
-                        {addPlayerMutation.isPending ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : isEnrolled ? (
-                          'Enrolled'
-                        ) : (
-                          'Add'
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddPlayerOpen(false)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Bulk Enroll Dialog */}
+      <BulkEnrollDialog
+        open={isBulkEnrollOpen}
+        onOpenChange={setIsBulkEnrollOpen}
+        enrolledPlayerIds={enrolledPlayerIds}
+        onEnroll={handleBulkEnroll}
+        isLoading={bulkAddMutation.isPending}
+        programName={program.name}
+      />
 
       {/* Remove Player Confirmation */}
       <AlertDialog open={!!removingPlayer} onOpenChange={() => setRemovingPlayer(null)}>

@@ -252,6 +252,24 @@ export function useAddPlayerToProgramMutation() {
   });
 }
 
+export function useBulkAddPlayersToProgramMutation() {
+  const queryClient = useQueryClient();
+  const { addPlayersToProgram } = useProgramsService();
+
+  return useMutation({
+    mutationFn: async ({ programId, playerIds }: { programId: number; playerIds: number[] }) => {
+      const response = await addPlayersToProgram(programId, playerIds);
+      return response.data;
+    },
+    onSuccess: (_, { programId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.players(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.detail(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.stats(programId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs.lists() });
+    },
+  });
+}
+
 export function useRemovePlayerFromProgramMutation() {
   const queryClient = useQueryClient();
   const { removePlayerFromProgram } = useProgramsService();
