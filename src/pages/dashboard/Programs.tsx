@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +53,7 @@ const statusColors: Record<ProgramStatus, string> = {
 };
 
 export default function Programs() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProgramStatus | 'all'>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -304,7 +306,8 @@ export default function Programs() {
                   programs.map((program) => (
                     <tr
                       key={program.id}
-                      className="border-b border-border/50 hover:bg-secondary/30 transition-colors"
+                      className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/programs/${program.id}`)}
                     >
                       <td className="p-4">
                         <div className="flex items-center gap-3">
@@ -312,7 +315,10 @@ export default function Programs() {
                             <FolderOpen className="w-5 h-5 text-primary" />
                           </div>
                           <div>
-                            <span className="font-medium">{program.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{program.name}</span>
+                              <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
                             {program.description && (
                               <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                                 {program.description}
@@ -340,7 +346,7 @@ export default function Programs() {
                           <span className="text-muted-foreground/60">No dates set</span>
                         )}
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" disabled={isAnyMutating}>
@@ -352,6 +358,11 @@ export default function Programs() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/programs/${program.id}`)}>
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             {program.status === 'draft' && (
                               <DropdownMenuItem onClick={() => handleActivate(program)}>
                                 <Play className="w-4 h-4 mr-2" />
