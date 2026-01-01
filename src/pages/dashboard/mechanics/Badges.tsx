@@ -247,8 +247,64 @@ export default function Badges() {
                 Create Badge
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <form onSubmit={handleSubmit}>
+                {/* Live Preview */}
+                <div className="mb-6 p-4 rounded-lg bg-secondary/50 border border-border">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Live Preview</p>
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-16 h-16 rounded-full flex items-center justify-center text-3xl bg-background border-2 border-border transition-all shrink-0"
+                    >
+                      {formState.image_url ? (
+                        <img 
+                          src={formState.image_url} 
+                          alt="Badge preview" 
+                          className="w-full h-full rounded-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <span className={formState.image_url ? 'hidden' : ''}>
+                        {tierIcons[formState.tier]}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-lg truncate">
+                        {formState.name || 'Badge Name'}
+                      </h4>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {formState.description || 'Badge description will appear here...'}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <BadgeUI variant="outline" className={`text-xs ${tierColors[formState.tier]}`}>
+                          {tierIcons[formState.tier]} {formState.tier}
+                        </BadgeUI>
+                        <BadgeUI variant="outline" className="text-xs bg-secondary">
+                          {categoryLabels[formState.category]}
+                        </BadgeUI>
+                        {formState.points_value > 0 && (
+                          <BadgeUI variant="outline" className="text-xs bg-secondary">
+                            <Award className="w-3 h-3 mr-1" />
+                            {formState.points_value} pts
+                          </BadgeUI>
+                        )}
+                        {formState.is_secret && (
+                          <BadgeUI variant="outline" className="text-xs bg-amber-500/20 text-amber-500 border-amber-500/30">
+                            🔒 Secret
+                          </BadgeUI>
+                        )}
+                        {!formState.is_active && (
+                          <BadgeUI variant="outline" className="text-xs bg-muted text-muted-foreground">
+                            Inactive
+                          </BadgeUI>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <DialogHeader>
                   <DialogTitle>{editingBadge ? 'Edit Badge' : 'Create New Badge'}</DialogTitle>
                   <DialogDescription>
