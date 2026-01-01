@@ -8,6 +8,7 @@ import {
   AwardBadgeData,
   Level,
   CreateLevelData,
+  UpdateLevelData,
   PlayerLevel,
   GrantXpData,
   GrantXpResponse,
@@ -113,7 +114,7 @@ export function useMechanicsService() {
     return api.post<Level>('/levels', data);
   }, [api]);
 
-  const updateLevel = useCallback(async (levelId: number, data: Partial<CreateLevelData>) => {
+  const updateLevel = useCallback(async (levelId: number, data: UpdateLevelData) => {
     return api.put<Level>(`/levels/${levelId}`, data);
   }, [api]);
 
@@ -126,7 +127,7 @@ export function useMechanicsService() {
   }, [api]);
 
   const getPlayerLevel = useCallback(async (playerId: number) => {
-    return api.get<PlayerLevel>(`/levels/players/${playerId}/level`);
+    return api.get<PlayerLevel>(`/levels/players/${playerId}`);
   }, [api]);
 
   // ==================== MISSIONS ====================

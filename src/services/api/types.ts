@@ -204,7 +204,7 @@ export interface Level extends Timestamps {
   id: number;
   tenant_id: number;
   number: number;
-  name: string;
+  name?: string;
   description?: string;
   xp_required: number;
   points_reward: number;
@@ -212,6 +212,7 @@ export interface Level extends Timestamps {
   badge_reward?: Badge;
   icon_url?: string;
   color?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CreateLevelData {
@@ -223,6 +224,19 @@ export interface CreateLevelData {
   badge_reward_id?: number;
   icon_url?: string;
   color?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateLevelData {
+  number?: number;
+  name?: string;
+  description?: string;
+  xp_required?: number;
+  points_reward?: number;
+  badge_reward_id?: number;
+  icon_url?: string;
+  color?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PlayerLevel extends Timestamps {
@@ -232,6 +246,9 @@ export interface PlayerLevel extends Timestamps {
   level?: Level;
   current_xp: number;
   total_xp: number;
+  level_reached_at: string;
+  xp_to_next_level?: number;
+  progress_percentage?: number;
 }
 
 export interface GrantXpData {
