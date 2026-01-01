@@ -137,7 +137,9 @@ export interface Badge extends Timestamps {
   id: number;
   tenant_id: number;
   name: string;
+  slug: string;
   description?: string;
+  image_url?: string;
   tier: BadgeTier;
   category: BadgeCategory;
   points_value: number;
@@ -152,8 +154,24 @@ export interface Badge extends Timestamps {
 export interface CreateBadgeData {
   name: string;
   description?: string;
-  tier: BadgeTier;
-  category: BadgeCategory;
+  image_url?: string;
+  tier?: BadgeTier;
+  category?: BadgeCategory;
+  points_value?: number;
+  is_stackable?: boolean;
+  max_awards?: number;
+  is_active?: boolean;
+  is_secret?: boolean;
+  requirements?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateBadgeData {
+  name?: string;
+  description?: string;
+  image_url?: string;
+  tier?: BadgeTier;
+  category?: BadgeCategory;
   points_value?: number;
   is_stackable?: boolean;
   max_awards?: number;
@@ -167,8 +185,10 @@ export interface PlayerBadge extends Timestamps {
   id: number;
   player_id: number;
   badge_id: number;
-  badge?: Badge;
+  awarded_at: string;
+  awarded_by?: number;
   earned_count: number;
+  badge?: Badge;
   metadata?: Record<string, unknown>;
 }
 
@@ -176,11 +196,6 @@ export interface AwardBadgeData {
   player_id: number;
   badge_id: number;
   metadata?: Record<string, unknown>;
-}
-
-export interface RevokeBadgeData {
-  player_id: number;
-  badge_id: number;
 }
 
 // ==================== LEVELS ====================
