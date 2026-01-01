@@ -4,6 +4,7 @@ import { queryKeys } from './keys';
 import {
   Badge,
   CreateBadgeData,
+  UpdateBadgeData,
   Level,
   CreateLevelData,
   Mission,
@@ -27,6 +28,7 @@ import {
   DebitWalletData,
   TransferPointsData,
   ExecuteRulesData,
+  AwardBadgeData,
 } from '../api/types';
 
 // ==================== BADGES ====================
@@ -93,7 +95,7 @@ export function useUpdateBadgeMutation() {
   const { updateBadge } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ badgeId, data }: { badgeId: number; data: Partial<CreateBadgeData> }) => {
+    mutationFn: async ({ badgeId, data }: { badgeId: number; data: UpdateBadgeData }) => {
       const response = await updateBadge(badgeId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update badge');
       return response.data!;
@@ -135,6 +137,40 @@ export function useDeleteBadgeMutation() {
     },
   });
 }
+
+export function useAwardBadgeMutation() {
+  const queryClient = useQueryClient();
+  const { awardBadge } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async (data: AwardBadgeData) => {
+      const response = await awardBadge(data);
+      if (!response.success) throw new Error(response.error || 'Failed to award badge');
+      return response.data!;
+    },
+    onSuccess: (data, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(player_id) });
+    },
+  });
+}
+
+export function useRevokeBadgeMutation() {
+  const queryClient = useQueryClient();
+  const { revokeBadge } = useMechanicsService();
+
+  return useMutation({
+    mutationFn: async ({ playerId, badgeId }: { playerId: number; badgeId: number }) => {
+      const response = await revokeBadge(playerId, badgeId);
+      if (!response.success) throw new Error(response.error || 'Failed to revoke badge');
+    },
+    onSuccess: (data, { playerId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(playerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(playerId) });
+    },
+  });
+}
+
 
 // ==================== LEVELS ====================
 

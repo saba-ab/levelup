@@ -3,9 +3,9 @@ import { useCallback } from 'react';
 import {
   Badge,
   CreateBadgeData,
+  UpdateBadgeData,
   PlayerBadge,
   AwardBadgeData,
-  RevokeBadgeData,
   Level,
   CreateLevelData,
   PlayerLevel,
@@ -70,7 +70,7 @@ export function useMechanicsService() {
     return api.post<Badge>('/badges', data);
   }, [api]);
 
-  const updateBadge = useCallback(async (badgeId: number, data: Partial<CreateBadgeData>) => {
+  const updateBadge = useCallback(async (badgeId: number, data: UpdateBadgeData) => {
     return api.put<Badge>(`/badges/${badgeId}`, data);
   }, [api]);
 
@@ -82,12 +82,12 @@ export function useMechanicsService() {
     return api.post<PlayerBadge>('/badges/award', data);
   }, [api]);
 
-  const revokeBadge = useCallback(async (data: RevokeBadgeData) => {
-    return api.post<{ message: string }>('/badges/revoke', data);
+  const revokeBadge = useCallback(async (playerId: number, badgeId: number) => {
+    return api.delete(`/badges/players/${playerId}/badges/${badgeId}`);
   }, [api]);
 
   const getPlayerBadges = useCallback(async (playerId: number) => {
-    return api.get<PlayerBadge[]>(`/badges/players/${playerId}/badges`);
+    return api.get<PlayerBadge[]>(`/badges/players/${playerId}`);
   }, [api]);
 
   // ==================== LEVELS ====================

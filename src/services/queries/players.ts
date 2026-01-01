@@ -9,7 +9,6 @@ import {
   UpdatePlayerData,
   PaginatedResponse,
   AwardBadgeData,
-  RevokeBadgeData,
   GrantXpData,
 } from '../api/types';
 
@@ -215,13 +214,13 @@ export function useRevokeBadgeMutation() {
   const { revokeBadge } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async (data: RevokeBadgeData) => {
-      const response = await revokeBadge(data);
+    mutationFn: async ({ playerId, badgeId }: { playerId: number; badgeId: number }) => {
+      const response = await revokeBadge(playerId, badgeId);
       if (!response.success) throw new Error(response.error || 'Failed to revoke badge');
     },
-    onSuccess: (data, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
+    onSuccess: (data, { playerId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(playerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(playerId) });
     },
   });
 }
