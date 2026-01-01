@@ -94,9 +94,9 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     name: event?.name || '',
     slug: event?.slug || '',
     description: event?.description || '',
-    icon: getEventIcon(event!) || '⚡',
-    category: getEventCategory(event!) || 'custom',
-    properties: getEventProperties(event!) || [],
+    icon: event ? getEventIcon(event) : '⚡',
+    category: event ? getEventCategory(event) : 'custom',
+    properties: event ? getEventProperties(event) : [],
     is_active: event?.is_active ?? true,
   });
 
