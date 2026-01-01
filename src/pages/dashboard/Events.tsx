@@ -39,10 +39,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
   useEventsQuery,
+  usePredefinedEventsQuery,
+  useCustomEventsQuery,
   useCreateEventMutation,
   useUpdateEventMutation,
   useDeleteEventMutation,
@@ -60,6 +63,21 @@ const eventCategories = [
 
 const propertyTypes = ['string', 'number', 'boolean', 'array', 'object'] as const;
 
+// Helper to get metadata fields
+const getEventIcon = (event: TriggerEvent) => event.metadata?.icon || '⚡';
+const getEventCategory = (event: TriggerEvent) => event.metadata?.category || 'custom';
+const getEventProperties = (event: TriggerEvent) => event.metadata?.properties || [];
+
+interface EventFormData {
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  category: string;
+  properties: TriggerEventProperty[];
+  is_active: boolean;
+}
+
 interface EventFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,13 +90,13 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
   const updateMutation = useUpdateEventMutation();
   const isEditing = !!event;
 
-  const [formData, setFormData] = useState<CreateTriggerEventData>({
+  const [formData, setFormData] = useState<EventFormData>({
     name: event?.name || '',
-    key: event?.key || '',
+    slug: event?.slug || '',
     description: event?.description || '',
-    icon: event?.icon || '⚡',
-    category: event?.category || 'custom',
-    properties: event?.properties || [],
+    icon: getEventIcon(event!) || '⚡',
+    category: getEventCategory(event!) || 'custom',
+    properties: getEventProperties(event!) || [],
     is_active: event?.is_active ?? true,
   });
 
@@ -93,17 +111,17 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     if (event) {
       setFormData({
         name: event.name,
-        key: event.key,
+        slug: event.slug,
         description: event.description || '',
-        icon: event.icon || '⚡',
-        category: event.category || 'custom',
-        properties: event.properties || [],
+        icon: getEventIcon(event),
+        category: getEventCategory(event),
+        properties: getEventProperties(event),
         is_active: event.is_active,
       });
     } else {
       setFormData({
         name: '',
-        key: '',
+        slug: '',
         description: '',
         icon: '⚡',
         category: 'custom',
@@ -113,7 +131,7 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     }
   }, [event, open]);
 
-  const generateKey = (name: string) => {
+  const generateSlug = (name: string) => {
     return name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   };
 
@@ -121,7 +139,7 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     setFormData(prev => ({
       ...prev,
       name,
-      key: !isEditing ? generateKey(name) : prev.key,
+      slug: !isEditing ? generateSlug(name) : prev.slug,
     }));
   };
 
@@ -129,7 +147,7 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     if (!newProperty.name) return;
     setFormData(prev => ({
       ...prev,
-      properties: [...(prev.properties || []), newProperty],
+      properties: [...prev.properties, newProperty],
     }));
     setNewProperty({ name: '', type: 'string', required: false, description: '' });
   };
@@ -137,26 +155,38 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
   const removeProperty = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      properties: prev.properties?.filter((_, i) => i !== index),
+      properties: prev.properties.filter((_, i) => i !== index),
     }));
   };
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.key) {
+    if (!formData.name) {
       toast({
         title: 'Missing required fields',
-        description: 'Please provide a name and key for the event.',
+        description: 'Please provide a name for the event.',
         variant: 'destructive',
       });
       return;
     }
 
+    const payload: CreateTriggerEventData = {
+      name: formData.name,
+      slug: formData.slug || undefined,
+      description: formData.description || undefined,
+      is_active: formData.is_active,
+      metadata: {
+        icon: formData.icon,
+        category: formData.category,
+        properties: formData.properties,
+      },
+    };
+
     try {
       if (isEditing && event) {
-        await updateMutation.mutateAsync({ eventId: event.id, data: formData });
+        await updateMutation.mutateAsync({ eventId: event.id, data: payload });
         toast({ title: 'Event updated successfully' });
       } else {
-        await createMutation.mutateAsync(formData);
+        await createMutation.mutateAsync(payload);
         toast({ title: 'Event created successfully' });
       }
       onOpenChange(false);
@@ -193,11 +223,11 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Event Key *</Label>
+              <Label>Event Slug</Label>
               <Input
                 placeholder="e.g., purchase_completed"
-                value={formData.key}
-                onChange={(e) => setFormData(prev => ({ ...prev, key: e.target.value }))}
+                value={formData.slug}
+                onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
                 disabled={isEditing}
                 className={cn(isEditing && "opacity-50")}
               />
@@ -251,10 +281,10 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label>Event Properties</Label>
-              <Badge variant="secondary">{formData.properties?.length || 0} properties</Badge>
+              <Badge variant="secondary">{formData.properties.length} properties</Badge>
             </div>
             
-            {formData.properties && formData.properties.length > 0 && (
+            {formData.properties.length > 0 && (
               <div className="space-y-2">
                 {formData.properties.map((prop, index) => (
                   <div key={index} className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg">
@@ -340,19 +370,56 @@ export default function Events() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'predefined' | 'custom'>('all');
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<TriggerEvent | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<TriggerEvent | null>(null);
 
-  const { data: eventsData, isLoading } = useEventsQuery({
+  // Fetch events based on active tab
+  const { data: allEventsData, isLoading: allLoading } = useEventsQuery({
     search: searchQuery || undefined,
-    category: categoryFilter !== 'all' ? categoryFilter : undefined,
   });
+  const { data: predefinedEventsData, isLoading: predefinedLoading } = usePredefinedEventsQuery();
+  const { data: customEventsData, isLoading: customLoading } = useCustomEventsQuery();
+
   const updateMutation = useUpdateEventMutation();
   const deleteMutation = useDeleteEventMutation();
 
-  const events = eventsData || [];
+  // Get the right events based on tab
+  const getEvents = () => {
+    let events: TriggerEvent[] = [];
+    switch (activeTab) {
+      case 'predefined':
+        events = predefinedEventsData || [];
+        break;
+      case 'custom':
+        events = customEventsData || [];
+        break;
+      default:
+        events = allEventsData || [];
+    }
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      events = events.filter(e => getEventCategory(e) === categoryFilter);
+    }
+    
+    // Apply search filter for non-API search tabs
+    if (searchQuery && activeTab !== 'all') {
+      const query = searchQuery.toLowerCase();
+      events = events.filter(e => 
+        e.name.toLowerCase().includes(query) || 
+        e.slug.toLowerCase().includes(query) ||
+        e.description?.toLowerCase().includes(query)
+      );
+    }
+    
+    return events;
+  };
+
+  const events = getEvents();
+  const isLoading = activeTab === 'all' ? allLoading : activeTab === 'predefined' ? predefinedLoading : customLoading;
 
   const handleEdit = (event: TriggerEvent) => {
     setSelectedEvent(event);
@@ -415,6 +482,15 @@ export default function Events() {
           Create Event
         </Button>
       </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList>
+          <TabsTrigger value="all">All Events</TabsTrigger>
+          <TabsTrigger value="predefined">Predefined</TabsTrigger>
+          <TabsTrigger value="custom">Custom</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Search and Filter */}
       <Card>
@@ -480,7 +556,8 @@ export default function Events() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {events.map((event) => {
-            const categoryInfo = getCategoryInfo(event.category);
+            const categoryInfo = getCategoryInfo(getEventCategory(event));
+            const properties = getEventProperties(event);
             return (
               <Card key={event.id} className={cn(
                 "relative transition-all hover:shadow-md",
@@ -489,7 +566,7 @@ export default function Events() {
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-2xl">
-                      {event.icon || categoryInfo.icon}
+                      {getEventIcon(event)}
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -515,7 +592,7 @@ export default function Events() {
                             </>
                           )}
                         </DropdownMenuItem>
-                        {!event.is_system && (
+                        {!event.is_predefined && (
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => {
@@ -531,34 +608,42 @@ export default function Events() {
                     </DropdownMenu>
                   </div>
 
-                  <h3 className="font-semibold mb-1">{event.name}</h3>
-                  <code className="text-xs bg-secondary px-2 py-1 rounded">{event.key}</code>
-                  
-                  {event.description && (
-                    <p className="text-sm text-muted-foreground mt-3 line-clamp-2">{event.description}</p>
-                  )}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{event.name}</h3>
+                      {event.is_predefined && (
+                        <Badge variant="secondary" className="text-xs">System</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {event.description || 'No description provided'}
+                    </p>
+                  </div>
 
-                  <div className="flex items-center gap-2 mt-4">
-                    <Badge variant="outline" className="text-xs">
-                      <Tag className="w-3 h-3 mr-1" />
-                      {categoryInfo.label}
-                    </Badge>
-                    {event.properties && event.properties.length > 0 && (
+                  <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {categoryInfo.icon} {categoryInfo.label}
+                      </Badge>
+                      <code className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
+                        {event.slug}
+                      </code>
+                    </div>
+                    {properties.length > 0 && (
                       <Badge variant="secondary" className="text-xs">
-                        {event.properties.length} props
-                      </Badge>
-                    )}
-                    {event.is_system && (
-                      <Badge variant="outline" className="text-xs border-blue-500/50 text-blue-500">
-                        System
-                      </Badge>
-                    )}
-                    {!event.is_active && (
-                      <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-500">
-                        Inactive
+                        {properties.length} props
                       </Badge>
                     )}
                   </div>
+
+                  {!event.is_predefined && (
+                    <div className="absolute top-3 left-3">
+                      <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        event.is_active ? "bg-green-500" : "bg-muted"
+                      )} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -566,7 +651,7 @@ export default function Events() {
         </div>
       )}
 
-      {/* Event Form Dialog */}
+      {/* Form Dialog */}
       <EventFormDialog
         open={formDialogOpen}
         onOpenChange={setFormDialogOpen}
@@ -580,7 +665,7 @@ export default function Events() {
             <AlertDialogTitle>Delete Event</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{eventToDelete?.name}"? This action cannot be undone.
-              Rules using this event may stop working.
+              Any rules using this event will stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -589,7 +674,7 @@ export default function Events() {
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
