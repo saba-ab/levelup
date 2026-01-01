@@ -17,6 +17,7 @@ import Programs from "./pages/dashboard/Programs";
 import ProgramDetail from "./pages/dashboard/ProgramDetail";
 import Rules from "./pages/dashboard/Rules";
 import RuleBuilder from "./pages/dashboard/RuleBuilder";
+import Events from "./pages/dashboard/Events";
 import Badges from "./pages/dashboard/mechanics/Badges";
 import Levels from "./pages/dashboard/mechanics/Levels";
 import Leaderboards from "./pages/dashboard/mechanics/Leaderboards";
@@ -65,6 +66,7 @@ const App = () => (
                   <Route path="programs/:programId" element={<ProtectedRoute permission="view:programs"><ProgramDetail /></ProtectedRoute>} />
                   <Route path="rules" element={<ProtectedRoute permission="view:rules"><Rules /></ProtectedRoute>} />
                   <Route path="rules/new" element={<ProtectedRoute permission="manage:rules"><RuleBuilder /></ProtectedRoute>} />
+                  <Route path="events" element={<ProtectedRoute permission="view:rules"><Events /></ProtectedRoute>} />
                   <Route path="mechanics/points" element={<ProtectedRoute permission="view:mechanics"><Points /></ProtectedRoute>} />
                   <Route path="mechanics/badges" element={<ProtectedRoute permission="view:mechanics"><Badges /></ProtectedRoute>} />
                   <Route path="mechanics/levels" element={<ProtectedRoute permission="view:mechanics"><Levels /></ProtectedRoute>} />

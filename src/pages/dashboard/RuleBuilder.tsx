@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Zap, GitBranch, Award, Target, Save, Play } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Plus, Trash2, Zap, GitBranch, Award, Target, Save, Play, ExternalLink, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useEventsQuery } from '@/services/queries/events';
 
 interface Condition {
   id: string;
@@ -28,15 +29,6 @@ interface Action {
   config: Record<string, any>;
 }
 
-const eventTypes = [
-  { value: 'purchase_completed', label: 'Purchase Completed', icon: '🛒' },
-  { value: 'user_signup', label: 'User Signup', icon: '👋' },
-  { value: 'user_login', label: 'User Login', icon: '🔐' },
-  { value: 'referral_completed', label: 'Referral Completed', icon: '🔗' },
-  { value: 'workout_logged', label: 'Workout Logged', icon: '💪' },
-  { value: 'subscription_upgraded', label: 'Subscription Upgraded', icon: '⬆️' },
-];
-
 export default function RuleBuilder() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -45,6 +37,10 @@ export default function RuleBuilder() {
   const [triggerEvent, setTriggerEvent] = useState('');
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
+
+  // Fetch events from API
+  const { data: eventsData, isLoading: eventsLoading } = useEventsQuery({ is_active: true });
+  const events = eventsData || [];
 
   const addCondition = (type: Condition['type']) => {
     setConditions([
@@ -129,20 +125,42 @@ export default function RuleBuilder() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">When this event occurs:</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">When this event occurs:</label>
+                  <Link to="/events" className="text-xs text-primary hover:underline flex items-center gap-1">
+                    Manage Events <ExternalLink className="w-3 h-3" />
+                  </Link>
+                </div>
                 <Select value={triggerEvent} onValueChange={setTriggerEvent}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select an event type" />
+                    <SelectValue placeholder={eventsLoading ? "Loading events..." : "Select an event type"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {eventTypes.map(event => (
-                      <SelectItem key={event.value} value={event.value}>
-                        <div className="flex items-center gap-2">
-                          <span>{event.icon}</span>
-                          <span>{event.label}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {eventsLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        <span className="text-sm text-muted-foreground">Loading events...</span>
+                      </div>
+                    ) : events.length === 0 ? (
+                      <div className="py-4 px-2 text-center">
+                        <p className="text-sm text-muted-foreground mb-2">No events found</p>
+                        <Link to="/events">
+                          <Button size="sm" variant="outline">
+                            <Plus className="w-3 h-3 mr-1" />
+                            Create Event
+                          </Button>
+                        </Link>
+                      </div>
+                    ) : (
+                      events.map(event => (
+                        <SelectItem key={event.key} value={event.key}>
+                          <div className="flex items-center gap-2">
+                            <span>{event.icon || '⚡'}</span>
+                            <span>{event.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
