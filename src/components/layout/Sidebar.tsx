@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
   { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true, permission: 'view:ai-hub' },
   { label: 'Programs', path: '/programs', icon: <FolderOpen className="w-5 h-5" />, permission: 'view:programs' },
   { label: 'Rules', path: '/rules', icon: <GitBranch className="w-5 h-5" />, permission: 'view:rules' },
+  { label: 'Events', path: '/events', icon: <Sparkles className="w-5 h-5" />, permission: 'view:rules' },
   {
     label: 'Mechanics',
     path: '/mechanics',
