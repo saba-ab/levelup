@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Zap, GitBranch, Award, Target, Save, Play, ExternalLink, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Zap, GitBranch, Award, Target, Save, Play, ExternalLink, Loader2, Code, Info, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useEventsQuery } from '@/services/queries/events';
+import type { TriggerEventProperty } from '@/services/api/types';
+
+interface PropertyFilter {
+  id: string;
+  property: string;
+  operator: 'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte' | 'contains' | 'in';
+  value: string;
+}
 
 interface Condition {
   id: string;
@@ -29,18 +42,97 @@ interface Action {
   config: Record<string, any>;
 }
 
+const operatorLabels: Record<PropertyFilter['operator'], string> = {
+  eq: '=',
+  neq: '≠',
+  gt: '>',
+  lt: '<',
+  gte: '≥',
+  lte: '≤',
+  contains: 'contains',
+  in: 'in',
+};
+
+const operatorsForType: Record<string, PropertyFilter['operator'][]> = {
+  string: ['eq', 'neq', 'contains', 'in'],
+  number: ['eq', 'neq', 'gt', 'lt', 'gte', 'lte'],
+  boolean: ['eq', 'neq'],
+  array: ['contains', 'in'],
+  object: ['eq', 'neq'],
+};
+
+const getTypeColor = (type: string) => {
+  switch (type) {
+    case 'string': return 'text-green-500 border-green-500/50';
+    case 'number': return 'text-blue-500 border-blue-500/50';
+    case 'boolean': return 'text-amber-500 border-amber-500/50';
+    case 'array': return 'text-purple-500 border-purple-500/50';
+    case 'object': return 'text-pink-500 border-pink-500/50';
+    default: return 'text-muted-foreground';
+  }
+};
+
 export default function RuleBuilder() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [ruleName, setRuleName] = useState('');
   const [description, setDescription] = useState('');
   const [triggerEvent, setTriggerEvent] = useState('');
+  const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([]);
   const [conditions, setConditions] = useState<Condition[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
 
   // Fetch events from API
   const { data: eventsData, isLoading: eventsLoading } = useEventsQuery({ is_active: true });
   const events = eventsData || [];
+
+  // Get the selected event and its properties
+  const selectedEvent = useMemo(() => {
+    return events.find(e => e.key === triggerEvent);
+  }, [events, triggerEvent]);
+
+  const eventProperties = useMemo(() => {
+    return selectedEvent?.properties || [];
+  }, [selectedEvent]);
+
+  // Clear filters when event changes
+  const handleEventChange = (eventKey: string) => {
+    setTriggerEvent(eventKey);
+    setPropertyFilters([]);
+  };
+
+  // Property filter management
+  const addPropertyFilter = () => {
+    const firstProperty = eventProperties[0];
+    setPropertyFilters([
+      ...propertyFilters,
+      {
+        id: crypto.randomUUID(),
+        property: firstProperty?.name || '',
+        operator: 'eq',
+        value: '',
+      }
+    ]);
+  };
+
+  const updatePropertyFilter = (id: string, updates: Partial<PropertyFilter>) => {
+    setPropertyFilters(filters =>
+      filters.map(f => f.id === id ? { ...f, ...updates } : f)
+    );
+  };
+
+  const removePropertyFilter = (id: string) => {
+    setPropertyFilters(filters => filters.filter(f => f.id !== id));
+  };
+
+  const getPropertyByName = (name: string): TriggerEventProperty | undefined => {
+    return eventProperties.find(p => p.name === name);
+  };
+
+  const getAvailableOperators = (propertyName: string): PropertyFilter['operator'][] => {
+    const property = getPropertyByName(propertyName);
+    return operatorsForType[property?.type || 'string'] || operatorsForType.string;
+  };
 
   const addCondition = (type: Condition['type']) => {
     setConditions([
@@ -69,6 +161,17 @@ export default function RuleBuilder() {
       toast({
         title: 'Missing required fields',
         description: 'Please provide a rule name and trigger event.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate property filters
+    const invalidFilters = propertyFilters.filter(f => !f.property || !f.value);
+    if (invalidFilters.length > 0) {
+      toast({
+        title: 'Incomplete property filters',
+        description: 'Please fill in all property filter values or remove empty filters.',
         variant: 'destructive',
       });
       return;
@@ -131,7 +234,7 @@ export default function RuleBuilder() {
                     Manage Events <ExternalLink className="w-3 h-3" />
                   </Link>
                 </div>
-                <Select value={triggerEvent} onValueChange={setTriggerEvent}>
+                <Select value={triggerEvent} onValueChange={handleEventChange}>
                   <SelectTrigger>
                     <SelectValue placeholder={eventsLoading ? "Loading events..." : "Select an event type"} />
                   </SelectTrigger>
@@ -157,6 +260,11 @@ export default function RuleBuilder() {
                           <div className="flex items-center gap-2">
                             <span>{event.icon || '⚡'}</span>
                             <span>{event.name}</span>
+                            {event.properties && event.properties.length > 0 && (
+                              <Badge variant="secondary" className="text-[10px] ml-1">
+                                {event.properties.length} props
+                              </Badge>
+                            )}
                           </div>
                         </SelectItem>
                       ))
@@ -165,23 +273,169 @@ export default function RuleBuilder() {
                 </Select>
               </div>
 
-              {triggerEvent && (
-                <div className="p-4 bg-secondary/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">Property filters (optional):</p>
-                  <div className="flex gap-2">
-                    <Input placeholder="Property name" className="flex-1" />
-                    <Select defaultValue="equals">
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="equals">=</SelectItem>
-                        <SelectItem value="gt">&gt;</SelectItem>
-                        <SelectItem value="lt">&lt;</SelectItem>
-                        <SelectItem value="contains">contains</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input placeholder="Value" className="flex-1" />
+              {/* Event Properties Display */}
+              {selectedEvent && (
+                <div className="space-y-4">
+                  {/* Event Info */}
+                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-xl">
+                        {selectedEvent.icon || '⚡'}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium">{selectedEvent.name}</h4>
+                          <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">{selectedEvent.key}</code>
+                        </div>
+                        {selectedEvent.description && (
+                          <p className="text-sm text-muted-foreground mt-1">{selectedEvent.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Event Properties Schema */}
+                  {eventProperties.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Code className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Event Properties</span>
+                        </div>
+                        <Badge variant="outline">{eventProperties.length} available</Badge>
+                      </div>
+                      <div className="grid gap-2">
+                        {eventProperties.map((prop, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg border border-border/50"
+                          >
+                            <div className="flex-1 flex items-center gap-2">
+                              <code className="text-sm font-mono font-medium">{prop.name}</code>
+                              <Badge variant="outline" className={cn("text-xs", getTypeColor(prop.type))}>
+                                {prop.type}
+                              </Badge>
+                              {prop.required && (
+                                <Badge variant="destructive" className="text-[10px]">Required</Badge>
+                              )}
+                            </div>
+                            {prop.description && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-xs">
+                                  <p className="text-sm">{prop.description}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {eventProperties.length === 0 && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-500">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-sm">This event has no defined properties. Consider adding properties in the Events page.</span>
+                    </div>
+                  )}
+
+                  {/* Property Filters */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Property Filters (optional)</span>
+                      {eventProperties.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addPropertyFilter}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Add Filter
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {propertyFilters.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">
+                        No filters added. The rule will trigger for all events of this type.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {propertyFilters.map((filter) => {
+                          const property = getPropertyByName(filter.property);
+                          const availableOperators = getAvailableOperators(filter.property);
+                          
+                          return (
+                            <div key={filter.id} className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg">
+                              <Select
+                                value={filter.property}
+                                onValueChange={(value) => {
+                                  const newOperators = getAvailableOperators(value);
+                                  updatePropertyFilter(filter.id, {
+                                    property: value,
+                                    operator: newOperators[0],
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className="w-40">
+                                  <SelectValue placeholder="Property" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {eventProperties.map((prop) => (
+                                    <SelectItem key={prop.name} value={prop.name}>
+                                      <div className="flex items-center gap-2">
+                                        <code className="text-xs">{prop.name}</code>
+                                        <Badge variant="outline" className={cn("text-[10px]", getTypeColor(prop.type))}>
+                                          {prop.type}
+                                        </Badge>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Select
+                                value={filter.operator}
+                                onValueChange={(value: PropertyFilter['operator']) =>
+                                  updatePropertyFilter(filter.id, { operator: value })
+                                }
+                              >
+                                <SelectTrigger className="w-28">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableOperators.map((op) => (
+                                    <SelectItem key={op} value={op}>
+                                      {operatorLabels[op]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Input
+                                placeholder={property?.type === 'number' ? 'Enter number' : 'Enter value'}
+                                type={property?.type === 'number' ? 'number' : 'text'}
+                                value={filter.value}
+                                onChange={(e) => updatePropertyFilter(filter.id, { value: e.target.value })}
+                                className="flex-1"
+                              />
+
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => removePropertyFilter(filter.id)}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
