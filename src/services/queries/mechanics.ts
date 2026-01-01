@@ -7,6 +7,7 @@ import {
   UpdateBadgeData,
   Level,
   CreateLevelData,
+  UpdateLevelData,
   Mission,
   CreateMissionData,
   Streak,
@@ -222,7 +223,7 @@ export function useUpdateLevelMutation() {
   const { updateLevel } = useMechanicsService();
 
   return useMutation({
-    mutationFn: async ({ levelId, data }: { levelId: number; data: Partial<CreateLevelData> }) => {
+    mutationFn: async ({ levelId, data }: { levelId: number; data: UpdateLevelData }) => {
       const response = await updateLevel(levelId, data);
       if (!response.success) throw new Error(response.error || 'Failed to update level');
       return response.data!;
