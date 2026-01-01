@@ -517,30 +517,49 @@ export interface TriggerEventProperty {
 
 export interface TriggerEvent extends Timestamps {
   id: number;
-  tenant_id: number;
   name: string;
-  key: string;
+  slug: string;
   description?: string;
-  icon?: string;
-  category?: string;
-  properties?: TriggerEventProperty[];
-  is_system: boolean;
+  is_predefined: boolean;
   is_active: boolean;
+  metadata?: {
+    icon?: string;
+    category?: string;
+    properties?: TriggerEventProperty[];
+    [key: string]: unknown;
+  };
 }
 
 export interface CreateTriggerEventData {
   name: string;
-  key: string;
+  slug?: string;
   description?: string;
-  icon?: string;
-  category?: string;
-  properties?: TriggerEventProperty[];
+  is_predefined?: boolean;
   is_active?: boolean;
+  metadata?: {
+    icon?: string;
+    category?: string;
+    properties?: TriggerEventProperty[];
+    [key: string]: unknown;
+  };
+}
+
+export interface UpdateTriggerEventData {
+  name?: string;
+  slug?: string;
+  description?: string;
+  is_active?: boolean;
+  metadata?: {
+    icon?: string;
+    category?: string;
+    properties?: TriggerEventProperty[];
+    [key: string]: unknown;
+  };
 }
 
 export interface TriggerEventFilters extends PaginationParams {
   search?: string;
-  category?: string;
+  is_predefined?: boolean;
   is_active?: boolean;
 }
 

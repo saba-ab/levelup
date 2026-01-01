@@ -86,13 +86,17 @@ export default function RuleBuilder() {
   const { data: eventsData, isLoading: eventsLoading } = useEventsQuery({ is_active: true });
   const events = eventsData || [];
 
+  // Helper to get metadata properties
+  const getEventIcon = (event: { metadata?: { icon?: string } }) => event?.metadata?.icon || '⚡';
+  const getEventProperties = (event: { metadata?: { properties?: TriggerEventProperty[] } }) => event?.metadata?.properties || [];
+
   // Get the selected event and its properties
   const selectedEvent = useMemo(() => {
-    return events.find(e => e.key === triggerEvent);
+    return events.find(e => e.slug === triggerEvent);
   }, [events, triggerEvent]);
 
   const eventProperties = useMemo(() => {
-    return selectedEvent?.properties || [];
+    return getEventProperties(selectedEvent || {});
   }, [selectedEvent]);
 
   // Clear filters when event changes
@@ -255,19 +259,22 @@ export default function RuleBuilder() {
                         </Link>
                       </div>
                     ) : (
-                      events.map(event => (
-                        <SelectItem key={event.key} value={event.key}>
-                          <div className="flex items-center gap-2">
-                            <span>{event.icon || '⚡'}</span>
-                            <span>{event.name}</span>
-                            {event.properties && event.properties.length > 0 && (
-                              <Badge variant="secondary" className="text-[10px] ml-1">
-                                {event.properties.length} props
-                              </Badge>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))
+                      events.map(event => {
+                        const props = getEventProperties(event);
+                        return (
+                          <SelectItem key={event.slug} value={event.slug}>
+                            <div className="flex items-center gap-2">
+                              <span>{getEventIcon(event)}</span>
+                              <span>{event.name}</span>
+                              {props.length > 0 && (
+                                <Badge variant="secondary" className="text-[10px] ml-1">
+                                  {props.length} props
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })
                     )}
                   </SelectContent>
                 </Select>
@@ -280,12 +287,12 @@ export default function RuleBuilder() {
                   <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-xl">
-                        {selectedEvent.icon || '⚡'}
+                        {getEventIcon(selectedEvent)}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium">{selectedEvent.name}</h4>
-                          <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">{selectedEvent.key}</code>
+                          <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">{selectedEvent.slug}</code>
                         </div>
                         {selectedEvent.description && (
                           <p className="text-sm text-muted-foreground mt-1">{selectedEvent.description}</p>

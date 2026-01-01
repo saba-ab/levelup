@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import {
   TriggerEvent,
   CreateTriggerEventData,
+  UpdateTriggerEventData,
   TriggerEventFilters,
   PaginatedResponse,
 } from './types';
@@ -23,16 +24,24 @@ export function useEventsService() {
     return api.get<PaginatedResponse<TriggerEvent>>(`/events${query ? `?${query}` : ''}`);
   }, [api]);
 
+  const getPredefinedEvents = useCallback(async () => {
+    return api.get<{ data: TriggerEvent[] }>('/events/predefined');
+  }, [api]);
+
+  const getCustomEvents = useCallback(async () => {
+    return api.get<{ data: TriggerEvent[] }>('/events/custom');
+  }, [api]);
+
   const getEvent = useCallback(async (eventId: number) => {
-    return api.get<TriggerEvent>(`/events/${eventId}`);
+    return api.get<{ data: TriggerEvent }>(`/events/${eventId}`);
   }, [api]);
 
   const createEvent = useCallback(async (data: CreateTriggerEventData) => {
-    return api.post<TriggerEvent>('/events', data);
+    return api.post<{ data: TriggerEvent }>('/events', data);
   }, [api]);
 
-  const updateEvent = useCallback(async (eventId: number, data: Partial<CreateTriggerEventData>) => {
-    return api.put<TriggerEvent>(`/events/${eventId}`, data);
+  const updateEvent = useCallback(async (eventId: number, data: UpdateTriggerEventData) => {
+    return api.put<{ data: TriggerEvent }>(`/events/${eventId}`, data);
   }, [api]);
 
   const deleteEvent = useCallback(async (eventId: number) => {
@@ -41,6 +50,8 @@ export function useEventsService() {
 
   return {
     listEvents,
+    getPredefinedEvents,
+    getCustomEvents,
     getEvent,
     createEvent,
     updateEvent,
