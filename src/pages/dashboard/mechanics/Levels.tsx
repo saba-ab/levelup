@@ -66,7 +66,7 @@ export default function Levels() {
   const updateMutation = useUpdateLevelMutation();
   const deleteMutation = useDeleteLevelMutation();
 
-  const levels = levelsData?.data ?? [];
+  const levels = levelsData ?? [];
 
   const handleOpenDialog = (level?: Level) => {
     if (level) {
@@ -171,7 +171,7 @@ export default function Levels() {
       </div>
     );
   }
-
+console.log('levels', levelsData);
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
@@ -213,9 +213,9 @@ export default function Levels() {
                       )}
                     >
                       {formState.icon_url ? (
-                        <img 
-                          src={formState.icon_url} 
-                          alt="Level icon" 
+                        <img
+                          src={formState.icon_url}
+                          alt="Level icon"
                           className="w-full h-full rounded-full object-cover"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
@@ -381,7 +381,7 @@ export default function Levels() {
                   ))}
                 </div>
               </div>
-              
+
               {/* Level Markers */}
               <div className="flex justify-between mt-4 overflow-x-auto pb-2">
                 {levels.slice(0, 10).map((level) => (
