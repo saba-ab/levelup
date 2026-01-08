@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Play, Trophy, Star, Zap, Target } from "lucide-react";
+import { PORTAL_ROUTES } from "@/lib/constants";
 
 const HeroSection = () => {
   return (
@@ -10,9 +11,9 @@ const HeroSection = () => {
         <div className="absolute top-1/4 -left-32 w-96 h-96 bg-cyan/20 rounded-full blur-3xl animate-pulse-glow" />
         <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple/20 rounded-full blur-3xl animate-pulse-glow animation-delay-300" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold/5 rounded-full blur-3xl" />
-        
+
         {/* Grid pattern */}
-        <div 
+        <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
             backgroundImage: `linear-gradient(to right, hsl(var(--foreground)) 1px, transparent 1px),
@@ -48,13 +49,17 @@ const HeroSection = () => {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-fade-up animation-delay-300">
-              <Button variant="hero" size="xl">
-                Start Building
-                <ArrowRight className="w-5 h-5" />
+              <Button variant="hero" size="xl" asChild>
+                <a href={PORTAL_ROUTES.SIGNUP}>
+                  Start Building
+                  <ArrowRight className="w-5 h-5" />
+                </a>
               </Button>
-              <Button variant="heroOutline" size="xl">
-                <Play className="w-5 h-5" />
-                See API Demo
+              <Button variant="heroOutline" size="xl" asChild>
+                <a href={PORTAL_ROUTES.DOCS}>
+                  <Play className="w-5 h-5" />
+                  See API Demo
+                </a>
               </Button>
             </div>
 

@@ -1,73 +1,122 @@
-# Welcome to your Lovable project
+# LevelUpOS Landing Page
 
-## Project info
+A modern, high-performance landing page built with Next.js 14, React, TypeScript, and Tailwind CSS.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🚀 Tech Stack
 
-## How can I edit this code?
+- **Framework**: [Next.js 14](https://nextjs.org/) with App Router
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **UI Components**: [shadcn/ui](https://ui.shadcn.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Animations**: Custom CSS animations with Tailwind
+- **State Management**: React Query for server state
 
-There are several ways of editing your application.
+## 📦 Getting Started
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Node.js 18.x or higher
+- npm, yarn, or pnpm
 
-Changes made via Lovable will be committed automatically to this repo.
+### Installation
 
-**Use your preferred IDE**
+1. Install dependencies:
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm install
+# or
+yarn install
+# or
+pnpm install
 ```
 
-**Edit a file directly in GitHub**
+2. Run the development server:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+```
 
-**Use GitHub Codespaces**
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 🏗️ Project Structure
 
-## What technologies are used for this project?
+```
+levelupos-landing/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── layout.tsx         # Root layout
+│   │   ├── page.tsx           # Home page
+│   │   ├── not-found.tsx      # 404 page
+│   │   └── globals.css        # Global styles
+│   ├── components/            # React components
+│   │   ├── ui/               # shadcn/ui components
+│   │   ├── providers/        # Context providers
+│   │   ├── Navbar.tsx
+│   │   ├── HeroSection.tsx
+│   │   ├── FeaturesSection.tsx
+│   │   ├── HowItWorksSection.tsx
+│   │   ├── BenefitsSection.tsx
+│   │   ├── UseCasesSection.tsx
+│   │   ├── APIPreviewSection.tsx
+│   │   ├── TechHighlightsSection.tsx
+│   │   ├── PricingSection.tsx
+│   │   ├── CTASection.tsx
+│   │   └── Footer.tsx
+│   ├── hooks/                # Custom React hooks
+│   └── lib/                  # Utility functions
+├── public/                   # Static assets
+├── next.config.js           # Next.js configuration
+├── tailwind.config.ts       # Tailwind CSS configuration
+├── tsconfig.json            # TypeScript configuration
+└── package.json             # Dependencies
 
-This project is built with:
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🎨 Features
 
-## How can I deploy this project?
+- ⚡ **Next.js 14** with App Router for optimal performance
+- 🎯 **Type-safe** with TypeScript
+- 🎨 **Modern UI** with shadcn/ui components
+- 📱 **Fully Responsive** design
+- ♿ **Accessible** components
+- 🚀 **Optimized** for production
+- 🎭 **Custom Animations** and gradients
+- 🌙 **Dark Theme** optimized
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## 🛠️ Available Scripts
 
-## Can I connect a custom domain to my Lovable project?
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
 
-Yes, you can!
+## 🎨 Customization
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Colors
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+The color scheme is defined in `src/app/globals.css` using CSS variables. Key colors include:
+
+- **Cyan** (`--cyan`): Primary accent color
+- **Purple** (`--purple`): Secondary accent color
+- **Gold** (`--gold`): Highlight color
+
+### Fonts
+
+The project uses:
+- **Inter** for body text
+- **Space Grotesk** for headings
+
+Fonts are loaded via Google Fonts in the root layout.
+
+## 📝 License
+
+This project is private and proprietary.
+
+## 🤝 Contributing
+
+This is a private project. Please contact the team for contribution guidelines.

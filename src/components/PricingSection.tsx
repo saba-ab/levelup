@@ -1,6 +1,9 @@
+'use client'
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Sparkles, Zap, Building2 } from "lucide-react";
+import { PORTAL_ROUTES } from "@/lib/constants";
 
 const pricingTiers = [
   {
@@ -124,8 +127,8 @@ const PricingSection = () => {
               key={tier.name}
               className={`
                 relative bg-gradient-card rounded-2xl border p-8 transition-all duration-300 card-shadow
-                ${tier.popular 
-                  ? 'border-cyan/50 scale-105 lg:scale-110' 
+                ${tier.popular
+                  ? 'border-cyan/50 scale-105 lg:scale-110'
                   : 'border-border/50 hover:border-cyan/30'
                 }
               `}
@@ -187,8 +190,10 @@ const PricingSection = () => {
               </ul>
 
               {/* CTA */}
-              <Button variant={tier.variant} size="lg" className="w-full">
-                {tier.cta}
+              <Button variant={tier.variant} size="lg" className="w-full" asChild>
+                <a href={tier.name === 'Enterprise' ? 'mailto:sales@levelupos.com' : PORTAL_ROUTES.SIGNUP}>
+                  {tier.cta}
+                </a>
               </Button>
             </div>
           ))}
@@ -197,7 +202,7 @@ const PricingSection = () => {
         {/* Bottom Note */}
         <p className="text-center text-sm text-muted-foreground mt-12">
           All plans include API access, documentation, and basic analytics. Need something custom?{" "}
-          <a href="#contact" className="text-cyan hover:underline">Let's talk</a>.
+          <a href="mailto:sales@levelupos.com" className="text-cyan hover:underline">Let's talk</a>.
         </p>
       </div>
     </section>

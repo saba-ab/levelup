@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Sparkles } from "lucide-react";
+import { PORTAL_ROUTES } from "@/lib/constants";
 
 const CTASection = () => {
   return (
@@ -30,13 +31,17 @@ const CTASection = () => {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="hero" size="xl">
-              Get Started Free
-              <ArrowRight className="w-5 h-5" />
+            <Button variant="hero" size="xl" asChild>
+              <a href={PORTAL_ROUTES.SIGNUP}>
+                Get Started Free
+                <ArrowRight className="w-5 h-5" />
+              </a>
             </Button>
-            <Button variant="heroOutline" size="xl">
-              <Calendar className="w-5 h-5" />
-              Schedule Demo
+            <Button variant="heroOutline" size="xl" asChild>
+              <a href="mailto:sales@levelupos.com">
+                <Calendar className="w-5 h-5" />
+                Schedule Demo
+              </a>
             </Button>
           </div>
 

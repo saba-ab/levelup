@@ -1,6 +1,9 @@
+'use client'
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Code, Copy, Check, Terminal, FileCode } from "lucide-react";
+import { PORTAL_ROUTES } from "@/lib/constants";
 
 const codeExamples = {
   awardBadge: {
@@ -212,7 +215,7 @@ const APIPreviewSection = () => {
     <section className="py-24 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-background via-muted/20 to-background" />
-      
+
       <div className="container mx-auto px-4 relative z-10">
         {/* Header */}
         <div className="text-center mb-16">
@@ -311,12 +314,16 @@ const APIPreviewSection = () => {
               Explore our full API reference with interactive examples
             </p>
             <div className="flex gap-4 justify-center">
-              <Button variant="heroOutline" className="gap-2">
-                <FileCode className="w-4 h-4" />
-                View Full Docs
+              <Button variant="heroOutline" className="gap-2" asChild>
+                <a href={PORTAL_ROUTES.DOCS}>
+                  <FileCode className="w-4 h-4" />
+                  View Full Docs
+                </a>
               </Button>
-              <Button variant="ghost" className="text-cyan hover:text-cyan/80">
-                Try in Playground →
+              <Button variant="ghost" className="text-cyan hover:text-cyan/80" asChild>
+                <a href={`${PORTAL_ROUTES.DASHBOARD}/playground`}>
+                  Try in Playground →
+                </a>
               </Button>
             </div>
           </div>

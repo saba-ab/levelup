@@ -1,6 +1,9 @@
+'use client'
+
 import { Button } from "@/components/ui/button";
 import { Gamepad2, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { PORTAL_ROUTES } from "@/lib/constants";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,7 +20,7 @@ const Navbar = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-2 group">
+          <a href="/" className="flex items-center gap-2 group">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan to-purple flex items-center justify-center glow-cyan transition-transform group-hover:scale-110">
               <Gamepad2 className="w-5 h-5 text-primary-foreground" />
             </div>
@@ -41,11 +44,11 @@ const Navbar = () => {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm">
-              Sign In
+            <Button variant="ghost" size="sm" asChild>
+              <a href={PORTAL_ROUTES.LOGIN}>Sign In</a>
             </Button>
-            <Button variant="hero" size="sm">
-              Get Started Free
+            <Button variant="hero" size="sm" asChild>
+              <a href={PORTAL_ROUTES.SIGNUP}>Get Started Free</a>
             </Button>
           </div>
 
@@ -73,11 +76,11 @@ const Navbar = () => {
                 </a>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-border/50">
-                <Button variant="ghost" size="sm">
-                  Sign In
+                <Button variant="ghost" size="sm" asChild>
+                  <a href={PORTAL_ROUTES.LOGIN}>Sign In</a>
                 </Button>
-                <Button variant="hero" size="sm">
-                  Get Started Free
+                <Button variant="hero" size="sm" asChild>
+                  <a href={PORTAL_ROUTES.SIGNUP}>Get Started Free</a>
                 </Button>
               </div>
             </div>

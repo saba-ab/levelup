@@ -1,36 +1,37 @@
 import { Gamepad2, Github, Twitter, Linkedin, Youtube } from "lucide-react";
+import { PORTAL_ROUTES } from "@/lib/constants";
 
 const footerLinks = {
   Product: [
-    { name: "Features", href: "#features" },
-    { name: "Pricing", href: "#pricing" },
-    { name: "Use Cases", href: "#use-cases" },
-    { name: "Changelog", href: "#changelog" },
+    { name: "Features", href: "/#features" },
+    { name: "Pricing", href: "/#pricing" },
+    { name: "Use Cases", href: "/#use-cases" },
+    { name: "Changelog", href: `${PORTAL_ROUTES.DASHBOARD}/changelog` },
   ],
   Developers: [
-    { name: "Documentation", href: "#docs" },
-    { name: "API Reference", href: "#api" },
-    { name: "SDKs", href: "#sdks" },
-    { name: "Status", href: "#status" },
+    { name: "Documentation", href: PORTAL_ROUTES.DOCS },
+    { name: "API Reference", href: `${PORTAL_ROUTES.DOCS}/api` },
+    { name: "SDKs", href: `${PORTAL_ROUTES.DOCS}/sdks` },
+    { name: "Status", href: "https://status.levelupos.com" },
   ],
   Company: [
-    { name: "About", href: "#about" },
-    { name: "Blog", href: "#blog" },
-    { name: "Careers", href: "#careers" },
-    { name: "Contact", href: "#contact" },
+    { name: "About", href: "/about" },
+    { name: "Blog", href: "/blog" },
+    { name: "Careers", href: "/careers" },
+    { name: "Contact", href: "mailto:hello@levelupos.com" },
   ],
   Legal: [
-    { name: "Privacy", href: "#privacy" },
-    { name: "Terms", href: "#terms" },
-    { name: "Security", href: "#security" },
+    { name: "Privacy", href: "/privacy" },
+    { name: "Terms", href: "/terms" },
+    { name: "Security", href: "/security" },
   ],
 };
 
 const socialLinks = [
-  { icon: Twitter, href: "#", label: "Twitter" },
-  { icon: Github, href: "#", label: "GitHub" },
-  { icon: Linkedin, href: "#", label: "LinkedIn" },
-  { icon: Youtube, href: "#", label: "YouTube" },
+  { icon: Twitter, href: "https://twitter.com/levelupos", label: "Twitter" },
+  { icon: Github, href: "https://github.com/levelupos", label: "GitHub" },
+  { icon: Linkedin, href: "https://linkedin.com/company/levelupos", label: "LinkedIn" },
+  { icon: Youtube, href: "https://youtube.com/@levelupos", label: "YouTube" },
 ];
 
 const Footer = () => {
@@ -40,7 +41,7 @@ const Footer = () => {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <a href="#" className="flex items-center gap-2 mb-4">
+            <a href="/" className="flex items-center gap-2 mb-4">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan to-purple flex items-center justify-center">
                 <Gamepad2 className="w-5 h-5 text-primary-foreground" />
               </div>
@@ -57,6 +58,8 @@ const Footer = () => {
                 <a
                   key={social.label}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-9 h-9 rounded-lg bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                   aria-label={social.label}
                 >
