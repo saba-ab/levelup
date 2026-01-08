@@ -202,7 +202,7 @@ const PricingSection = () => {
         {/* Bottom Note */}
         <p className="text-center text-sm text-muted-foreground mt-12">
           All plans include API access, documentation, and basic analytics. Need something custom?{" "}
-          <a href="mailto:sales@levelupos.com" className="text-cyan hover:underline">Let's talk</a>.
+          <a href="mailto:sales@levelupos.com" className="text-cyan hover:underline">Let&apos;s talk</a>.
         </p>
       </div>
     </section>
