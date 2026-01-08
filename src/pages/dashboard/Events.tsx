@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, Zap, Tag, ToggleLeft, ToggleRight, Code } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,7 +50,7 @@ import {
   useUpdateEventMutation,
   useDeleteEventMutation,
 } from '@/services/queries/events';
-import type { TriggerEvent, CreateTriggerEventData, TriggerEventProperty } from '@/services/api/types';
+import type { TriggerEvent, CreateTriggerEventData } from '@/services/api/types';
 
 const eventCategories = [
   { value: 'commerce', label: 'Commerce', icon: '🛒' },
@@ -61,8 +61,6 @@ const eventCategories = [
   { value: 'custom', label: 'Custom', icon: '⚡' },
 ];
 
-const propertyTypes = ['string', 'number', 'boolean', 'array', 'object'] as const;
-
 // Helper to get metadata fields
 const getEventIcon = (event: TriggerEvent) => event.metadata?.icon || '⚡';
 const getEventCategory = (event: TriggerEvent) => event.metadata?.category || 'custom';
@@ -72,9 +70,6 @@ interface EventFormData {
   name: string;
   slug: string;
   description: string;
-  icon: string;
-  category: string;
-  properties: TriggerEventProperty[];
   is_active: boolean;
 }
 
@@ -94,17 +89,7 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     name: event?.name || '',
     slug: event?.slug || '',
     description: event?.description || '',
-    icon: event ? getEventIcon(event) : '⚡',
-    category: event ? getEventCategory(event) : 'custom',
-    properties: event ? getEventProperties(event) : [],
     is_active: event?.is_active ?? true,
-  });
-
-  const [newProperty, setNewProperty] = useState<TriggerEventProperty>({
-    name: '',
-    type: 'string',
-    required: false,
-    description: '',
   });
 
   React.useEffect(() => {
@@ -113,9 +98,6 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
         name: event.name,
         slug: event.slug,
         description: event.description || '',
-        icon: getEventIcon(event),
-        category: getEventCategory(event),
-        properties: getEventProperties(event),
         is_active: event.is_active,
       });
     } else {
@@ -123,9 +105,6 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
         name: '',
         slug: '',
         description: '',
-        icon: '⚡',
-        category: 'custom',
-        properties: [],
         is_active: true,
       });
     }
@@ -143,21 +122,6 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
     }));
   };
 
-  const addProperty = () => {
-    if (!newProperty.name) return;
-    setFormData(prev => ({
-      ...prev,
-      properties: [...prev.properties, newProperty],
-    }));
-    setNewProperty({ name: '', type: 'string', required: false, description: '' });
-  };
-
-  const removeProperty = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      properties: prev.properties.filter((_, i) => i !== index),
-    }));
-  };
 
   const handleSubmit = async () => {
     if (!formData.name) {
@@ -174,11 +138,6 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
       slug: formData.slug || undefined,
       description: formData.description || undefined,
       is_active: formData.is_active,
-      metadata: {
-        icon: formData.icon,
-        category: formData.category,
-        properties: formData.properties,
-      },
     };
 
     try {
@@ -244,104 +203,6 @@ function EventFormDialog({ open, onOpenChange, event }: EventFormDialogProps) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {eventCategories.map(cat => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      <div className="flex items-center gap-2">
-                        <span>{cat.icon}</span>
-                        <span>{cat.label}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Icon</Label>
-              <Input
-                placeholder="e.g., 🛒"
-                value={formData.icon}
-                onChange={(e) => setFormData(prev => ({ ...prev, icon: e.target.value }))}
-                className="text-center text-lg"
-              />
-            </div>
-          </div>
-
-          {/* Properties */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>Event Properties</Label>
-              <Badge variant="secondary">{formData.properties.length} properties</Badge>
-            </div>
-            
-            {formData.properties.length > 0 && (
-              <div className="space-y-2">
-                {formData.properties.map((prop, index) => (
-                  <div key={index} className="flex items-center gap-2 p-3 bg-secondary/50 rounded-lg">
-                    <Code className="w-4 h-4 text-muted-foreground" />
-                    <code className="text-sm font-medium">{prop.name}</code>
-                    <Badge variant="outline" className="text-xs">{prop.type}</Badge>
-                    {prop.required && <Badge variant="destructive" className="text-xs">Required</Badge>}
-                    <span className="flex-1 text-sm text-muted-foreground truncate">{prop.description}</span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeProperty(index)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="p-4 border border-dashed rounded-lg space-y-3">
-              <p className="text-sm font-medium">Add New Property</p>
-              <div className="grid grid-cols-4 gap-2">
-                <Input
-                  placeholder="Property name"
-                  value={newProperty.name}
-                  onChange={(e) => setNewProperty(prev => ({ ...prev, name: e.target.value }))}
-                />
-                <Select
-                  value={newProperty.type}
-                  onValueChange={(value: typeof propertyTypes[number]) => setNewProperty(prev => ({ ...prev, type: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {propertyTypes.map(type => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={newProperty.required}
-                    onCheckedChange={(checked) => setNewProperty(prev => ({ ...prev, required: checked }))}
-                  />
-                  <span className="text-sm">Required</span>
-                </div>
-                <Button onClick={addProperty} disabled={!newProperty.name}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <Input
-                placeholder="Property description (optional)"
-                value={newProperty.description}
-                onChange={(e) => setNewProperty(prev => ({ ...prev, description: e.target.value }))}
-              />
-            </div>
-          </div>
-
           {/* Active Status */}
           <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
             <div>
@@ -399,22 +260,22 @@ export default function Events() {
       default:
         events = allEventsData || [];
     }
-    
+
     // Apply category filter
     if (categoryFilter !== 'all') {
       events = events.filter(e => getEventCategory(e) === categoryFilter);
     }
-    
+
     // Apply search filter for non-API search tabs
     if (searchQuery && activeTab !== 'all') {
       const query = searchQuery.toLowerCase();
-      events = events.filter(e => 
-        e.name.toLowerCase().includes(query) || 
+      events = events.filter(e =>
+        e.name.toLowerCase().includes(query) ||
         e.slug.toLowerCase().includes(query) ||
         e.description?.toLowerCase().includes(query)
       );
     }
-    
+
     return events;
   };
 
