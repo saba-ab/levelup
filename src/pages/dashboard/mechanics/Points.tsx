@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Search, Coins, ArrowUpRight, ArrowDownRight, Wallet, Sparkles } from 'lucide-react';
+import { Search, Coins, ArrowUpRight, ArrowDownRight, Wallet, Send, TrendingUp, TrendingDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -12,69 +13,140 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
-import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
-import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
+import { usePlayersQuery } from '@/services/queries/players';
+import { useCreditWalletMutation, useDebitWalletMutation, useTransferPointsMutation } from '@/services/queries/mechanics';
+import { Player, WalletTransactionType } from '@/services/api/types';
 
-const initialCurrencies = [
-  { id: '1', name: 'Experience Points', symbol: 'XP', totalIssued: 2450000, activeUsers: 8029, color: '#8B5CF6' },
-  { id: '2', name: 'Loyalty Coins', symbol: 'LC', totalIssued: 890000, activeUsers: 4521, color: '#F59E0B' },
-  { id: '3', name: 'Reward Stars', symbol: 'RS', totalIssued: 125000, activeUsers: 2340, color: '#10B981' },
-];
-
-const ledgerEntries = [
-  { id: '1', userId: 'usr_001', currency: 'XP', amount: 150, type: 'credit', reason: 'First Purchase Bonus', timestamp: '2024-03-20 14:32:15', balance: 2450 },
-  { id: '2', userId: 'usr_023', currency: 'XP', amount: 50, type: 'credit', reason: 'Daily Login', timestamp: '2024-03-20 14:28:42', balance: 1200 },
-  { id: '3', userId: 'usr_089', currency: 'LC', amount: 100, type: 'debit', reason: 'Reward Redemption', timestamp: '2024-03-20 14:25:18', balance: 500 },
-  { id: '4', userId: 'usr_045', currency: 'XP', amount: 500, type: 'credit', reason: 'Mission Completed', timestamp: '2024-03-20 14:18:33', balance: 8900 },
-  { id: '5', userId: 'usr_112', currency: 'RS', amount: 25, type: 'credit', reason: 'Referral Bonus', timestamp: '2024-03-20 14:12:05', balance: 125 },
-  { id: '6', userId: 'usr_067', currency: 'XP', amount: 200, type: 'credit', reason: 'Streak Milestone', timestamp: '2024-03-20 14:05:41', balance: 3400 },
-  { id: '7', userId: 'usr_034', currency: 'LC', amount: 50, type: 'debit', reason: 'Store Purchase', timestamp: '2024-03-20 13:58:22', balance: 750 },
-  { id: '8', userId: 'usr_098', currency: 'XP', amount: 75, type: 'credit', reason: 'Review Submitted', timestamp: '2024-03-20 13:45:18', balance: 1575 },
-];
+type DialogType = 'credit' | 'debit' | 'transfer' | null;
 
 export default function Points() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [currencies, setCurrencies] = useState(initialCurrencies);
-  const [editingCurrency, setEditingCurrency] = useState<typeof initialCurrencies[0] | null>(null);
+  const [dialogType, setDialogType] = useState<DialogType>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [transactionType, setTransactionType] = useState<WalletTransactionType>('credit');
+  const [toPlayerId, setToPlayerId] = useState('');
+  const [page, setPage] = useState(1);
+
   const { toast } = useToast();
 
-  const filteredEntries = ledgerEntries.filter(entry =>
-    entry.userId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    entry.reason.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Fetch players with their wallet data
+  const { data: playersData, isLoading } = usePlayersQuery({ page, per_page: 10 });
 
-  const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
+  // Mutations
+  const creditMutation = useCreditWalletMutation();
+  const debitMutation = useDebitWalletMutation();
+  const transferMutation = useTransferPointsMutation();
+
+  // Calculate stats from players data
+  const stats = React.useMemo(() => {
+    if (!playersData?.data) return { totalIssued: 0, activeUsers: 0, totalSpent: 0 };
+
+    // For now, we show player count as active users
+    // In a real implementation, you'd sum up wallet data from an endpoint
+    return {
+      totalIssued: playersData.meta.total * 1000, // Mock calculation
+      activeUsers: playersData.meta.total,
+      totalSpent: playersData.meta.total * 250, // Mock calculation
+    };
+  }, [playersData]);
+
+  const handleCredit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: editingCurrency ? 'Currency updated' : 'Currency created',
-      description: editingCurrency ? 'Currency has been updated successfully.' : 'New currency has been added successfully.',
-    });
-    setIsDialogOpen(false);
-    setEditingCurrency(null);
+    if (!selectedPlayer || !amount) return;
+
+    try {
+      await creditMutation.mutateAsync({
+        player_id: selectedPlayer.id,
+        amount: parseInt(amount),
+        description: description || 'Manual credit',
+        type: transactionType as 'credit' | 'transfer_in' | 'mission_reward' | 'level_bonus' | 'refund',
+      });
+
+      toast({
+        title: 'Points credited',
+        description: `Successfully credited ${amount} points to ${selectedPlayer.display_name}.`,
+      });
+
+      resetDialog();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to credit points',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleEdit = (currency: typeof initialCurrencies[0]) => {
-    setEditingCurrency(currency);
-    setIsDialogOpen(true);
+  const handleDebit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlayer || !amount) return;
+
+    try {
+      await debitMutation.mutateAsync({
+        player_id: selectedPlayer.id,
+        amount: parseInt(amount),
+        description: description || 'Manual debit',
+        type: transactionType as 'debit' | 'transfer_out' | 'reward_purchase' | 'penalty',
+      });
+
+      toast({
+        title: 'Points debited',
+        description: `Successfully debited ${amount} points from ${selectedPlayer.display_name}.`,
+      });
+
+      resetDialog();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to debit points',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setCurrencies(prev => prev.filter(c => c.id !== id));
-    toast({
-      title: 'Currency deleted',
-      description: 'Currency has been removed successfully.',
-    });
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlayer || !amount || !toPlayerId) return;
+
+    try {
+      await transferMutation.mutateAsync({
+        from_player_id: selectedPlayer.id,
+        to_player_id: parseInt(toPlayerId),
+        amount: parseInt(amount),
+        description: description || 'Point transfer',
+      });
+
+      toast({
+        title: 'Points transferred',
+        description: `Successfully transferred ${amount} points.`,
+      });
+
+      resetDialog();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to transfer points',
+        variant: 'destructive',
+      });
+    }
   };
 
-  // Connect this to your MySQL backend
-  const handleAIGenerate = async (prompt: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Currency Idea:\n\n"${prompt}"\n\nName: Achievement Tokens\nSymbol: AT\nDescription: Premium currency earned through exceptional achievements.\n\nUse cases:\n- Exclusive reward redemptions\n- VIP store access\n- Special event participation`;
+  const resetDialog = () => {
+    setDialogType(null);
+    setSelectedPlayer(null);
+    setAmount('');
+    setDescription('');
+    setTransactionType('credit');
+    setToPlayerId('');
+  };
+
+  const openDialog = (type: DialogType, player?: Player) => {
+    setDialogType(type);
+    if (player) setSelectedPlayer(player);
   };
 
   return (
@@ -82,112 +154,111 @@ export default function Points() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Points & Wallets</h1>
-          <p className="text-muted-foreground mt-1">Manage currencies and view transaction ledger.</p>
+          <p className="text-muted-foreground mt-1">Manage player points and view transactions.</p>
         </div>
         <div className="flex gap-2">
-          <AIGenerateDialog
-            trigger={
-              <Button variant="outline" className="gap-2">
-                <Sparkles className="w-4 h-4" />
-                Generate with AI
-              </Button>
-            }
-            title="Generate Currency Ideas"
-            placeholder="E.g., Create a premium currency for VIP users that feels exclusive..."
-            context="Generate currency names, symbols, and use cases"
-            onGenerate={handleAIGenerate}
-          />
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setEditingCurrency(null); }}>
-            <DialogTrigger asChild>
-              <Button variant="glow">
-                <Plus className="w-4 h-4" />
-                Create Currency
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <form onSubmit={handleCreate}>
-                <DialogHeader>
-                  <DialogTitle>{editingCurrency ? 'Edit Currency' : 'Create New Currency'}</DialogTitle>
-                  <DialogDescription>
-                    {editingCurrency ? 'Update the currency details.' : 'Define a new point type for your gamification system.'}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Currency Name</label>
-                    <Input placeholder="e.g., Gold Coins" defaultValue={editingCurrency?.name} required />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Symbol</label>
-                    <Input placeholder="e.g., GC" maxLength={4} defaultValue={editingCurrency?.symbol} required />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Description</label>
-                    <Input placeholder="What is this currency used for?" />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setEditingCurrency(null); }}>Cancel</Button>
-                  <Button type="submit" variant="glow">{editingCurrency ? 'Save Changes' : 'Create Currency'}</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => openDialog('credit')}
+          >
+            <TrendingUp className="w-4 h-4" />
+            Credit Points
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => openDialog('debit')}
+          >
+            <TrendingDown className="w-4 h-4" />
+            Debit Points
+          </Button>
+          <Button
+            variant="glow"
+            className="gap-2"
+            onClick={() => openDialog('transfer')}
+          >
+            <Send className="w-4 h-4" />
+            Transfer Points
+          </Button>
         </div>
       </div>
 
-      {/* Currency Cards */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {currencies.map((currency, index) => (
-          <Card key={currency.id} className="stat-card group" style={{ animationDelay: `${index * 100}ms` }}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div 
-                  className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: `${currency.color}20` }}
-                >
-                  <Coins className="w-6 h-6" style={{ color: currency.color }} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" style={{ borderColor: currency.color, color: currency.color }}>
-                    {currency.symbol}
-                  </Badge>
-                  <ItemActionsMenu
-                    itemName={currency.name}
-                    onEdit={() => handleEdit(currency)}
-                    onDelete={() => handleDelete(currency.id)}
-                    showInGroup
-                  />
-                </div>
+        <Card className="stat-card">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                <Coins className="w-6 h-6 text-violet-500" />
               </div>
-              <h3 className="font-semibold text-lg mb-1">{currency.name}</h3>
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div>
-                  <p className="text-2xl font-bold">{(currency.totalIssued / 1000000).toFixed(2)}M</p>
-                  <p className="text-xs text-muted-foreground">Total Issued</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{currency.activeUsers.toLocaleString()}</p>
-                  <p className="text-xs text-muted-foreground">Active Users</p>
-                </div>
+              <Badge variant="outline" className="border-violet-500 text-violet-500">
+                POINTS
+              </Badge>
+            </div>
+            <h3 className="font-semibold text-lg mb-1">Total Issued</h3>
+            <div className="grid grid-cols-1 gap-2 mt-4">
+              <div>
+                <p className="text-3xl font-bold">{(stats.totalIssued / 1000).toFixed(1)}K</p>
+                <p className="text-xs text-muted-foreground">Points in circulation</p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="stat-card" style={{ animationDelay: '100ms' }}>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <Wallet className="w-6 h-6 text-amber-500" />
+              </div>
+              <Badge variant="outline" className="border-amber-500 text-amber-500">
+                USERS
+              </Badge>
+            </div>
+            <h3 className="font-semibold text-lg mb-1">Active Wallets</h3>
+            <div className="grid grid-cols-1 gap-2 mt-4">
+              <div>
+                <p className="text-3xl font-bold">{stats.activeUsers.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Players with points</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="stat-card" style={{ animationDelay: '200ms' }}>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                <TrendingDown className="w-6 h-6 text-emerald-500" />
+              </div>
+              <Badge variant="outline" className="border-emerald-500 text-emerald-500">
+                SPENT
+              </Badge>
+            </div>
+            <h3 className="font-semibold text-lg mb-1">Total Spent</h3>
+            <div className="grid grid-cols-1 gap-2 mt-4">
+              <div>
+                <p className="text-3xl font-bold">{(stats.totalSpent / 1000).toFixed(1)}K</p>
+                <p className="text-xs text-muted-foreground">Points redeemed</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Ledger */}
+      {/* Players List */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle className="flex items-center gap-2">
               <Wallet className="w-5 h-5" />
-              Transaction Ledger
+              Player Wallets
             </CardTitle>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search transactions..."
+                placeholder="Search players..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -196,50 +267,290 @@ export default function Points() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">User</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Currency</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Amount</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Reason</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Balance</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEntries.map((entry) => (
-                  <tr key={entry.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                    <td className="p-4">
-                      <code className="text-sm bg-secondary px-2 py-1 rounded">{entry.userId}</code>
-                    </td>
-                    <td className="p-4">
-                      <Badge variant="outline">{entry.currency}</Badge>
-                    </td>
-                    <td className="p-4">
-                      <div className={cn(
-                        "flex items-center gap-1 font-mono font-medium",
-                        entry.type === 'credit' ? "text-green-500" : "text-red-500"
-                      )}>
-                        {entry.type === 'credit' ? (
-                          <ArrowUpRight className="w-4 h-4" />
-                        ) : (
-                          <ArrowDownRight className="w-4 h-4" />
-                        )}
-                        {entry.type === 'credit' ? '+' : '-'}{entry.amount}
-                      </div>
-                    </td>
-                    <td className="p-4 text-muted-foreground">{entry.reason}</td>
-                    <td className="p-4 font-mono">{entry.balance.toLocaleString()}</td>
-                    <td className="p-4 text-sm text-muted-foreground">{entry.timestamp}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Loading players...</div>
+          ) : !playersData?.data.length ? (
+            <div className="p-8 text-center text-muted-foreground">
+              No players found. Create a player to get started.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Player</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Email</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">External ID</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
+                      <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playersData.data
+                      .filter(player =>
+                        searchQuery === '' ||
+                        player.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        player.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        player.external_id.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((player) => (
+                        <tr key={player.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              {player.avatar_url ? (
+                                <img src={player.avatar_url} alt={player.display_name} className="w-8 h-8 rounded-full" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <span className="text-sm font-medium">{player.display_name[0]}</span>
+                                </div>
+                              )}
+                              <span className="font-medium">{player.display_name}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-muted-foreground">{player.email || '-'}</td>
+                          <td className="p-4">
+                            <code className="text-sm bg-secondary px-2 py-1 rounded">{player.external_id}</code>
+                          </td>
+                          <td className="p-4">
+                            <Badge variant={player.is_active ? 'default' : 'secondary'}>
+                              {player.is_active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDialog('credit', player)}
+                              >
+                                <TrendingUp className="w-3 h-3 mr-1" />
+                                Credit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDialog('debit', player)}
+                              >
+                                <TrendingDown className="w-3 h-3 mr-1" />
+                                Debit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDialog('transfer', player)}
+                              >
+                                <Send className="w-3 h-3 mr-1" />
+                                Transfer
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {playersData.meta.last_page > 1 && (
+                <div className="flex items-center justify-between p-4 border-t border-border">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {playersData.meta.from} to {playersData.meta.to} of {playersData.meta.total} players
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={page === 1}
+                      onClick={() => setPage(p => p - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={page === playersData.meta.last_page}
+                      onClick={() => setPage(p => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
+
+      {/* Credit Dialog */}
+      <Dialog open={dialogType === 'credit'} onOpenChange={(open) => !open && resetDialog()}>
+        <DialogContent>
+          <form onSubmit={handleCredit}>
+            <DialogHeader>
+              <DialogTitle>Credit Points</DialogTitle>
+              <DialogDescription>
+                Add points to {selectedPlayer?.display_name}'s wallet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="credit-amount">Amount</Label>
+                <Input
+                  id="credit-amount"
+                  type="number"
+                  min="1"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="credit-type">Transaction Type</Label>
+                <Select value={transactionType} onValueChange={(v) => setTransactionType(v as WalletTransactionType)}>
+                  <SelectTrigger id="credit-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="credit">Credit</SelectItem>
+                    <SelectItem value="transfer_in">Transfer In</SelectItem>
+                    <SelectItem value="mission_reward">Mission Reward</SelectItem>
+                    <SelectItem value="level_bonus">Level Bonus</SelectItem>
+                    <SelectItem value="refund">Refund</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="credit-description">Description (optional)</Label>
+                <Input
+                  id="credit-description"
+                  placeholder="Reason for credit"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={resetDialog}>Cancel</Button>
+              <Button type="submit" variant="glow" disabled={creditMutation.isPending}>
+                {creditMutation.isPending ? 'Processing...' : 'Credit Points'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Debit Dialog */}
+      <Dialog open={dialogType === 'debit'} onOpenChange={(open) => !open && resetDialog()}>
+        <DialogContent>
+          <form onSubmit={handleDebit}>
+            <DialogHeader>
+              <DialogTitle>Debit Points</DialogTitle>
+              <DialogDescription>
+                Remove points from {selectedPlayer?.display_name}'s wallet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="debit-amount">Amount</Label>
+                <Input
+                  id="debit-amount"
+                  type="number"
+                  min="1"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="debit-type">Transaction Type</Label>
+                <Select value={transactionType} onValueChange={(v) => setTransactionType(v as WalletTransactionType)}>
+                  <SelectTrigger id="debit-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="debit">Debit</SelectItem>
+                    <SelectItem value="transfer_out">Transfer Out</SelectItem>
+                    <SelectItem value="reward_purchase">Reward Purchase</SelectItem>
+                    <SelectItem value="penalty">Penalty</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="debit-description">Description (optional)</Label>
+                <Input
+                  id="debit-description"
+                  placeholder="Reason for debit"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={resetDialog}>Cancel</Button>
+              <Button type="submit" variant="destructive" disabled={debitMutation.isPending}>
+                {debitMutation.isPending ? 'Processing...' : 'Debit Points'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={dialogType === 'transfer'} onOpenChange={(open) => !open && resetDialog()}>
+        <DialogContent>
+          <form onSubmit={handleTransfer}>
+            <DialogHeader>
+              <DialogTitle>Transfer Points</DialogTitle>
+              <DialogDescription>
+                Transfer points from {selectedPlayer?.display_name} to another player.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="transfer-to">To Player ID</Label>
+                <Input
+                  id="transfer-to"
+                  type="number"
+                  min="1"
+                  placeholder="Enter recipient player ID"
+                  value={toPlayerId}
+                  onChange={(e) => setToPlayerId(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="transfer-amount">Amount</Label>
+                <Input
+                  id="transfer-amount"
+                  type="number"
+                  min="1"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="transfer-description">Description (optional)</Label>
+                <Input
+                  id="transfer-description"
+                  placeholder="Reason for transfer"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={resetDialog}>Cancel</Button>
+              <Button type="submit" variant="glow" disabled={transferMutation.isPending}>
+                {transferMutation.isPending ? 'Processing...' : 'Transfer Points'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

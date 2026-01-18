@@ -49,7 +49,7 @@ export function useMechanicsService() {
   const api = useApi();
 
   // ==================== BADGES ====================
-  
+
   const listBadges = useCallback(async (filters?: MechanicsFilters) => {
     const params = new URLSearchParams();
     if (filters) {
@@ -312,7 +312,7 @@ export function useMechanicsService() {
   }, [api]);
 
   const transferPoints = useCallback(async (data: TransferPointsData) => {
-    return api.post<WalletTransaction[]>('/wallets/transfer', data);
+    return api.post<{ message: string; source_transaction: WalletTransaction; destination_transaction: WalletTransaction }>('/wallets/transfer', data);
   }, [api]);
 
   const getWalletTransactions = useCallback(async (playerId: number, filters?: WalletTransactionFilters) => {
@@ -325,7 +325,7 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<WalletTransaction>>(`/wallets/players/${playerId}/transactions${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<WalletTransaction>>(`/wallets/players/${playerId}/wallet/transactions${query ? `?${query}` : ''}`);
   }, [api]);
 
   // ==================== RULES ====================

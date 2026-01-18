@@ -831,6 +831,7 @@ export function useCreditWalletMutation() {
     },
     onSuccess: (data, { player_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(player_id) });
     },
   });
 }
@@ -847,6 +848,7 @@ export function useDebitWalletMutation() {
     },
     onSuccess: (data, { player_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(player_id) });
     },
   });
 }
@@ -861,9 +863,11 @@ export function useTransferPointsMutation() {
       if (!response.success) throw new Error(response.error || 'Failed to transfer points');
       return response.data!;
     },
-    onSuccess: (data, { from_player_id, to_player_id }) => {
+    onSuccess: (result, { from_player_id, to_player_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(from_player_id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(to_player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(from_player_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(to_player_id) });
     },
   });
 }
