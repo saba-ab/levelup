@@ -321,7 +321,7 @@ const APIPreviewSection = () => {
                 </a>
               </Button>
               <Button variant="ghost" className="text-cyan hover:text-cyan/80" asChild>
-                <a href={`${PORTAL_ROUTES.DASHBOARD}/playground`}>
+                <a href={PORTAL_ROUTES.PLAYGROUND}>
                   Try in Playground →
                 </a>
               </Button>

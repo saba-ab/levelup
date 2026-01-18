@@ -12,7 +12,6 @@ const footerLinks = {
     { name: "Documentation", href: PORTAL_ROUTES.DOCS },
     { name: "API Reference", href: `${PORTAL_ROUTES.DOCS}/api` },
     { name: "SDKs", href: `${PORTAL_ROUTES.DOCS}/sdks` },
-    { name: "Status", href: "https://status.levelupos.com" },
   ],
   Company: [
     { name: "About", href: "/about" },

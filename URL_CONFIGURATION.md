@@ -4,47 +4,48 @@ This document outlines all the external URLs configured in the LevelUpOS landing
 
 ## Domain Structure
 
-- **Landing Page**: `www.levelupos.ge` (production)
-- **Portal/Dashboard**: `portal.levelupos.com`
-- **Documentation**: `docs.levelupos.com`
-- **Status Page**: `status.levelupos.com`
+- **Landing Page**: `levelupos.ge` (production)
+- **Portal/Dashboard/Docs**: `portal.levelupos.ge` (all portal resources)
+- **Status Page**: `status.levelupos.ge`
 
 ## URL Constants (`src/lib/constants.ts`)
 
 ```typescript
-export const PORTAL_URL = 'https://portal.levelupos.com';
-export const DOCS_URL = 'https://docs.levelupos.com';
+// External URLs - All portal resources are on portal.levelupos.ge
+export const PORTAL_URL = 'https://portal.levelupos.ge';
 
+// Portal routes
 export const PORTAL_ROUTES = {
   LOGIN: `${PORTAL_URL}/login`,
   SIGNUP: `${PORTAL_URL}/signup`,
   DASHBOARD: `${PORTAL_URL}/dashboard`,
-  DOCS: DOCS_URL,
+  DOCS: `${PORTAL_URL}/docs`,
+  PLAYGROUND: `${PORTAL_URL}/playground`,
 }
 ```
 
 ## Button/Link Mapping
 
 ### Navbar
-- **"Sign In"** → `portal.levelupos.com/login`
-- **"Get Started Free"** → `portal.levelupos.com/signup`
+- **"Sign In"** → `portal.levelupos.ge/login`
+- **"Get Started Free"** → `portal.levelupos.ge/signup`
 - **Logo** → `/` (home page)
 
 ### Hero Section
-- **"Start Building"** → `portal.levelupos.com/signup`
-- **"See API Demo"** → `docs.levelupos.com`
+- **"Start Building"** → `portal.levelupos.ge/signup`
+- **"See API Demo"** → `portal.levelupos.ge/docs`
 
 ### Pricing Section
-- **"Get Started Free"** (Free & Pro tiers) → `portal.levelupos.com/signup`
-- **"Start Pro Trial"** → `portal.levelupos.com/signup`
+- **"Get Started Free"** (Free & Pro tiers) → `portal.levelupos.ge/signup`
+- **"Start Pro Trial"** → `portal.levelupos.ge/signup`
 - **"Contact Sales"** (Enterprise) → `mailto:sales@levelupos.com`
 
 ### API Preview Section
-- **"View Full Docs"** → `docs.levelupos.com`
-- **"Try in Playground"** → `portal.levelupos.com/dashboard/playground`
+- **"View Full Docs"** → `portal.levelupos.ge/docs`
+- **"Try in Playground"** → `portal.levelupos.ge/playground`
 
 ### CTA Section
-- **"Get Started Free"** → `portal.levelupos.com/signup`
+- **"Get Started Free"** → `portal.levelupos.ge/signup`
 - **"Schedule Demo"** → `mailto:sales@levelupos.com`
 
 ### Footer
@@ -53,13 +54,13 @@ export const PORTAL_ROUTES = {
 - Features → `/#features`
 - Pricing → `/#pricing`
 - Use Cases → `/#use-cases`
-- Changelog → `portal.levelupos.com/dashboard/changelog`
+- Changelog → `portal.levelupos.ge/dashboard/changelog`
 
 #### Developers
-- Documentation → `docs.levelupos.com`
-- API Reference → `docs.levelupos.com/api`
-- SDKs → `docs.levelupos.com/sdks`
-- Status → `status.levelupos.com`
+- Documentation → `portal.levelupos.ge/docs`
+- API Reference → `portal.levelupos.ge/docs/api`
+- SDKs → `portal.levelupos.ge/docs/sdks`
+- Status → `status.levelupos.ge`
 
 #### Company
 - About → `/about`
@@ -80,9 +81,9 @@ export const PORTAL_ROUTES = {
 
 ## Notes
 
-1. All portal login/signup actions route to `portal.levelupos.com`
-2. Documentation links point to `docs.levelupos.com`
-3. Internal links (Features, Pricing, etc.) use hash anchors (`/#features`)
+1. **All portal resources** (login, signup, dashboard, docs) are on `portal.levelupos.ge`
+2. **Landing page only** is on `levelupos.ge`
+3. Internal navigation links (Features, Pricing, etc.) use hash anchors (`/#features`)
 4. External links include `target="_blank"` and `rel="noopener noreferrer"` for security
 5. Contact/demo requests use `mailto:` links
 

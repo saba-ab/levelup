@@ -1,11 +1,11 @@
-// External URLs
-export const PORTAL_URL = 'https://portal.levelupos.com';
-export const DOCS_URL = 'https://docs.levelupos.com';
+// External URLs - All portal resources are on portal.levelupos.ge
+export const PORTAL_URL = 'https://portal.levelupos.ge';
 
 // Portal routes
 export const PORTAL_ROUTES = {
   LOGIN: `${PORTAL_URL}/login`,
   SIGNUP: `${PORTAL_URL}/signup`,
   DASHBOARD: `${PORTAL_URL}/dashboard`,
-  DOCS: DOCS_URL,
+  DOCS: `${PORTAL_URL}/docs`,
+  PLAYGROUND: `${PORTAL_URL}/playground`,
 } as const;
