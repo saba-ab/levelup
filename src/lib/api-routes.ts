@@ -1,6 +1,6 @@
 /**
  * API Route Constants
- * 
+ *
  * Centralized API endpoint paths for the application.
  * All API routes should use these constants for consistency and maintainability.
  */
@@ -90,7 +90,7 @@ export const LEADERBOARD_ENDPOINTS = {
   UPDATE: (id: number | string) => `${API_VERSION}/leaderboards/${id}`,
   DELETE: (id: number | string) => `${API_VERSION}/leaderboards/${id}`,
   ENTRIES: (id: number | string) => `${API_VERSION}/leaderboards/${id}/entries`,
-  PLAYER_RANK: (leaderboardId: number | string, playerId: number | string) => 
+  PLAYER_RANK: (leaderboardId: number | string, playerId: number | string) =>
     `${API_VERSION}/leaderboards/${leaderboardId}/players/${playerId}/rank`,
 } as const;
 
@@ -108,6 +108,8 @@ export const EVENT_ENDPOINTS = {
   SHOW: (id: number | string) => `${API_VERSION}/events/${id}`,
   UPDATE: (id: number | string) => `${API_VERSION}/events/${id}`,
   DELETE: (id: number | string) => `${API_VERSION}/events/${id}`,
+  PREDEFINED: `${API_VERSION}/events/predefined`,
+  CUSTOM: `${API_VERSION}/events/custom`,
 } as const;
 
 // Rule Endpoints
@@ -127,6 +129,30 @@ export const PROGRAM_ENDPOINTS = {
   SHOW: (id: number | string) => `${API_VERSION}/programs/${id}`,
   UPDATE: (id: number | string) => `${API_VERSION}/programs/${id}`,
   DELETE: (id: number | string) => `${API_VERSION}/programs/${id}`,
+  ACTIVATE: (id: number | string) => `${API_VERSION}/programs/${id}/activate`,
+  PAUSE: (id: number | string) => `${API_VERSION}/programs/${id}/pause`,
+  END: (id: number | string) => `${API_VERSION}/programs/${id}/end`,
+  DUPLICATE: (id: number | string) => `${API_VERSION}/programs/${id}/duplicate`,
+  STATS: (id: number | string) => `${API_VERSION}/programs/${id}/stats`,
+  PLAYERS: (id: number | string) => `${API_VERSION}/programs/${id}/players`,
+  ADD_PLAYER: (id: number | string) => `${API_VERSION}/programs/${id}/players`,
+  REMOVE_PLAYER: (programId: number | string, playerId: number | string) =>
+    `${API_VERSION}/programs/${programId}/players/${playerId}`,
+} as const;
+
+// Segment Endpoints
+export const SEGMENT_ENDPOINTS = {
+  LIST: `${API_VERSION}/segments`,
+  CREATE: `${API_VERSION}/segments`,
+  SHOW: (id: number | string) => `${API_VERSION}/segments/${id}`,
+  UPDATE: (id: number | string) => `${API_VERSION}/segments/${id}`,
+  DELETE: (id: number | string) => `${API_VERSION}/segments/${id}`,
+  PLAYERS: (id: number | string) => `${API_VERSION}/segments/${id}/players`,
+  ADD_PLAYER: (id: number | string) => `${API_VERSION}/segments/${id}/players`,
+  REMOVE_PLAYER: (segmentId: number | string, playerId: number | string) =>
+    `${API_VERSION}/segments/${segmentId}/players/${playerId}`,
+  REFRESH: (id: number | string) => `${API_VERSION}/segments/${id}/refresh`,
+  PREVIEW: `${API_VERSION}/segments/preview`,
 } as const;
 
 // User Endpoints
@@ -146,7 +172,7 @@ export const HEALTH_ENDPOINTS = {
 // Helper function to get all endpoint values (for debugging)
 export function getAllEndpoints(): string[] {
   const endpoints: string[] = [];
-  
+
   const addEndpoints = (obj: Record<string, unknown>) => {
     Object.values(obj).forEach(value => {
       if (typeof value === 'string') {
@@ -158,6 +184,6 @@ export function getAllEndpoints(): string[] {
   addEndpoints(AUTH_ENDPOINTS);
   addEndpoints(HEALTH_ENDPOINTS);
   // Note: Function endpoints like PLAYER_ENDPOINTS.SHOW(id) would need to be called with a sample ID
-  
+
   return endpoints;
 }

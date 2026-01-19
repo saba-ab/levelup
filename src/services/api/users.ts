@@ -7,6 +7,7 @@ import {
   PaginatedResponse,
   PaginationParams,
 } from './types';
+import { USER_ENDPOINTS } from '@/lib/api-routes';
 
 export function useUsersService() {
   const api = useApi();
@@ -21,23 +22,23 @@ export function useUsersService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<User>>(`/users${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<User>>(`${USER_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getUser = useCallback(async (userId: number) => {
-    return api.get<User>(`/users/${userId}`);
+    return api.get<User>(USER_ENDPOINTS.SHOW(userId));
   }, [api]);
 
   const createUser = useCallback(async (data: CreateUserData) => {
-    return api.post<User>('/users', data);
+    return api.post<User>(USER_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateUser = useCallback(async (userId: number, data: UpdateUserData) => {
-    return api.put<User>(`/users/${userId}`, data);
+    return api.put<User>(USER_ENDPOINTS.UPDATE(userId), data);
   }, [api]);
 
   const deleteUser = useCallback(async (userId: number) => {
-    return api.delete(`/users/${userId}`);
+    return api.delete(USER_ENDPOINTS.DELETE(userId));
   }, [api]);
 
   return {

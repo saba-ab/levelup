@@ -44,6 +44,17 @@ import {
   PaginatedResponse,
   MechanicsFilters,
 } from './types';
+import {
+  BADGE_ENDPOINTS,
+  LEVEL_ENDPOINTS,
+  MISSION_ENDPOINTS,
+  STREAK_ENDPOINTS,
+  LEADERBOARD_ENDPOINTS,
+  REWARD_ENDPOINTS,
+  WALLET_ENDPOINTS,
+  PLAYER_ENDPOINTS,
+  RULE_ENDPOINTS,
+} from '@/lib/api-routes';
 
 export function useMechanicsService() {
   const api = useApi();
@@ -60,35 +71,35 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Badge>>(`/badges${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Badge>>(`${BADGE_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getBadge = useCallback(async (badgeId: number) => {
-    return api.get<Badge>(`/badges/${badgeId}`);
+    return api.get<Badge>(BADGE_ENDPOINTS.SHOW(badgeId));
   }, [api]);
 
   const createBadge = useCallback(async (data: CreateBadgeData) => {
-    return api.post<Badge>('/badges', data);
+    return api.post<Badge>(BADGE_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateBadge = useCallback(async (badgeId: number, data: UpdateBadgeData) => {
-    return api.put<Badge>(`/badges/${badgeId}`, data);
+    return api.put<Badge>(BADGE_ENDPOINTS.UPDATE(badgeId), data);
   }, [api]);
 
   const deleteBadge = useCallback(async (badgeId: number) => {
-    return api.delete(`/badges/${badgeId}`);
+    return api.delete(BADGE_ENDPOINTS.DELETE(badgeId));
   }, [api]);
 
   const awardBadge = useCallback(async (data: AwardBadgeData) => {
-    return api.post<PlayerBadge>('/badges/award', data);
+    return api.post<PlayerBadge>(BADGE_ENDPOINTS.AWARD, data);
   }, [api]);
 
   const revokeBadge = useCallback(async (playerId: number, badgeId: number) => {
-    return api.delete(`/badges/players/${playerId}/badges/${badgeId}`);
+    return api.delete(`${BADGE_ENDPOINTS.LIST}/players/${playerId}/badges/${badgeId}`);
   }, [api]);
 
   const getPlayerBadges = useCallback(async (playerId: number) => {
-    return api.get<PlayerBadge[]>(`/badges/players/${playerId}`);
+    return api.get<PlayerBadge[]>(`${BADGE_ENDPOINTS.LIST}/players/${playerId}`);
   }, [api]);
 
   // ==================== LEVELS ====================
@@ -103,31 +114,31 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Level>>(`/levels${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Level>>(`${LEVEL_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getLevel = useCallback(async (levelId: number) => {
-    return api.get<Level>(`/levels/${levelId}`);
+    return api.get<Level>(LEVEL_ENDPOINTS.SHOW(levelId));
   }, [api]);
 
   const createLevel = useCallback(async (data: CreateLevelData) => {
-    return api.post<Level>('/levels', data);
+    return api.post<Level>(LEVEL_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateLevel = useCallback(async (levelId: number, data: UpdateLevelData) => {
-    return api.put<Level>(`/levels/${levelId}`, data);
+    return api.put<Level>(LEVEL_ENDPOINTS.UPDATE(levelId), data);
   }, [api]);
 
   const deleteLevel = useCallback(async (levelId: number) => {
-    return api.delete(`/levels/${levelId}`);
+    return api.delete(LEVEL_ENDPOINTS.DELETE(levelId));
   }, [api]);
 
   const grantXp = useCallback(async (data: GrantXpData) => {
-    return api.post<GrantXpResponse>('/levels/xp', data);
+    return api.post<GrantXpResponse>(LEVEL_ENDPOINTS.GRANT_XP, data);
   }, [api]);
 
   const getPlayerLevel = useCallback(async (playerId: number) => {
-    return api.get<PlayerLevel>(`/levels/players/${playerId}`);
+    return api.get<PlayerLevel>(`${LEVEL_ENDPOINTS.LIST}/players/${playerId}`);
   }, [api]);
 
   // ==================== MISSIONS ====================
@@ -142,39 +153,39 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Mission>>(`/missions${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Mission>>(`${MISSION_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getMission = useCallback(async (missionId: number) => {
-    return api.get<Mission>(`/missions/${missionId}`);
+    return api.get<Mission>(MISSION_ENDPOINTS.SHOW(missionId));
   }, [api]);
 
   const createMission = useCallback(async (data: CreateMissionData) => {
-    return api.post<Mission>('/missions', data);
+    return api.post<Mission>(MISSION_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateMission = useCallback(async (missionId: number, data: Partial<CreateMissionData>) => {
-    return api.put<Mission>(`/missions/${missionId}`, data);
+    return api.put<Mission>(MISSION_ENDPOINTS.UPDATE(missionId), data);
   }, [api]);
 
   const deleteMission = useCallback(async (missionId: number) => {
-    return api.delete(`/missions/${missionId}`);
+    return api.delete(MISSION_ENDPOINTS.DELETE(missionId));
   }, [api]);
 
   const startMission = useCallback(async (data: StartMissionData) => {
-    return api.post<PlayerMission>('/missions/start', data);
+    return api.post<PlayerMission>(MISSION_ENDPOINTS.START, data);
   }, [api]);
 
   const updateMissionProgress = useCallback(async (playerId: number, missionId: number, data: UpdateMissionProgressData) => {
-    return api.put<PlayerMission>(`/missions/players/${playerId}/missions/${missionId}/progress`, data);
+    return api.put<PlayerMission>(`${MISSION_ENDPOINTS.LIST}/players/${playerId}/missions/${missionId}/progress`, data);
   }, [api]);
 
   const completeMission = useCallback(async (playerId: number, missionId: number) => {
-    return api.post<PlayerMission>(`/missions/players/${playerId}/missions/${missionId}/complete`);
+    return api.post<PlayerMission>(`${MISSION_ENDPOINTS.LIST}/players/${playerId}/missions/${missionId}/complete`);
   }, [api]);
 
   const getPlayerMissions = useCallback(async (playerId: number) => {
-    return api.get<PlayerMission[]>(`/missions/players/${playerId}/missions`);
+    return api.get<PlayerMission[]>(`${MISSION_ENDPOINTS.LIST}/players/${playerId}/missions`);
   }, [api]);
 
   // ==================== STREAKS ====================
@@ -189,69 +200,69 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Streak>>(`/streaks${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Streak>>(`${STREAK_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getStreak = useCallback(async (streakId: number) => {
-    return api.get<Streak>(`/streaks/${streakId}`);
+    return api.get<Streak>(STREAK_ENDPOINTS.SHOW(streakId));
   }, [api]);
 
   const createStreak = useCallback(async (data: CreateStreakData) => {
-    return api.post<Streak>('/streaks', data);
+    return api.post<Streak>(STREAK_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateStreak = useCallback(async (streakId: number, data: Partial<CreateStreakData>) => {
-    return api.put<Streak>(`/streaks/${streakId}`, data);
+    return api.put<Streak>(STREAK_ENDPOINTS.UPDATE(streakId), data);
   }, [api]);
 
   const deleteStreak = useCallback(async (streakId: number) => {
-    return api.delete(`/streaks/${streakId}`);
+    return api.delete(STREAK_ENDPOINTS.DELETE(streakId));
   }, [api]);
 
   const recordStreakActivity = useCallback(async (data: RecordStreakActivityData) => {
-    return api.post<RecordStreakActivityResponse>('/streaks/activity', data);
+    return api.post<RecordStreakActivityResponse>(STREAK_ENDPOINTS.RECORD_ACTIVITY, data);
   }, [api]);
 
   const getPlayerStreak = useCallback(async (playerId: number, streakId: number) => {
-    return api.get<PlayerStreak>(`/streaks/players/${playerId}/streaks/${streakId}`);
+    return api.get<PlayerStreak>(`${STREAK_ENDPOINTS.LIST}/players/${playerId}/streaks/${streakId}`);
   }, [api]);
 
   const getPlayerStreaks = useCallback(async (playerId: number) => {
-    return api.get<PlayerStreak[]>(`/streaks/players/${playerId}/streaks`);
+    return api.get<PlayerStreak[]>(`${STREAK_ENDPOINTS.LIST}/players/${playerId}/streaks`);
   }, [api]);
 
   const resetStreak = useCallback(async (playerId: number, streakId: number) => {
-    return api.post<PlayerStreak>(`/streaks/players/${playerId}/streaks/${streakId}/reset`);
+    return api.post<PlayerStreak>(`${STREAK_ENDPOINTS.LIST}/players/${playerId}/streaks/${streakId}/reset`);
   }, [api]);
 
   // ==================== LEADERBOARDS ====================
 
   const listLeaderboards = useCallback(async () => {
-    return api.get<Leaderboard[]>('/leaderboards');
+    return api.get<Leaderboard[]>(LEADERBOARD_ENDPOINTS.LIST);
   }, [api]);
 
   const getLeaderboard = useCallback(async (leaderboardId: number) => {
-    return api.get<Leaderboard>(`/leaderboards/${leaderboardId}`);
+    return api.get<Leaderboard>(LEADERBOARD_ENDPOINTS.SHOW(leaderboardId));
   }, [api]);
 
   const createLeaderboard = useCallback(async (data: CreateLeaderboardData) => {
-    return api.post<Leaderboard>('/leaderboards', data);
+    return api.post<Leaderboard>(LEADERBOARD_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateLeaderboard = useCallback(async (leaderboardId: number, data: Partial<CreateLeaderboardData>) => {
-    return api.put<Leaderboard>(`/leaderboards/${leaderboardId}`, data);
+    return api.put<Leaderboard>(LEADERBOARD_ENDPOINTS.UPDATE(leaderboardId), data);
   }, [api]);
 
   const deleteLeaderboard = useCallback(async (leaderboardId: number) => {
-    return api.delete(`/leaderboards/${leaderboardId}`);
+    return api.delete(LEADERBOARD_ENDPOINTS.DELETE(leaderboardId));
   }, [api]);
 
   const getLeaderboardEntries = useCallback(async (leaderboardId: number, limit = 100, offset = 0) => {
-    return api.get<LeaderboardEntry[]>(`/leaderboards/${leaderboardId}/entries?limit=${limit}&offset=${offset}`);
+    return api.get<LeaderboardEntry[]>(`${LEADERBOARD_ENDPOINTS.ENTRIES(leaderboardId)}?limit=${limit}&offset=${offset}`);
   }, [api]);
 
   const getPlayerRank = useCallback(async (leaderboardId: number, playerId: number) => {
-    return api.get<LeaderboardEntry>(`/leaderboards/${leaderboardId}/players/${playerId}`);
+    return api.get<LeaderboardEntry>(LEADERBOARD_ENDPOINTS.PLAYER_RANK(leaderboardId, playerId));
   }, [api]);
 
   // ==================== REWARDS ====================
@@ -266,53 +277,53 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Reward>>(`/rewards${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Reward>>(`${REWARD_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getReward = useCallback(async (rewardId: number) => {
-    return api.get<Reward>(`/rewards/${rewardId}`);
+    return api.get<Reward>(REWARD_ENDPOINTS.SHOW(rewardId));
   }, [api]);
 
   const createReward = useCallback(async (data: CreateRewardData) => {
-    return api.post<Reward>('/rewards', data);
+    return api.post<Reward>(REWARD_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateReward = useCallback(async (rewardId: number, data: Partial<CreateRewardData>) => {
-    return api.put<Reward>(`/rewards/${rewardId}`, data);
+    return api.put<Reward>(REWARD_ENDPOINTS.UPDATE(rewardId), data);
   }, [api]);
 
   const deleteReward = useCallback(async (rewardId: number) => {
-    return api.delete(`/rewards/${rewardId}`);
+    return api.delete(REWARD_ENDPOINTS.DELETE(rewardId));
   }, [api]);
 
   const claimReward = useCallback(async (data: ClaimRewardData) => {
-    return api.post<PlayerReward>('/rewards/claim', data);
+    return api.post<PlayerReward>(REWARD_ENDPOINTS.CLAIM, data);
   }, [api]);
 
   const redeemReward = useCallback(async (playerId: number, rewardId: number) => {
-    return api.post<PlayerReward>(`/rewards/players/${playerId}/rewards/${rewardId}/redeem`);
+    return api.post<PlayerReward>(`${REWARD_ENDPOINTS.LIST}/players/${playerId}/rewards/${rewardId}/redeem`);
   }, [api]);
 
   const getPlayerRewards = useCallback(async (playerId: number) => {
-    return api.get<PlayerReward[]>(`/rewards/players/${playerId}/rewards`);
+    return api.get<PlayerReward[]>(`${REWARD_ENDPOINTS.LIST}/players/${playerId}/rewards`);
   }, [api]);
 
   // ==================== WALLETS ====================
 
   const getPlayerWallet = useCallback(async (playerId: number) => {
-    return api.get<Wallet>(`/wallets/players/${playerId}/wallet`);
+    return api.get<Wallet>(PLAYER_ENDPOINTS.WALLET(playerId));
   }, [api]);
 
   const creditWallet = useCallback(async (data: CreditWalletData) => {
-    return api.post<WalletTransaction>('/wallets/credit', data);
+    return api.post<WalletTransaction>(WALLET_ENDPOINTS.CREDIT, data);
   }, [api]);
 
   const debitWallet = useCallback(async (data: DebitWalletData) => {
-    return api.post<WalletTransaction>('/wallets/debit', data);
+    return api.post<WalletTransaction>(WALLET_ENDPOINTS.DEBIT, data);
   }, [api]);
 
   const transferPoints = useCallback(async (data: TransferPointsData) => {
-    return api.post<{ message: string; source_transaction: WalletTransaction; destination_transaction: WalletTransaction }>('/wallets/transfer', data);
+    return api.post<{ message: string; source_transaction: WalletTransaction; destination_transaction: WalletTransaction }>(WALLET_ENDPOINTS.TRANSFER, data);
   }, [api]);
 
   const getWalletTransactions = useCallback(async (playerId: number, filters?: WalletTransactionFilters) => {
@@ -325,7 +336,7 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<WalletTransaction>>(`/wallets/players/${playerId}/wallet/transactions${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<WalletTransaction>>(`${PLAYER_ENDPOINTS.WALLET_TRANSACTIONS(playerId)}${query ? `?${query}` : ''}`);
   }, [api]);
 
   // ==================== RULES ====================
@@ -340,31 +351,31 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Rule>>(`/rules${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Rule>>(`${RULE_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   const getRule = useCallback(async (ruleId: number) => {
-    return api.get<Rule>(`/rules/${ruleId}`);
+    return api.get<Rule>(RULE_ENDPOINTS.SHOW(ruleId));
   }, [api]);
 
   const createRule = useCallback(async (data: CreateRuleData) => {
-    return api.post<Rule>('/rules', data);
+    return api.post<Rule>(RULE_ENDPOINTS.CREATE, data);
   }, [api]);
 
   const updateRule = useCallback(async (ruleId: number, data: Partial<CreateRuleData>) => {
-    return api.put<Rule>(`/rules/${ruleId}`, data);
+    return api.put<Rule>(RULE_ENDPOINTS.UPDATE(ruleId), data);
   }, [api]);
 
   const deleteRule = useCallback(async (ruleId: number) => {
-    return api.delete(`/rules/${ruleId}`);
+    return api.delete(RULE_ENDPOINTS.DELETE(ruleId));
   }, [api]);
 
   const createRuleVersion = useCallback(async (ruleId: number, data: CreateRuleData) => {
-    return api.post<RuleVersion>(`/rules/${ruleId}/versions`, data);
+    return api.post<RuleVersion>(`${RULE_ENDPOINTS.SHOW(ruleId)}/versions`, data);
   }, [api]);
 
   const executeRules = useCallback(async (data: ExecuteRulesData) => {
-    return api.post<RuleExecution[]>('/rules/execute', data);
+    return api.post<RuleExecution[]>(RULE_ENDPOINTS.EXECUTE, data);
   }, [api]);
 
   const getRuleExecutions = useCallback(async (filters?: RuleExecutionFilters) => {
@@ -377,7 +388,7 @@ export function useMechanicsService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<RuleExecution>>(`/rules/executions${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<RuleExecution>>(`${RULE_ENDPOINTS.LIST}/executions${query ? `?${query}` : ''}`);
   }, [api]);
 
   return {

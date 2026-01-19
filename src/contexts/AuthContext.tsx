@@ -131,8 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Internal refresh token function (doesn't depend on state)
   const refreshTokenInternal = async (): Promise<boolean> => {
     try {
-      const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.REFRESH, undefined, { 
-        showErrorToast: false 
+      const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.REFRESH, undefined, {
+        showErrorToast: false
       });
 
       if (response.success && response.data) {
@@ -149,10 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const loginData: LoginData = { email, password };
-    
-    const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.LOGIN, loginData, { 
+
+    const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.LOGIN, loginData, {
       skipAuth: true,
-      showErrorToast: false 
+      showErrorToast: false
     });
 
     if (!response.success || !response.data) {
@@ -171,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: data.password,
       password_confirmation: data.password,
     };
-    
+
     const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.REGISTER, registerData, {
       skipAuth: true,
       showErrorToast: false
@@ -188,8 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await api.post<{ message: string }>(AUTH_ENDPOINTS.LOGOUT, undefined, { 
-        showErrorToast: false 
+      await api.post<{ message: string }>(AUTH_ENDPOINTS.LOGOUT, undefined, {
+        showErrorToast: false
       });
     } catch {
       // Continue with local logout even if API call fails

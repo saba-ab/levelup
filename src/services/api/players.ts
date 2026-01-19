@@ -11,6 +11,7 @@ import {
   PaginatedResponse,
   PlayerFilters,
 } from './types';
+import { PLAYER_ENDPOINTS, BADGE_ENDPOINTS, MISSION_ENDPOINTS, STREAK_ENDPOINTS, REWARD_ENDPOINTS } from '@/lib/api-routes';
 
 export function usePlayersService() {
   const api = useApi();
@@ -26,52 +27,52 @@ export function usePlayersService() {
       });
     }
     const query = params.toString();
-    return api.get<PaginatedResponse<Player>>(`/players${query ? `?${query}` : ''}`);
+    return api.get<PaginatedResponse<Player>>(`${PLAYER_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
   }, [api]);
 
   // Get single player by ID
   const getPlayer = useCallback(async (playerId: number) => {
-    return api.get<Player>(`/players/${playerId}`);
+    return api.get<Player>(PLAYER_ENDPOINTS.SHOW(playerId));
   }, [api]);
 
   // Get player by external ID
   const getPlayerByExternalId = useCallback(async (externalId: string) => {
-    return api.get<Player>(`/players/external/${encodeURIComponent(externalId)}`);
+    return api.get<Player>(`/api/v1/players/external/${encodeURIComponent(externalId)}`);
   }, [api]);
 
   // Create player
   const createPlayer = useCallback(async (data: CreatePlayerData) => {
-    return api.post<Player>('/players', data);
+    return api.post<Player>(PLAYER_ENDPOINTS.CREATE, data);
   }, [api]);
 
   // Update player
   const updatePlayer = useCallback(async (playerId: number, data: UpdatePlayerData) => {
-    return api.put<Player>(`/players/${playerId}`, data);
+    return api.put<Player>(PLAYER_ENDPOINTS.UPDATE(playerId), data);
   }, [api]);
 
   // Delete player
   const deletePlayer = useCallback(async (playerId: number) => {
-    return api.delete(`/players/${playerId}`);
+    return api.delete(PLAYER_ENDPOINTS.DELETE(playerId));
   }, [api]);
 
   // Get player badges (via badges endpoint)
   const getPlayerBadges = useCallback(async (playerId: number) => {
-    return api.get<PlayerBadge[]>(`/badges/players/${playerId}/badges`);
+    return api.get<PlayerBadge[]>(`${BADGE_ENDPOINTS.LIST}/players/${playerId}/badges`);
   }, [api]);
 
   // Get player missions (via missions endpoint per API spec)
   const getPlayerMissions = useCallback(async (playerId: number) => {
-    return api.get<PlayerMission[]>(`/missions/players/${playerId}/missions`);
+    return api.get<PlayerMission[]>(`${MISSION_ENDPOINTS.LIST}/players/${playerId}/missions`);
   }, [api]);
 
   // Get player streaks (via streaks endpoint per API spec)
   const getPlayerStreaks = useCallback(async (playerId: number) => {
-    return api.get<PlayerStreak[]>(`/streaks/players/${playerId}/streaks`);
+    return api.get<PlayerStreak[]>(`${STREAK_ENDPOINTS.LIST}/players/${playerId}/streaks`);
   }, [api]);
 
   // Get player rewards (via rewards endpoint per API spec)
   const getPlayerRewards = useCallback(async (playerId: number) => {
-    return api.get<PlayerReward[]>(`/rewards/players/${playerId}/rewards`);
+    return api.get<PlayerReward[]>(`${REWARD_ENDPOINTS.LIST}/players/${playerId}/rewards`);
   }, [api]);
 
   return {
