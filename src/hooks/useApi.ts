@@ -163,7 +163,6 @@ export function useApi() {
         const response = await fetch(config.url, {
           ...config,
           signal: abortControllerRef.current.signal,
-          credentials: 'include', // Send cookies with requests for CORS
         });
 
         // Handle different response statuses

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { TeamRole, Permission, hasPermission, canAccessRoute } from '@/lib/permissions';
 import { useApi } from '@/hooks/useApi';
 import { AuthResponse, AuthUser, RegisterData as ApiRegisterData, LoginData } from '@/services/api/types';
+import { AUTH_ENDPOINTS } from '@/lib/api-routes';
 
 const TOKEN_KEY = 'levelupos_token';
 const USER_KEY = 'levelupos_user';
@@ -100,8 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedToken && storedUser) {
         // Try to verify the token by fetching current user
         try {
-          const response = await api.get<AuthUser>('/auth/me', { showErrorToast: false });
-          
+          const response = await api.get<AuthUser>(AUTH_ENDPOINTS.ME, { showErrorToast: false });
+
           if (response.success && response.data) {
             const verifiedUser = transformAuthUser(response.data, storedUser.role);
             setUser(verifiedUser);
@@ -120,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearAuthData();
         }
       }
-      
+
       setIsLoading(false);
     };
 
@@ -130,10 +131,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Internal refresh token function (doesn't depend on state)
   const refreshTokenInternal = async (): Promise<boolean> => {
     try {
-      const response = await api.post<AuthResponse>('/auth/refresh', undefined, { 
+      const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.REFRESH, undefined, { 
         showErrorToast: false 
       });
-      
+
       if (response.success && response.data) {
         const newUser = transformAuthUser(response.data.user, getStoredUser()?.role || 'owner');
         storeAuthData(response.data.access_token, newUser);
@@ -149,11 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const loginData: LoginData = { email, password };
     
-    const response = await api.post<AuthResponse>('/auth/login', loginData, { 
+    const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.LOGIN, loginData, { 
       skipAuth: true,
       showErrorToast: false 
     });
-    
+
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Login failed');
     }
@@ -171,11 +172,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password_confirmation: data.password,
     };
     
-    const response = await api.post<AuthResponse>('/auth/register', registerData, { 
+    const response = await api.post<AuthResponse>(AUTH_ENDPOINTS.REGISTER, registerData, {
       skipAuth: true,
-      showErrorToast: false 
+      showErrorToast: false
     });
-    
+
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Registration failed');
     }
@@ -187,13 +188,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await api.post<{ message: string }>('/auth/logout', undefined, { 
+      await api.post<{ message: string }>(AUTH_ENDPOINTS.LOGOUT, undefined, { 
         showErrorToast: false 
       });
     } catch {
       // Continue with local logout even if API call fails
     }
-    
+
     clearAuthData();
     setUser(null);
   }, [api]);
