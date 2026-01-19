@@ -81,6 +81,7 @@ export function useConnectionStatus(options: UseConnectionStatusOptions = {}) {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
           },
+          credentials: 'include', // Send cookies with requests for CORS
           // Don't follow redirects for health checks
           redirect: 'error',
         });
@@ -166,6 +167,7 @@ export function useConnectionStatus(options: UseConnectionStatusOptions = {}) {
               'Accept': 'application/json',
               'X-Requested-With': 'XMLHttpRequest',
             },
+            credentials: 'include', // Send cookies with requests for CORS
             redirect: 'error',
           });
 
@@ -230,6 +232,7 @@ export function useConnectionStatus(options: UseConnectionStatusOptions = {}) {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
           },
+          credentials: 'include', // Send cookies with requests for CORS
           redirect: 'error',
         });
 

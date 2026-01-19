@@ -163,6 +163,7 @@ export function useApi() {
         const response = await fetch(config.url, {
           ...config,
           signal: abortControllerRef.current.signal,
+          credentials: 'include', // Send cookies with requests for CORS
         });
 
         // Handle different response statuses
@@ -204,7 +205,7 @@ export function useApi() {
           // Check if we should retry
           if (!skipRetry && attempt < maxRetries && RETRYABLE_STATUS_CODES.includes(response.status)) {
             const delay = getRetryDelay(attempt, retryDelay);
-            
+
             // Handle rate limiting (429) - check Retry-After header
             if (response.status === 429) {
               const retryAfter = response.headers.get('Retry-After');
@@ -222,8 +223,8 @@ export function useApi() {
           if (showErrorToast && error) {
             toast({
               title: getErrorTitle(response.status),
-              description: validationErrors 
-                ? formatValidationErrors(validationErrors) 
+              description: validationErrors
+                ? formatValidationErrors(validationErrors)
                 : error,
               variant: 'destructive',
             });
