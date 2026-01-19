@@ -49,7 +49,7 @@ response = client.badges.award(
 
 print(response.badge)
 # {'id': 'badge_789', 'name': 'First Purchase', 'tier': 'gold', ...}`,
-    curl: `curl -X POST https://api.levelupos.com/v1/badges/award \\
+    curl: `curl -X POST https://api.levelupos.ge/v1/badges/award \\
   -H "Authorization: Bearer your-api-key" \\
   -H "X-Org-Id: your-org-id" \\
   -H "Content-Type: application/json" \\
@@ -106,7 +106,7 @@ transaction = client.points.credit(
 
 print(transaction)
 # {'id': 'txn_abc', 'balance': 1500, 'amount': 500, ...}`,
-    curl: `curl -X POST https://api.levelupos.com/v1/points/credit \\
+    curl: `curl -X POST https://api.levelupos.ge/v1/points/credit \\
   -H "Authorization: Bearer your-api-key" \\
   -H "X-Org-Id: your-org-id" \\
   -H "Content-Type: application/json" \\
@@ -169,7 +169,7 @@ mission = client.missions.create(
 
 print(mission.id)
 # 'mission_xyz'`,
-    curl: `curl -X POST https://api.levelupos.com/v1/missions \\
+    curl: `curl -X POST https://api.levelupos.ge/v1/missions \\
   -H "Authorization: Bearer your-api-key" \\
   -H "X-Org-Id: your-org-id" \\
   -H "Content-Type: application/json" \\
