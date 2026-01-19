@@ -74,19 +74,19 @@ This project uses environment variables for API configuration. All environment v
 2. Update the `.env` file with your API URLs:
    ```env
    # Production API URL
-   VITE_API_URL_PRODUCTION=https://api.levelupos.com
+   VITE_API_URL_PRODUCTION=https://api.levelupos.ge
 
    # Staging API URL
-   VITE_API_URL_STAGING=https://staging-api.levelupos.com
+   VITE_API_URL_STAGING=https://staging-api.levelupos.ge
 
    # Development API URL
-   VITE_API_URL_DEVELOPMENT=https://dev-api.levelupos.com
+   VITE_API_URL_DEVELOPMENT=https://dev-api.levelupos.ge
 
    # Localhost API URL (for local development)
    VITE_API_URL_LOCALHOST=http://127.0.0.1:8000/api/v1
 
    # Default API URL (used as fallback)
-   VITE_API_URL_DEFAULT=https://api.levelupos.com
+   VITE_API_URL_DEFAULT=https://api.levelupos.ge
 
    # Default Environment (prod, staging, develop, localhost)
    # Set to 'localhost' to use local API by default

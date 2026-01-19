@@ -31,20 +31,20 @@ const defaultEnvironments: Environment[] = [
   {
     id: 'prod',
     name: 'Production',
-    url: getEnvVar('VITE_API_URL_PRODUCTION', 'https://api.levelupos.com'),
+    url: getEnvVar('VITE_API_URL_PRODUCTION', 'https://api.levelupos.ge'),
     type: 'production',
     isDefault: true
   },
   {
     id: 'staging',
     name: 'Staging',
-    url: getEnvVar('VITE_API_URL_STAGING', 'https://staging-api.levelupos.com'),
+    url: getEnvVar('VITE_API_URL_STAGING', 'https://staging-api.levelupos.ge'),
     type: 'staging'
   },
   {
     id: 'develop',
     name: 'Development',
-    url: getEnvVar('VITE_API_URL_DEVELOPMENT', 'https://dev-api.levelupos.com'),
+    url: getEnvVar('VITE_API_URL_DEVELOPMENT', 'https://dev-api.levelupos.ge'),
     type: 'develop'
   },
   {

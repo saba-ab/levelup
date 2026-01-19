@@ -199,7 +199,7 @@ print(f"Points awarded: {result.data}")`}</code>
             <TabsContent value="curl" className="mt-4">
               <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
                 <code>{`# Award points to a user
-curl -X POST https://api.levelupos.com/v1/points/award \\
+curl -X POST https://api.levelupos.ge/v1/points/award \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -209,7 +209,7 @@ curl -X POST https://api.levelupos.com/v1/points/award \\
   }'
 
 # Track a custom event
-curl -X POST https://api.levelupos.com/v1/events \\
+curl -X POST https://api.levelupos.ge/v1/events \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{

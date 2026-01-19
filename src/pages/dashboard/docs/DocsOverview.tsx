@@ -101,7 +101,7 @@ export default function DocsOverview() {
         </CardHeader>
         <CardContent>
           <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-            <code className="text-foreground">{`curl -X POST https://api.levelupos.com/v1/points/award \\
+            <code className="text-foreground">{`curl -X POST https://api.levelupos.ge/v1/points/award \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
