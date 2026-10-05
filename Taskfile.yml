@@ -1,8 +1,11 @@
 version: '3'
 
-# Monorepo entrypoint. Each app owns its Taskfile (backend/Taskfile.yml loads
-# backend/.env, which Task does not allow in included files), so the root
-# delegates: `task be -- check`, `task be -- run`, or `cd backend && task check`.
+# Monorepo entrypoint. Each app owns its own tooling:
+#   backend  (Go)         -> backend/Taskfile.yml   `task be -- check`
+#   portal   (Vite/React) -> frontend/portal        `task portal -- run dev`
+#   landing  (Next.js)    -> frontend/landing       `task landing -- run dev`
+# backend/Taskfile.yml loads backend/.env, which Task does not allow in
+# included files, so the root delegates instead of including.
 tasks:
   default:
     cmds: [task --list]
@@ -10,3 +13,27 @@ tasks:
   be:
     desc: 'Run a backend task. Usage: task be -- check'
     cmd: task -d backend {{.CLI_ARGS}}
+
+  portal:
+    desc: 'Run npm in the portal. Usage: task portal -- run dev'
+    dir: frontend/portal
+    cmd: npm {{.CLI_ARGS}}
+
+  landing:
+    desc: 'Run npm in the landing site. Usage: task landing -- run dev'
+    dir: frontend/landing
+    cmd: npm {{.CLI_ARGS}}
+
+  install:
+    desc: Install frontend dependencies
+    cmds:
+      - npm ci --prefix frontend/portal
+      - npm ci --prefix frontend/landing
+
+  build:
+    desc: Build everything (backend binaries + both frontends)
+    cmds:
+      - task -d backend generate
+      - cd backend && go build ./cmd/...
+      - npm run build --prefix frontend/portal
+      - npm run build --prefix frontend/landing

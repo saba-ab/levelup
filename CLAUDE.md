@@ -4,7 +4,10 @@ This is a monorepo. Each app has its own guide, and those guides are binding ins
 
 - `backend/`: Go modular monolith. Read `backend/CLAUDE.md`. Run Go tooling from `backend/`
   (`cd backend && task check`), or from the root with `task be -- check`.
-- `frontend/`: web app (being moved in). It keeps its own tooling and guide.
+- `frontend/portal/`: tenant dashboard (Vite, React, TanStack Query, shadcn/ui). npm, own `package-lock.json`.
+- `frontend/landing/`: marketing site (Next.js). npm, own `package-lock.json`.
+  Each frontend app is independent: run npm inside its directory (`task portal -- run dev`), never at the root.
+  There are no workspaces, so the apps do not share dependencies.
 
 LevelUp product and architecture docs live in `docs/rewrite/`:
 - `00-target-architecture.md`: module list, canonical topic and job names, cross-module flows, requirements
