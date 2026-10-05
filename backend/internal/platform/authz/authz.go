@@ -25,7 +25,15 @@ type Principal struct {
 	UserID   string
 	RoleIDs  []int64
 	TenantID string
+	// APIKeyID is set when a tenant backend authenticated with an API key
+	// (ADR-0017). UserID is then the key id: it is what created_by columns
+	// record, so every write stays attributable. Human-only operations
+	// (user, tenant and key administration) refuse such principals.
+	APIKeyID string
 }
+
+// IsAPIKey reports whether the principal is a tenant backend, not a person.
+func (p Principal) IsAPIKey() bool { return p.APIKeyID != "" }
 
 func (p Principal) Subject() string { return "user:" + p.UserID }
 

@@ -19,7 +19,7 @@ func CORS(allowed []string) func(http.Handler) http.Handler {
 	allowAny := slices.Contains(allowed, "*")
 	const (
 		allowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-		allowHeaders = "Authorization, Content-Type, Accept, Idempotency-Key, X-Request-Id"
+		allowHeaders = "Authorization, Content-Type, Accept, Idempotency-Key, X-Request-Id, X-API-Key"
 		exposeHeader = "X-Request-Id, Idempotent-Replay, Retry-After, Link"
 		maxAge       = 600
 	)

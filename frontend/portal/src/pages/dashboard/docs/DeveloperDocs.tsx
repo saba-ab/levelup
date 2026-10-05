@@ -142,7 +142,7 @@ export default function DeveloperDocs() {
 const res = await fetch('https://api.levelupos.ge/api/v1/activities', {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${accessToken}\`,
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
@@ -158,12 +158,12 @@ const { activity_id, status, duplicate } = await res.json(); // 202 { status: "p
             </TabsContent>
             <TabsContent value="python" className="mt-4">
               <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                <code>{`import requests
+                <code>{`import os, requests
 
 # Report an activity; live rules react to it asynchronously.
 res = requests.post(
     "https://api.levelupos.ge/api/v1/activities",
-    headers={"Authorization": f"Bearer {access_token}"},
+    headers={"Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}"},
     json={
         "event_id": "order-456",          # idempotency key: resending is safe
         "event_type": "purchase_completed",
@@ -176,14 +176,12 @@ print(res.status_code, res.json())  # 202 {"activity_id": ..., "status": "pendin
             </TabsContent>
             <TabsContent value="curl" className="mt-4">
               <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                <code>{`# Sign in (returns access_token and refresh_token)
-curl -X POST https://api.levelupos.ge/api/v1/auth/login \\
-  -H "Content-Type: application/json" \\
-  -d '{ "email": "you@company.com", "password": "..." }'
+                <code>{`# Create an API key in the portal: Settings → API Keys, then
+export LEVELUP_API_KEY=lvl_live_...
 
 # Report an activity
 curl -X POST https://api.levelupos.ge/api/v1/activities \\
-  -H "Authorization: Bearer ACCESS_TOKEN" \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "event_id": "order-456",
@@ -194,7 +192,7 @@ curl -X POST https://api.levelupos.ge/api/v1/activities \\
 
 # Credit points directly (Idempotency-Key makes retries safe)
 curl -X POST https://api.levelupos.ge/api/v1/players/PLAYER_ID/wallet/credit \\
-  -H "Authorization: Bearer ACCESS_TOKEN" \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Idempotency-Key: 7d1c6f0e-onboarding" \\
   -H "Content-Type: application/json" \\
   -d '{ "amount": 100, "kind": "bonus", "description": "Completed onboarding" }'`}</code>

@@ -28,6 +28,13 @@ export const USER_ENDPOINTS = {
   ROLES: (id: Id) => `${API_VERSION}/users/${id}/roles`,
 } as const;
 
+/** API keys for tenant backends: Authorization: Bearer lvl_live_… (ADR-0017). */
+export const API_KEY_ENDPOINTS = {
+  LIST: `${API_VERSION}/api-keys`,
+  CREATE: `${API_VERSION}/api-keys`,
+  REVOKE: (id: Id) => `${API_VERSION}/api-keys/${id}`,
+} as const;
+
 export const TENANT_ENDPOINTS = {
   CURRENT: `${API_VERSION}/tenant`,
 } as const;

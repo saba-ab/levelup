@@ -258,6 +258,156 @@ const docTemplate = `{
                 }
             }
         },
+        "/api-keys": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "List the tenant's API keys (secrets are never returned)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.APIKeyListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The secret is returned once. Keys authenticate with \"Authorization: Bearer lvl_live_…\" or \"X-API-Key\". Requires a signed-in admin (not another key).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "Create an API key for the tenant's backend",
+                "parameters": [
+                    {
+                        "description": "Key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.CreateAPIKeyReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.CreatedAPIKeyResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/api-keys/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "api-keys"
+                ],
+                "summary": "Revoke an API key (idempotent; effective on the next request)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "API key id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "consumes": [
@@ -8179,6 +8329,61 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_identity_internal_transport.APIKeyListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_identity_internal_transport.APIKeyResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.APIKeyResp": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_used_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "prefix": {
+                    "type": "string"
+                },
+                "revoked_at": {
+                    "type": "string"
+                },
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_identity_internal_transport.RoleResp"
+                    }
+                }
+            }
+        },
         "internal_modules_identity_internal_transport.AssignRolesReq": {
             "type": "object",
             "required": [
@@ -8188,6 +8393,29 @@ const docTemplate = `{
                 "role_ids": {
                     "type": "array",
                     "maxItems": 10,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.CreateAPIKeyReq": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "role_ids": {
+                    "type": "array",
+                    "maxItems": 3,
                     "items": {
                         "type": "integer"
                     }
@@ -8224,6 +8452,18 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.CreatedAPIKeyResp": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "$ref": "#/definitions/internal_modules_identity_internal_transport.APIKeyResp"
+                },
+                "secret": {
+                    "description": "Secret is shown once; LevelUp stores only its hash.",
+                    "type": "string"
                 }
             }
         },

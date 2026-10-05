@@ -49,6 +49,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Patch("/", h.updateTenant)
 		r.Delete("/", h.deleteTenant)
 	})
+	h.mountAPIKeys(r)
 	r.Route("/platform/tenants", func(r chi.Router) {
 		r.Use(httpx.RequireAuth)
 		r.Get("/", h.platformListTenants)

@@ -488,6 +488,42 @@ definitions:
         maxLength: 100
         type: string
     type: object
+  internal_modules_identity_internal_transport.APIKeyListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.APIKeyResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_identity_internal_transport.APIKeyResp:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      revoked_at:
+        type: string
+      role_ids:
+        items:
+          type: integer
+        type: array
+      roles:
+        items:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.RoleResp'
+        type: array
+    type: object
   internal_modules_identity_internal_transport.AssignRolesReq:
     properties:
       role_ids:
@@ -497,6 +533,22 @@ definitions:
         type: array
     required:
     - role_ids
+    type: object
+  internal_modules_identity_internal_transport.CreateAPIKeyReq:
+    properties:
+      expires_at:
+        type: string
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      role_ids:
+        items:
+          type: integer
+        maxItems: 3
+        type: array
+    required:
+    - name
     type: object
   internal_modules_identity_internal_transport.CreateUserReq:
     properties:
@@ -521,6 +573,14 @@ definitions:
     - email
     - name
     - password
+    type: object
+  internal_modules_identity_internal_transport.CreatedAPIKeyResp:
+    properties:
+      api_key:
+        $ref: '#/definitions/internal_modules_identity_internal_transport.APIKeyResp'
+      secret:
+        description: Secret is shown once; LevelUp stores only its hash.
+        type: string
     type: object
   internal_modules_identity_internal_transport.LoginReq:
     properties:
@@ -2613,6 +2673,102 @@ paths:
       summary: Ingest up to 100 activities
       tags:
       - activity
+  /api-keys:
+    get:
+      parameters:
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from the previous page
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_identity_internal_transport.APIKeyListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List the tenant's API keys (secrets are never returned)
+      tags:
+      - api-keys
+    post:
+      consumes:
+      - application/json
+      description: 'The secret is returned once. Keys authenticate with "Authorization:
+        Bearer lvl_live_…" or "X-API-Key". Requires a signed-in admin (not another
+        key).'
+      parameters:
+      - description: Key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.CreateAPIKeyReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_identity_internal_transport.CreatedAPIKeyResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Create an API key for the tenant's backend
+      tags:
+      - api-keys
+  /api-keys/{id}:
+    delete:
+      parameters:
+      - description: API key id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Revoke an API key (idempotent; effective on the next request)
+      tags:
+      - api-keys
   /auth/login:
     post:
       consumes:

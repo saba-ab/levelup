@@ -59,7 +59,7 @@ func (a *App) Router() chi.Router {
 	r.Use(httpx.BaseMiddleware(a.P.Tel.Log, a.P.Tel.Tracer, a.P.Tel.Registry)...)
 	// Token PARSING is global (never rejects); rejection is per-route-group
 	// via httpx.RequireAuth inside modules.
-	r.Use(authn.Middleware(a.P.Authn.Issuer, a.P.Authn.Refresh, a.P.Tel.Log))
+	r.Use(authn.Middleware(a.P.Authn.Issuer, a.P.Authn.Refresh, a.P.Tel.Log, a.apiKeyVerifier()))
 	// After authn so limits key on the principal when there is one (R38).
 	r.Use(httpx.RateLimit(a.P.Limiter, a.P.Cfg.HTTP.RateLimitPerMinute, a.P.Tel.Log))
 	// Idempotency-Key replay protection on non-GET (R11).
@@ -211,6 +211,18 @@ func Migrate(ctx context.Context, cfg config.Config) error {
 			return err
 		}
 		app.P.Tel.Log.Info("migrated", zap.String("module", m.Name()))
+	}
+	return nil
+}
+
+// apiKeyVerifier returns the enabled module that authenticates API keys
+// (identity), found by interface so the platform never names a module.
+// Nil when no such module is enabled: keys are then simply not accepted.
+func (a *App) apiKeyVerifier() authn.KeyVerifier {
+	for _, m := range a.Modules {
+		if kv, ok := m.(authn.KeyVerifier); ok {
+			return kv
+		}
 	}
 	return nil
 }

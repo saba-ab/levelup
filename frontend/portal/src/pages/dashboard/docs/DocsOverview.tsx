@@ -102,7 +102,7 @@ export default function DocsOverview() {
         <CardContent>
           <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
             <code className="text-foreground">{`curl -X POST https://api.levelupos.ge/api/v1/activities \\
-  -H "Authorization: Bearer ACCESS_TOKEN" \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "event_id": "order-1042",

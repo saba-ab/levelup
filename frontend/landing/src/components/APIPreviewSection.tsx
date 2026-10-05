@@ -17,7 +17,7 @@ const codeExamples = {
 const res = await fetch('${API}/api/v1/activities', {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${process.env.LEVELUP_TOKEN}\`,
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
@@ -35,7 +35,7 @@ console.log(res.status, await res.json());
 # Your backend reports an activity; LevelUp's rules decide the rewards.
 res = requests.post(
     "${API}/api/v1/activities",
-    headers={"Authorization": f"Bearer {os.environ['LEVELUP_TOKEN']}"},
+    headers={"Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}"},
     json={
         "event_id": "order_789",            # your id: retries never double-award
         "event_type": "purchase_completed",
@@ -47,7 +47,7 @@ res = requests.post(
 print(res.status_code, res.json())
 # 202 {'activity_id': '01a1...', 'status': 'pending', 'duplicate': False}`,
     curl: `curl -X POST ${API}/api/v1/activities \\
-  -H "Authorization: Bearer $LEVELUP_TOKEN" \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "event_id": "order_789",
@@ -66,7 +66,7 @@ print(res.status_code, res.json())
 const res = await fetch(\`${API}/api/v1/players/\${playerId}/wallet/credit\`, {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${process.env.LEVELUP_TOKEN}\`,
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
     'Content-Type': 'application/json',
     'Idempotency-Key': 'order_789-points',   // required for money movements
   },
@@ -83,7 +83,7 @@ player_id = "01a10cdf-5e1c-70a0-a223-4589108b5a25"
 res = requests.post(
     f"${API}/api/v1/players/{player_id}/wallet/credit",
     headers={
-        "Authorization": f"Bearer {os.environ['LEVELUP_TOKEN']}",
+        "Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}",
         "Idempotency-Key": "order_789-points",   # required for money movements
     },
     json={"amount": 500, "kind": "earn", "description": "Purchase reward"},
@@ -93,7 +93,7 @@ print(res.json())
 # {'id': '01a1...', 'kind': 'earn', 'direction': 'credit', 'amount': 500,
 #  'balance_before': 1000, 'balance_after': 1500, ...}`,
     curl: `curl -X POST ${API}/api/v1/players/01a10cdf-5e1c-70a0-a223-4589108b5a25/wallet/credit \\
-  -H "Authorization: Bearer $LEVELUP_TOKEN" \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: order_789-points" \\
   -d '{ "amount": 500, "kind": "earn", "description": "Purchase reward" }'
@@ -109,7 +109,7 @@ print(res.json())
 const res = await fetch(\`${API}/api/v1/badges/\${badgeId}/award\`, {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${process.env.LEVELUP_TOKEN}\`,
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
     'Content-Type': 'application/json',
     'Idempotency-Key': 'order_789-badge',
   },
@@ -126,7 +126,7 @@ badge_id = "01a10ce1-26ab-761e-8dcc-6266f4f0cc94"   # "First Purchase"
 res = requests.post(
     f"${API}/api/v1/badges/{badge_id}/award",
     headers={
-        "Authorization": f"Bearer {os.environ['LEVELUP_TOKEN']}",
+        "Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}",
         "Idempotency-Key": "order_789-badge",
     },
     json={"player_id": "01a10cdf-5e1c-70a0-a223-4589108b5a25"},
@@ -136,7 +136,7 @@ print(res.status_code, res.json())
 # 201 {'award_id': '01a1...', 'status': 'applied',
 #      'player_badge': {'badge_id': '01a10ce1...', 'earned_count': 1, ...}}`,
     curl: `curl -X POST ${API}/api/v1/badges/01a10ce1-26ab-761e-8dcc-6266f4f0cc94/award \\
-  -H "Authorization: Bearer $LEVELUP_TOKEN" \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: order_789-badge" \\
   -d '{ "player_id": "01a10cdf-5e1c-70a0-a223-4589108b5a25" }'

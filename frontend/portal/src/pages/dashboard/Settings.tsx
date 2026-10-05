@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
+import ApiKeysSettings from '@/components/ApiKeysSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import {
@@ -655,10 +656,19 @@ export default function Settings() {
             Team
             {!canManageTeam && <Lock className="h-3 w-3" />}
           </TabsTrigger>
+          <TabsTrigger value="api-keys" disabled={!canManageTeam} className="gap-2">
+            API Keys
+            {!canManageTeam && <Lock className="h-3 w-3" />}
+          </TabsTrigger>
         </TabsList>
 
         <GeneralSettings canManage={canManageSettings} />
         {canManageTeam && <TeamSettings />}
+        {canManageTeam && (
+          <TabsContent value="api-keys">
+            <ApiKeysSettings />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

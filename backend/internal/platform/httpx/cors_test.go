@@ -26,6 +26,7 @@ func TestCORSPreflightForAllowedOrigin(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, rec.Code, "preflight never reaches the handler")
 	require.Equal(t, "http://localhost:5173", rec.Header().Get("Access-Control-Allow-Origin"))
 	require.Contains(t, rec.Header().Get("Access-Control-Allow-Headers"), "Idempotency-Key")
+	require.Contains(t, rec.Header().Get("Access-Control-Allow-Headers"), "X-API-Key")
 	require.Contains(t, rec.Header().Get("Access-Control-Allow-Methods"), "PATCH")
 	require.Empty(t, rec.Header().Get("Access-Control-Allow-Credentials"))
 }

@@ -64,6 +64,9 @@ func (s *Service) CreateUser(ctx context.Context, cmd CreateUserCmd) (domain.Use
 	if err != nil {
 		return domain.User{}, err
 	}
+	if err := requireHuman(p); err != nil {
+		return domain.User{}, err
+	}
 	if err := s.authz.Authorize(ctx, p, contracts.PermUsersCreate, nil); err != nil {
 		return domain.User{}, err
 	}
@@ -109,6 +112,9 @@ type UpdateUserCmd struct {
 func (s *Service) UpdateUser(ctx context.Context, id string, cmd UpdateUserCmd) (domain.User, error) {
 	p, err := authz.RequireTenant(ctx)
 	if err != nil {
+		return domain.User{}, err
+	}
+	if err := requireHuman(p); err != nil {
 		return domain.User{}, err
 	}
 	self := id == p.UserID
@@ -218,6 +224,9 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if err := requireHuman(p); err != nil {
+		return err
+	}
 	if err := s.authz.Authorize(ctx, p, contracts.PermUsersDelete, nil); err != nil {
 		return err
 	}
@@ -259,6 +268,9 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 func (s *Service) AssignRoles(ctx context.Context, id string, roleIDs []int64) (domain.User, error) {
 	p, err := authz.RequireTenant(ctx)
 	if err != nil {
+		return domain.User{}, err
+	}
+	if err := requireHuman(p); err != nil {
 		return domain.User{}, err
 	}
 	if err := s.authz.Authorize(ctx, p, contracts.PermUsersAssignRoles, nil); err != nil {

@@ -12,3 +12,4 @@ export { useUsersService } from './users';
 export { useEventsService } from './events';
 export { useActivitiesService } from './activities';
 export { useRulesService } from './rules';
+export { useApiKeysService } from './apiKeys';

@@ -172,11 +172,17 @@ export default function ApiReference() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Authentication</CardTitle>
-          <CardDescription>Requests carry the access token from POST /api/v1/auth/login; refresh it with /api/v1/auth/refresh</CardDescription>
+          <CardDescription>
+            Backends use an API key from Settings → API Keys. People signed in to the portal use the access token
+            from POST /api/v1/auth/login (refreshed with /api/v1/auth/refresh).
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-            <code>{`Authorization: Bearer ACCESS_TOKEN`}</code>
+            <code>{`# Server-to-server (recommended for integrations)
+Authorization: Bearer lvl_live_xxxxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# or
+X-API-Key: lvl_live_xxxxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}</code>
           </pre>
         </CardContent>
       </Card>
@@ -245,7 +251,7 @@ export default function ApiReference() {
               <TabsContent value="request" className="mt-4">
                 <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
                   <code>{`curl -X ${selectedEndpoint.method} ${baseUrl}${selectedEndpoint.path}${selectedEndpoint.auth ? ` \\
-  -H "Authorization: Bearer ACCESS_TOKEN"` : ''} \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY"` : ''} \\
   -H "Content-Type: application/json"${selectedEndpoint.body ? ` \\
   -d '${selectedEndpoint.body}'` : ''}`}</code>
                 </pre>

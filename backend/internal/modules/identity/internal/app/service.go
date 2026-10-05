@@ -89,6 +89,8 @@ type Service struct {
 	log      *zap.Logger
 	settings Settings
 	pw       *passwords
+	keys     APIKeyRepository
+	keyCache KeyCache
 
 	tx func(ctx context.Context, fn func(tx *gorm.DB) error) error
 }

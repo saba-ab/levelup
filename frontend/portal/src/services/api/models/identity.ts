@@ -106,3 +106,34 @@ export interface UpdateUserData {
 }
 
 export type UserFilters = CursorParams;
+
+// ==================== API KEYS (ADR-0017) ====================
+
+/** Roles an API key may hold (never owner or super admin). */
+export const API_KEY_ROLE_KEYS: RoleKey[] = ['admin', 'program_manager', 'developer'];
+
+export interface ApiKey {
+  id: ID;
+  name: string;
+  /** Clear prefix: the key reads "lvl_live_<prefix>_…". */
+  prefix: string;
+  role_ids: number[];
+  roles: Role[];
+  created_by: ID | null;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface CreateApiKeyData {
+  name: string;
+  role_ids?: number[];
+  expires_at?: string;
+}
+
+/** The only response that contains the secret; it is never retrievable again. */
+export interface CreatedApiKey {
+  api_key: ApiKey;
+  secret: string;
+}
