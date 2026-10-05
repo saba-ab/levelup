@@ -45,10 +45,10 @@ const Navbar = () => {
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>
-              <a href={PORTAL_ROUTES.HOME}>Sign In</a>
+              <a href={PORTAL_ROUTES.LOGIN}>Sign In</a>
             </Button>
             <Button variant="hero" size="sm" asChild>
-              <a href={PORTAL_ROUTES.HOME}>Get Started Free</a>
+              <a href={PORTAL_ROUTES.SIGNUP}>Get Started Free</a>
             </Button>
           </div>
 
@@ -77,10 +77,10 @@ const Navbar = () => {
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-border/50">
                 <Button variant="ghost" size="sm" asChild>
-                  <a href={PORTAL_ROUTES.HOME}>Sign In</a>
+                  <a href={PORTAL_ROUTES.LOGIN}>Sign In</a>
                 </Button>
                 <Button variant="hero" size="sm" asChild>
-                  <a href={PORTAL_ROUTES.HOME}>Get Started Free</a>
+                  <a href={PORTAL_ROUTES.SIGNUP}>Get Started Free</a>
                 </Button>
               </div>
             </div>

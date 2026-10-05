@@ -6,12 +6,11 @@ const footerLinks = {
     { name: "Features", href: "/#features" },
     { name: "Pricing", href: "/#pricing" },
     { name: "Use Cases", href: "/#use-cases" },
-    { name: "Changelog", href: `${PORTAL_ROUTES.DASHBOARD}/changelog` },
   ],
   Developers: [
     { name: "Documentation", href: PORTAL_ROUTES.DOCS },
-    { name: "API Reference", href: `${PORTAL_ROUTES.DOCS}/api` },
-    { name: "SDKs", href: `${PORTAL_ROUTES.DOCS}/sdks` },
+    { name: "API Reference", href: PORTAL_ROUTES.API_REFERENCE },
+    { name: "Developer Guide", href: PORTAL_ROUTES.DEVELOPER_DOCS },
   ],
   Company: [
     { name: "About", href: "/about" },
