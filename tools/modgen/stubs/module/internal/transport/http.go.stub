@@ -1,0 +1,83 @@
+// Package transport is << PACKAGE >>'s HTTP layer: DTO shape validation
+// here, invariants in the service/domain (PRD §7.5).
+package transport
+
+import (
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/internal/app"
+	"<< MODULE >>/internal/platform/httpx"
+	"<< MODULE >>/internal/shared/validate"
+)
+
+type Handler struct {
+	svc *app.Service
+	val *validate.Validator
+}
+
+func NewHandler(svc *app.Service, val *validate.Validator) *Handler {
+	return &Handler{svc: svc, val: val}
+}
+
+func (h *Handler) Mount(r chi.Router) {
+	r.Route("/<< PACKAGE >>s", func(r chi.Router) {
+		r.Post("/", h.create)
+		r.Get("/", h.list)
+	})
+}
+
+type CreateReq struct {
+	Name string `json:"name" validate:"required,max=128"`
+}
+
+type ItemResp struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// @Summary      Create a << PACKAGE >> item
+// @Tags         << PACKAGE >>
+// @Accept       json
+// @Produce      json
+// @Param        body body CreateReq true "Item"
+// @Success      201 {object} ItemResp
+// @Failure      422 {object} httpx.Problem
+// @Router       /<< PACKAGE >>s [post]
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	var req CreateReq
+	if err := httpx.Decode(r, &req, h.val); err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	it, err := h.svc.Create(r.Context(), req.Name)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, ItemResp(it))
+}
+
+// @Summary      List << PACKAGE >> items
+// @Tags         << PACKAGE >>
+// @Produce      json
+// @Param        limit query int false "Page size (max 100)"
+// @Success      200 {array} ItemResp
+// @Router       /<< PACKAGE >>s [get]
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	items, err := h.svc.List(r.Context(), limit)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	out := make([]ItemResp, len(items))
+	for i, it := range items {
+		out[i] = ItemResp(it)
+	}
+	httpx.JSON(w, http.StatusOK, out)
+}

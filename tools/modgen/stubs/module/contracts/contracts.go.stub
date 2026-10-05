@@ -1,0 +1,25 @@
+// Package contracts is << PACKAGE >>'s public surface: topics, event
+// schemas, permissions. Data only (PRD §4 P2). Anyone may import this;
+// nothing here may import anything but stdlib and authz contract types.
+package contracts
+
+import (
+	"time"
+
+	"<< MODULE >>/internal/platform/authz"
+)
+
+// Topic names carry the schema version (PRD §8): breaking change → .v2
+// topic, dual-publish, migrate consumers, retire .v1.
+const Topic<< NAME >>Created = "<< TOPIC >>.created.v1"
+
+type << NAME >>CreatedV1 struct {
+	ID   string    `json:"id"`
+	Name string    `json:"name"`
+	At   time.Time `json:"at"`
+}
+
+// Module-owned permission catalogue (PRD §7.6): seeded and enforced from
+// these same constants. Add permissions here and a Go seed migration when
+// this module needs authorization.
+var AllPermissions = []authz.Permission{}

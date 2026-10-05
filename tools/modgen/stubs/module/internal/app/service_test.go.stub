@@ -1,0 +1,57 @@
+package app
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"<< MODULE >>/internal/platform/clock"
+	"<< MODULE >>/internal/shared/errs"
+)
+
+type fakeRepo struct{ rows []Item }
+
+func (f *fakeRepo) Insert(_ context.Context, _ *gorm.DB, it Item) error {
+	f.rows = append(f.rows, it)
+	return nil
+}
+
+func (f *fakeRepo) List(_ context.Context, limit int) ([]Item, error) {
+	if len(f.rows) > limit {
+		return f.rows[:limit], nil
+	}
+	return f.rows, nil
+}
+
+type fakeOutbox struct{ topics []string }
+
+func (f *fakeOutbox) Publish(_ context.Context, _ *gorm.DB, topic string, _ any) error {
+	f.topics = append(f.topics, topic)
+	return nil
+}
+
+func newTestService(repo Repository, ob *fakeOutbox) *Service {
+	svc := NewService(repo, ob, nil, clock.NewFake(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+	svc.tx = func(_ context.Context, fn func(tx *gorm.DB) error) error { return fn(nil) }
+	return svc
+}
+
+func TestCreatePublishesInSameTx(t *testing.T) {
+	repo, ob := &fakeRepo{}, &fakeOutbox{}
+	svc := newTestService(repo, ob)
+
+	it, err := svc.Create(context.Background(), "first")
+	require.NoError(t, err)
+	require.NotEmpty(t, it.ID)
+	require.Len(t, repo.rows, 1)
+	require.Len(t, ob.topics, 1)
+}
+
+func TestCreateRejectsEmptyName(t *testing.T) {
+	svc := newTestService(&fakeRepo{}, &fakeOutbox{})
+	_, err := svc.Create(context.Background(), "  ")
+	require.Equal(t, errs.Invalid, errs.KindOf(err))
+}

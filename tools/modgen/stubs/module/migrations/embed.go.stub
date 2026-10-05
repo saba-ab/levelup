@@ -1,0 +1,13 @@
+// Package migrations embeds << PACKAGE >>'s goose migrations
+// (schema << SCHEMA >>, applied by cmd/migrate in registry order, R3).
+package migrations
+
+import (
+	"embed"
+	"io/fs"
+)
+
+//go:embed *.sql
+var files embed.FS
+
+var FS fs.FS = files

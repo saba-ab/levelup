@@ -1,0 +1,46 @@
+// Package repo implements << PACKAGE >>'s persistence. Models stay
+// unexported and inside this package (PRD §7.1 Mechanism 2).
+package repo
+
+import (
+	"context"
+	"time"
+
+	"gorm.io/gorm"
+
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/internal/app"
+	"<< MODULE >>/internal/shared/errs"
+)
+
+// << PACKAGE >>Item derives its table name from the struct name — NO
+// TableName() override: GORM's TablePrefix (the §7.1 containment) ignores
+// overrides, and the arch test bans them. Table: << SCHEMA >>.<< PACKAGE >>_items.
+type << PACKAGE >>Item struct {
+	ID        string `gorm:"primaryKey;type:uuid"`
+	Name      string `gorm:"not null"`
+	CreatedAt time.Time
+}
+
+type Postgres struct{ db *gorm.DB }
+
+func NewPostgres(db *gorm.DB) *Postgres { return &Postgres{db: db} }
+
+func (r *Postgres) Insert(ctx context.Context, tx *gorm.DB, it app.Item) error {
+	m := << PACKAGE >>Item{ID: it.ID, Name: it.Name, CreatedAt: it.CreatedAt}
+	if err := tx.WithContext(ctx).Create(&m).Error; err != nil {
+		return errs.Wrap(errs.Internal, "insert << PACKAGE >> item", err)
+	}
+	return nil
+}
+
+func (r *Postgres) List(ctx context.Context, limit int) ([]app.Item, error) {
+	var ms []<< PACKAGE >>Item
+	if err := r.db.WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&ms).Error; err != nil {
+		return nil, errs.Wrap(errs.Internal, "list << PACKAGE >> items", err)
+	}
+	out := make([]app.Item, len(ms))
+	for i, m := range ms {
+		out[i] = app.Item{ID: m.ID, Name: m.Name, CreatedAt: m.CreatedAt}
+	}
+	return out, nil
+}

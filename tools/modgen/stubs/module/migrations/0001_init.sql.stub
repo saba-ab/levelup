@@ -1,0 +1,15 @@
+-- +goose Up
+-- Lands in schema << SCHEMA >> (per-module schema + version table, R3).
+-- Table name must match GORM's derivation from the model struct
+-- (<< PACKAGE >>Item → << PACKAGE >>_items); GORM pluralizes irregular
+-- names (story→stories) — align this file if yours is irregular.
+CREATE TABLE << PACKAGE >>_items (
+    id         UUID PRIMARY KEY,
+    name       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+-- No foreign keys to other modules' schemas — ever (PRD §4 P5).
+
+-- +goose Down
+DROP TABLE << PACKAGE >>_items;

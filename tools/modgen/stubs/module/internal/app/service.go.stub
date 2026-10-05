@@ -1,0 +1,80 @@
+// Package app holds << PACKAGE >>'s use cases and transaction boundaries
+// (ADR-0013: the tx handle is an explicit argument, never smuggled in ctx).
+package app
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"gorm.io/gorm"
+
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/contracts"
+	"<< MODULE >>/internal/platform/clock"
+	"<< MODULE >>/internal/platform/outbox"
+	"<< MODULE >>/internal/platform/postgres"
+	"<< MODULE >>/internal/shared/errs"
+	"<< MODULE >>/internal/shared/id"
+)
+
+// Item is the service-level view. Rename or replace it with a real domain
+// package (internal/domain) once this module grows invariants worth
+// isolating — thin modules stay flat (PRD §5).
+type Item struct {
+	ID        string
+	Name      string
+	CreatedAt time.Time
+}
+
+type Repository interface {
+	Insert(ctx context.Context, tx *gorm.DB, it Item) error
+	List(ctx context.Context, limit int) ([]Item, error)
+}
+
+type Service struct {
+	repo   Repository
+	outbox outbox.Store
+	db     *gorm.DB
+	clock  clock.Clock
+
+	tx func(ctx context.Context, fn func(tx *gorm.DB) error) error
+}
+
+func NewService(repo Repository, ob outbox.Store, db *gorm.DB, c clock.Clock) *Service {
+	s := &Service{repo: repo, outbox: ob, db: db, clock: c}
+	s.tx = func(ctx context.Context, fn func(tx *gorm.DB) error) error {
+		return postgres.InTx(ctx, s.db, fn)
+	}
+	return s
+}
+
+// Create stores an item and records << TOPIC >>.created.v1 IN THE SAME
+// transaction — rollback leaves neither the row nor the event (PRD §8).
+func (s *Service) Create(ctx context.Context, name string) (Item, error) {
+	if strings.TrimSpace(name) == "" {
+		return Item{}, errs.New(errs.Invalid, "name is required")
+	}
+	it := Item{ID: id.NewID(), Name: name, CreatedAt: s.clock.Now()}
+
+	err := s.tx(ctx, func(tx *gorm.DB) error {
+		if err := s.repo.Insert(ctx, tx, it); err != nil {
+			return err
+		}
+		return s.outbox.Publish(ctx, tx, contracts.Topic<< NAME >>Created, contracts.<< NAME >>CreatedV1{
+			ID:   it.ID,
+			Name: it.Name,
+			At:   it.CreatedAt,
+		})
+	})
+	if err != nil {
+		return Item{}, err
+	}
+	return it, nil
+}
+
+func (s *Service) List(ctx context.Context, limit int) ([]Item, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	return s.repo.List(ctx, limit)
+}

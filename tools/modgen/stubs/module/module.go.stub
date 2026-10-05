@@ -1,0 +1,59 @@
+// Package << PACKAGE >> was scaffolded by `task new-module NAME=<< PACKAGE >>`.
+// Public surface: this file + contracts/ + config.go. Everything else lives
+// under internal/ and is compiler-private to this module (PRD §4 P1).
+package << PACKAGE >>
+
+import (
+	"context"
+	"io/fs"
+
+	"github.com/go-chi/chi/v5"
+
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/contracts"
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/internal/app"
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/internal/repo"
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/internal/transport"
+	"<< MODULE >>/internal/modules/<< PACKAGE >>/migrations"
+	"<< MODULE >>/internal/platform/authz"
+	"<< MODULE >>/internal/platform/bus"
+	"<< MODULE >>/internal/platform/jobs"
+	"<< MODULE >>/internal/platform/modkit"
+)
+
+type Module struct {
+	svc  *app.Service
+	deps modkit.Deps
+}
+
+// New wires the module. Constructors do no I/O.
+func New(d modkit.Deps) *Module {
+	svc := app.NewService(repo.NewPostgres(d.DB), d.Outbox, d.DB, d.Clock)
+	return &Module{svc: svc, deps: d}
+}
+
+func (m *Module) Name() string { return "<< PACKAGE >>" }
+
+// Migrations land in schema << SCHEMA >> with an own goose version table (R3).
+func (m *Module) Migrations() fs.FS { return migrations.FS }
+
+func (m *Module) RegisterHTTP(r chi.Router) {
+	transport.NewHandler(m.svc, m.deps.Validate).Mount(r)
+}
+
+// Subscriptions: react to other modules' events here. Import ONLY their
+// contracts; handlers must be idempotent (PRD §8).
+func (m *Module) Subscriptions() []bus.Subscription { return nil }
+
+// Jobs: crons (Schedule set — the scheduler enqueues, the worker runs) and
+// queue consumers (Schedule empty). Scheduled jobs must be RECONCILING (R47).
+func (m *Module) Jobs() []jobs.Job { return nil }
+
+func (m *Module) Health(ctx context.Context) error {
+	sqlDB, err := m.deps.DB.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.PingContext(ctx)
+}
+
+func (m *Module) Permissions() []authz.Permission { return contracts.AllPermissions }

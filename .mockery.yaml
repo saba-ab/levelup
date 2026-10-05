@@ -1,0 +1,21 @@
+# Mocks are generated for PORTS ONLY (PRD §7.7): the point of a port mock is
+# verifying the contract survives extraction. A mockery entry for a module's
+# own repository would produce tests that assert "I called the method I
+# wrote" — passing while the SQL is wrong. Repositories get testcontainers.
+#
+# This restricted list is itself an enforcement mechanism: adding a
+# repository interface here is a visible line in a diff to argue about.
+with-expecter: true
+resolve-type-alias: false
+disable-version-string: true
+issue-845-fix: true
+dir: "{{.InterfaceDir}}/mocks"
+outpkg: mocks
+filename: "{{.InterfaceName | snakecase}}.go"
+packages:
+  myapp/internal/platform/authz:
+    interfaces:
+      Enforcer:
+  myapp/internal/platform/bus:
+    interfaces:
+      Bus:

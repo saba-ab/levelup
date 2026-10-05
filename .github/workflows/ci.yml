@@ -1,0 +1,48 @@
+# CI invokes the SAME task targets developers run locally (PRD §15, ADR-0008):
+# divergence between local and CI commands is a recurring source of "works on
+# my machine", and the fix is having exactly one definition.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    name: task check (lint + arch + unit + generated-code drift)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+      - name: install codegen tools
+        run: |
+          go install github.com/google/wire/cmd/wire@latest
+          go install github.com/vektra/mockery/v2@v2.53.6
+          go install github.com/swaggo/swag/cmd/swag@latest
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13
+          # lint runs inside `task check` too; the action only installs here
+          args: --help
+      - run: task check
+
+  integration:
+    name: task test:all (testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # testcontainers provisions postgres/redis/rabbitmq per package; the
+      # compose stack is for humans, so test:all's docker:up dep is skipped
+      # by calling go test directly here with the same flags.
+      - run: go test ./... -race -count=1 -timeout 20m
