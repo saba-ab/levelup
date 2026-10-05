@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	headerKey      = "Idempotency-Key"
-	maxBodyBytes   = 1 << 20 // hash + replay cap; larger bodies bypass storage
-	maxStoredBody  = 1 << 20
+	headerKey     = "Idempotency-Key"
+	maxBodyBytes  = 1 << 20 // hash + replay cap; larger bodies bypass storage
+	maxStoredBody = 1 << 20
 )
 
 // HashRequest fingerprints (method+path, body): the mismatch check compares

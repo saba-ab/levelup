@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"reflect"
 	"strings"
 	"time"
@@ -44,6 +45,10 @@ type Config struct {
 		// CORSAllowedOrigins lists browser origins allowed to call the API
 		// (the portal). "*" allows any origin; use it only in development.
 		CORSAllowedOrigins []string `env:"CORS_ALLOWED_ORIGINS" envSeparator:"," envDefault:"http://localhost:5173,http://127.0.0.1:5173"`
+		// TrustedProxies (CIDRs or IPs) may set X-Forwarded-For: behind a
+		// reverse proxy the peer is the proxy, so without this every
+		// anonymous caller shares one rate-limit bucket. Empty: trust none.
+		TrustedProxies []string `env:"TRUSTED_PROXIES" envSeparator:","`
 	} `envPrefix:"HTTP_"`
 
 	DB struct {
@@ -109,6 +114,13 @@ func Load() (Config, error) {
 	c.ModulesEnabled = compactNames(c.ModulesEnabled)
 	if err := validate.New().Struct(c); err != nil {
 		return c, err
+	}
+	for _, e := range compactNames(c.HTTP.TrustedProxies) {
+		if _, err := netip.ParsePrefix(e); err != nil {
+			if _, err := netip.ParseAddr(e); err != nil {
+				return c, fmt.Errorf("HTTP_TRUSTED_PROXIES: %q is neither an IP nor a CIDR", e)
+			}
+		}
 	}
 	return c, nil
 }

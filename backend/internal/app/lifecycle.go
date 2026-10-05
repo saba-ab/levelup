@@ -53,7 +53,11 @@ func (a *App) Close() {
 // /api/v1. The router each module receives is already scoped (PRD §6).
 func (a *App) Router() chi.Router {
 	r := chi.NewRouter()
-	// CORS first: a browser preflight must not be rate limited, logged as an
+	// Real client address first: rate limiting and logs key on it.
+	// Config validated the CIDRs at boot (config.Load), so the error is nil.
+	trusted, _ := httpx.ParseTrustedProxies(a.P.Cfg.HTTP.TrustedProxies)
+	r.Use(httpx.ClientIP(trusted))
+	// CORS next: a browser preflight must not be rate limited, logged as an
 	// auth failure, or claimed by the idempotency store.
 	r.Use(httpx.CORS(a.P.Cfg.HTTP.CORSAllowedOrigins))
 	r.Use(httpx.BaseMiddleware(a.P.Tel.Log, a.P.Tel.Tracer, a.P.Tel.Registry)...)
