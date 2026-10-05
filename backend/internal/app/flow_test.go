@@ -86,8 +86,15 @@ func TestActivityToEffectsFlow(t *testing.T) {
 	api.do("POST", "/api/v1/rules/"+rule["id"].(string)+"/publish", "", map[string]any{"version": 1}, http.StatusOK)
 	pump(false) // settle configuration side effects (wallet opened on player.created.v1, ...)
 
+	// The tenant's backend authenticates with an API key (ADR-0017), not a
+	// person's session.
+	created := api.do("POST", "/api/v1/api-keys", "", map[string]any{"name": "checkout backend"}, http.StatusCreated)
+	backend := &client{t: t, h: api.h, token: created["secret"].(string)}
+	// A key cannot administer: no keys, no users, even through the API.
+	backend.do("POST", "/api/v1/api-keys", "", map[string]any{"name": "child"}, http.StatusForbidden)
+
 	// The activity.
-	accepted := api.do("POST", "/api/v1/activities", "", map[string]any{
+	accepted := backend.do("POST", "/api/v1/activities", "", map[string]any{
 		"event_id": "evt-1", "event_type": "purchase_completed", "player_external_id": "u-1",
 		"properties": map[string]any{"amount": 120},
 	}, http.StatusAccepted)
@@ -129,13 +136,18 @@ func TestActivityToEffectsFlow(t *testing.T) {
 	assertState()
 
 	// A duplicate activity is accepted once.
-	dup := api.do("POST", "/api/v1/activities", "", map[string]any{
+	dup := backend.do("POST", "/api/v1/activities", "", map[string]any{
 		"event_id": "evt-1", "event_type": "purchase_completed", "player_external_id": "u-1",
 		"properties": map[string]any{"amount": 120},
 	}, http.StatusOK)
 	require.Equal(t, true, dup["duplicate"])
 	require.Zero(t, pump(false))
 	assertState()
+
+	// Revocation takes effect on the next request.
+	keyID := created["api_key"].(map[string]any)["id"].(string)
+	api.do("DELETE", "/api/v1/api-keys/"+keyID, "", nil, http.StatusNoContent)
+	backend.do("GET", "/api/v1/players", "", nil, http.StatusUnauthorized)
 }
 
 // pumpOutbox delivers outbox rows the way dispatcher + worker do and marks

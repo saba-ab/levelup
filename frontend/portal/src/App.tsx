@@ -66,6 +66,7 @@ const App = () => (
                   <Route path="programs/:programId" element={<ProtectedRoute permission="view:programs"><ProgramDetail /></ProtectedRoute>} />
                   <Route path="rules" element={<ProtectedRoute permission="view:rules"><Rules /></ProtectedRoute>} />
                   <Route path="rules/new" element={<ProtectedRoute permission="manage:rules"><RuleBuilder /></ProtectedRoute>} />
+                  <Route path="rules/:ruleId" element={<ProtectedRoute permission="manage:rules"><RuleBuilder /></ProtectedRoute>} />
                   <Route path="events" element={<ProtectedRoute permission="view:rules"><Events /></ProtectedRoute>} />
                   <Route path="mechanics/points" element={<ProtectedRoute permission="view:mechanics"><Points /></ProtectedRoute>} />
                   <Route path="mechanics/badges" element={<ProtectedRoute permission="view:mechanics"><Badges /></ProtectedRoute>} />

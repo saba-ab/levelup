@@ -97,17 +97,18 @@ export default function DocsOverview() {
       <Card>
         <CardHeader>
           <CardTitle>Quick Example</CardTitle>
-          <CardDescription>Award points to a user with a simple API call</CardDescription>
+          <CardDescription>Report an activity; your live rules decide what the player earns</CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-            <code className="text-foreground">{`curl -X POST https://api.levelupos.ge/v1/points/award \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+            <code className="text-foreground">{`curl -X POST https://api.levelupos.ge/api/v1/activities \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "user_id": "usr_123",
-    "points": 100,
-    "reason": "First purchase bonus"
+    "event_id": "order-1042",
+    "event_type": "purchase_completed",
+    "player_external_id": "usr_123",
+    "properties": { "amount": 150 }
   }'`}</code>
           </pre>
         </CardContent>

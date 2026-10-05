@@ -115,3 +115,15 @@ func TestLoadFailsOnMalformedDuration(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "JWT_ACCESS_TTL")
 }
+
+func TestTrustedProxiesAreValidatedAtBoot(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("HTTP_TRUSTED_PROXIES", "172.29.0.0/24,127.0.0.1")
+	c, err := config.Load()
+	require.NoError(t, err)
+	require.Equal(t, []string{"172.29.0.0/24", "127.0.0.1"}, c.HTTP.TrustedProxies)
+
+	t.Setenv("HTTP_TRUSTED_PROXIES", "172.29.0.0/24,not-an-ip")
+	_, err = config.Load()
+	require.ErrorContains(t, err, "HTTP_TRUSTED_PROXIES")
+}

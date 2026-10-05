@@ -29,6 +29,7 @@ import {
   Book,
   Terminal,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 
 interface NavItem {
@@ -38,14 +39,16 @@ interface NavItem {
   permission: Permission;
   children?: { label: string; path: string; icon: React.ReactNode; permission: Permission }[];
   highlight?: boolean;
+  /** No Go API yet: the page shows a "coming soon" state. */
+  soon?: boolean;
 }
 
 const navItems: NavItem[] = [
   { label: 'Overview', path: '/', icon: <LayoutDashboard className="w-5 h-5" />, permission: 'view:overview' },
-  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true, permission: 'view:ai-hub' },
+  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true, permission: 'view:ai-hub', soon: true },
   { label: 'Programs', path: '/programs', icon: <FolderOpen className="w-5 h-5" />, permission: 'view:programs' },
   { label: 'Rules', path: '/rules', icon: <GitBranch className="w-5 h-5" />, permission: 'view:rules' },
-  { label: 'Events', path: '/events', icon: <Sparkles className="w-5 h-5" />, permission: 'view:rules' },
+  { label: 'Events', path: '/events', icon: <Zap className="w-5 h-5" />, permission: 'view:rules' },
   {
     label: 'Mechanics',
     path: '/mechanics',
@@ -62,10 +65,10 @@ const navItems: NavItem[] = [
     ],
   },
   { label: 'Players', path: '/players', icon: <Users className="w-5 h-5" />, permission: 'view:players' },
-  { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" />, permission: 'view:segments' },
-  { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" />, permission: 'view:analytics' },
-  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" />, permission: 'view:notifications' },
-  { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" />, permission: 'view:integrations' },
+  { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" />, permission: 'view:segments', soon: true },
+  { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" />, permission: 'view:analytics', soon: true },
+  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" />, permission: 'view:notifications', soon: true },
+  { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" />, permission: 'view:integrations', soon: true },
   {
     label: 'Documentation',
     path: '/docs',
@@ -78,7 +81,7 @@ const navItems: NavItem[] = [
       { label: 'Developer Docs', path: '/docs/developer', icon: <Terminal className="w-4 h-4" />, permission: 'view:docs' },
     ],
   },
-  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" />, permission: 'view:audit-logs' },
+  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" />, permission: 'view:audit-logs', soon: true },
   { label: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" />, permission: 'view:settings' },
 ];
 
@@ -188,14 +191,21 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       isActive(item.path) && "active",
                       item.highlight && !isActive(item.path) && "text-primary"
                     )}
-                    title={collapsed ? item.label : undefined}
+                    title={collapsed ? `${item.label}${item.soon ? ' (coming soon)' : ''}` : undefined}
                   >
                     {item.icon}
                     {!collapsed && <span>{item.label}</span>}
-                    {!collapsed && item.highlight && (
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                        NEW
+                    {!collapsed && item.soon ? (
+                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
+                        SOON
                       </span>
+                    ) : (
+                      !collapsed &&
+                      item.highlight && (
+                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                          NEW
+                        </span>
+                      )
                     )}
                   </Link>
                 ) : null}

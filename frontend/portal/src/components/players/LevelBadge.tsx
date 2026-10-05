@@ -3,7 +3,10 @@ import { cn } from '@/lib/utils';
 import { getLevelColor } from '@/lib/player-utils';
 
 interface LevelBadgeProps {
+  /** Level name from the API, e.g. "Rookie". */
   level: string;
+  /** level_number; drives the colour. */
+  levelNumber?: number | null;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -14,11 +17,11 @@ const sizeClasses = {
   lg: 'text-sm px-3 py-1',
 };
 
-export function LevelBadge({ level, className, size = 'md' }: LevelBadgeProps) {
+export function LevelBadge({ level, levelNumber, className, size = 'md' }: LevelBadgeProps) {
   return (
     <Badge
       variant="outline"
-      className={cn('capitalize', getLevelColor(level), sizeClasses[size], className)}
+      className={cn('capitalize', getLevelColor(levelNumber), sizeClasses[size], className)}
     >
       {level}
     </Badge>

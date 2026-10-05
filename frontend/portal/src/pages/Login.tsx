@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(1, 'Please enter your password'),
   rememberMe: z.boolean().optional(),
 });
 
@@ -50,7 +50,7 @@ export default function Login() {
     } catch (error) {
       toast({
         title: "Login failed",
-        description: "Invalid email or password.",
+        description: error instanceof Error && error.message ? error.message : "Invalid email or password.",
         variant: "destructive",
       });
     } finally {

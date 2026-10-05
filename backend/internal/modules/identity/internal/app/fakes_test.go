@@ -408,7 +408,7 @@ func ctxAs(p authz.Principal) context.Context {
 func (h *harness) ctxWithToken(t *testing.T, token string) context.Context {
 	t.Helper()
 	var got context.Context
-	mw := authn.Middleware(h.issuer, nil, zap.NewNop())
+	mw := authn.Middleware(h.issuer, nil, zap.NewNop(), nil)
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	mw(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got = r.Context() })).

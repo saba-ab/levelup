@@ -5,6 +5,7 @@ package identity
 import (
 	"context"
 	"io/fs"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/pressly/goose/v3"
@@ -43,8 +44,16 @@ func New(d modkit.Deps, cfg Config, auth *authn.Auth) *Module {
 			refresh = auth.Refresh
 		}
 	}
-	svc := app.NewService(repo.NewPostgres(d.DB), d.Outbox, d.Authz, issuer, refresh, d.DB, d.Clock, d.Log,
+	pg := repo.NewPostgres(d.DB)
+	svc := app.NewService(pg, d.Outbox, d.Authz, issuer, refresh, d.DB, d.Clock, d.Log,
 		app.Settings{BcryptCost: cfg.BcryptCost, AllowSelfSignup: cfg.AllowSelfSignup})
+	var keyCache app.KeyCache
+	if d.Cache != nil {
+		// Short TTL: a suspended tenant's keys stop within a minute even
+		// though tenant changes do not evict key entries (revocation does).
+		keyCache = d.Cache.WithTTL(time.Minute)
+	}
+	svc.WithAPIKeys(pg, keyCache)
 	return &Module{svc: svc, deps: d}
 }
 
@@ -79,3 +88,11 @@ func (m *Module) Permissions() []authz.Permission { return contracts.AllPermissi
 // TenantReader is offered to other modules; their adapters wrap it into
 // their own ports.
 func (m *Module) TenantReader() contracts.TenantReader { return m.svc }
+
+// VerifyAPIKey makes the module an authn.KeyVerifier: the composition root
+// finds it by interface and hands it to the auth middleware (ADR-0017).
+func (m *Module) VerifyAPIKey(ctx context.Context, raw string) (authz.Principal, error) {
+	return m.svc.VerifyAPIKey(ctx, raw)
+}
+
+var _ authn.KeyVerifier = (*Module)(nil)

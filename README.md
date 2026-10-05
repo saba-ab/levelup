@@ -28,9 +28,10 @@ From the repository root, `task be -- <task>` runs any backend task, for example
 ## Quick start (frontend)
 
 ```bash
-task portal -- ci && task portal -- run dev     # API URLs: frontend/portal/.env.example
+task portal -- ci && task portal -- run dev     # http://localhost:5173
 task landing -- ci && task landing -- run dev
 ```
 
-> The portal still speaks the Laravel API contract. Moving it to the Go API (problem+json errors, cursor
-> pagination, UUID ids, `/auth/refresh` rotation; see `backend/docs/adr/0016`) is the next step.
+The portal talks to the Go API (problem+json errors with `code`, cursor pagination, UUID ids, rotating refresh
+tokens; see `backend/docs/adr/0016`). On the dev server it defaults to the local API at `http://localhost:8080`,
+and the backend allows the portal's origin through `HTTP_CORS_ALLOWED_ORIGINS`.

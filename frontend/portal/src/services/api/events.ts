@@ -1,61 +1,51 @@
 import { useApi } from '@/hooks/useApi';
-import { useCallback } from 'react';
-import {
-  TriggerEvent,
-  CreateTriggerEventData,
-  UpdateTriggerEventData,
-  TriggerEventFilters,
-  PaginatedResponse,
+import { useCallback, useMemo } from 'react';
+import type {
+  EventType,
+  EventCategory,
+  CreateEventTypeData,
+  UpdateEventTypeData,
+  EventTypeFilters,
+  CursorPage,
+  ID,
 } from './types';
-import { EVENT_ENDPOINTS } from '@/lib/api-routes';
+import { EVENT_ENDPOINTS, toQuery } from '@/lib/api-routes';
 
+/** Writes report errors to the caller (it branches on res.code), not as toasts. */
+const QUIET = { showErrorToast: false } as const;
+
+/** Event types (the trigger catalogue at /events) and their categories. */
 export function useEventsService() {
   const api = useApi();
 
-  const listEvents = useCallback(async (filters?: TriggerEventFilters) => {
-    const params = new URLSearchParams();
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-    }
-    const query = params.toString();
-    return api.get<PaginatedResponse<TriggerEvent>>(`${EVENT_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
-  }, [api]);
+  const listEvents = useCallback(
+    (filters?: EventTypeFilters) => api.get<CursorPage<EventType>>(`${EVENT_ENDPOINTS.LIST}${toQuery(filters)}`),
+    [api],
+  );
 
-  const getPredefinedEvents = useCallback(async () => {
-    return api.get<{ data: TriggerEvent[] }>(EVENT_ENDPOINTS.PREDEFINED);
-  }, [api]);
+  const getEvent = useCallback((eventId: ID) => api.get<EventType>(EVENT_ENDPOINTS.SHOW(eventId)), [api]);
 
-  const getCustomEvents = useCallback(async () => {
-    return api.get<{ data: TriggerEvent[] }>(EVENT_ENDPOINTS.CUSTOM);
-  }, [api]);
+  const createEvent = useCallback(
+    (data: CreateEventTypeData) => api.post<EventType>(EVENT_ENDPOINTS.CREATE, data, QUIET),
+    [api],
+  );
 
-  const getEvent = useCallback(async (eventId: number) => {
-    return api.get<{ data: TriggerEvent }>(EVENT_ENDPOINTS.SHOW(eventId));
-  }, [api]);
+  /** Partial update. Global types answer 403 global_event_type_read_only. */
+  const updateEvent = useCallback(
+    (eventId: ID, data: UpdateEventTypeData) => api.patch<EventType>(EVENT_ENDPOINTS.UPDATE(eventId), data, QUIET),
+    [api],
+  );
 
-  const createEvent = useCallback(async (data: CreateTriggerEventData) => {
-    return api.post<{ data: TriggerEvent }>(EVENT_ENDPOINTS.CREATE, data);
-  }, [api]);
+  const deleteEvent = useCallback((eventId: ID) => api.delete<void>(EVENT_ENDPOINTS.DELETE(eventId), QUIET), [api]);
 
-  const updateEvent = useCallback(async (eventId: number, data: UpdateTriggerEventData) => {
-    return api.put<{ data: TriggerEvent }>(EVENT_ENDPOINTS.UPDATE(eventId), data);
-  }, [api]);
+  /** Bounded catalogue, ordered by sort_order; next_cursor is always "". */
+  const listCategories = useCallback(
+    () => api.get<CursorPage<EventCategory>>(EVENT_ENDPOINTS.CATEGORIES),
+    [api],
+  );
 
-  const deleteEvent = useCallback(async (eventId: number) => {
-    return api.delete(EVENT_ENDPOINTS.DELETE(eventId));
-  }, [api]);
-
-  return {
-    listEvents,
-    getPredefinedEvents,
-    getCustomEvents,
-    getEvent,
-    createEvent,
-    updateEvent,
-    deleteEvent,
-  };
+  return useMemo(
+    () => ({ listEvents, getEvent, createEvent, updateEvent, deleteEvent, listCategories }),
+    [listEvents, getEvent, createEvent, updateEvent, deleteEvent, listCategories],
+  );
 }

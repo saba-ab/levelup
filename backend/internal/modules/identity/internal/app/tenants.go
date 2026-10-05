@@ -34,6 +34,9 @@ func (s *Service) UpdateCurrentTenant(ctx context.Context, c domain.TenantChange
 	if err != nil {
 		return domain.Tenant{}, err
 	}
+	if err := requireHuman(p); err != nil {
+		return domain.Tenant{}, err
+	}
 	if err := s.authz.Authorize(ctx, p, contracts.PermTenantUpdate, nil); err != nil {
 		return domain.Tenant{}, err
 	}
@@ -66,6 +69,9 @@ func (s *Service) UpdateCurrentTenant(ctx context.Context, c domain.TenantChange
 func (s *Service) DeleteCurrentTenant(ctx context.Context) error {
 	p, err := authz.RequireTenant(ctx)
 	if err != nil {
+		return err
+	}
+	if err := requireHuman(p); err != nil {
 		return err
 	}
 	if err := s.authz.Authorize(ctx, p, contracts.PermTenantDelete, nil); err != nil {

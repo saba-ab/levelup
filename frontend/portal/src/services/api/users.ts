@@ -1,51 +1,39 @@
 import { useApi } from '@/hooks/useApi';
-import { useCallback } from 'react';
-import {
-  User,
-  CreateUserData,
-  UpdateUserData,
-  PaginatedResponse,
-  PaginationParams,
-} from './types';
-import { USER_ENDPOINTS } from '@/lib/api-routes';
+import { useCallback, useMemo } from 'react';
+import type { User, CreateUserData, UpdateUserData, UserFilters, CursorPage, ID } from './types';
+import { USER_ENDPOINTS, toQuery } from '@/lib/api-routes';
 
+/** Writes report errors to the caller, not as toasts. */
+const QUIET = { showErrorToast: false } as const;
+
+/** Tenant team members (identity module). */
 export function useUsersService() {
   const api = useApi();
 
-  const listUsers = useCallback(async (filters?: PaginationParams) => {
-    const params = new URLSearchParams();
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-    }
-    const query = params.toString();
-    return api.get<PaginatedResponse<User>>(`${USER_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
-  }, [api]);
+  const listUsers = useCallback(
+    (filters?: UserFilters) => api.get<CursorPage<User>>(`${USER_ENDPOINTS.LIST}${toQuery(filters)}`),
+    [api],
+  );
 
-  const getUser = useCallback(async (userId: number) => {
-    return api.get<User>(USER_ENDPOINTS.SHOW(userId));
-  }, [api]);
+  const getUser = useCallback((userId: ID) => api.get<User>(USER_ENDPOINTS.SHOW(userId)), [api]);
 
-  const createUser = useCallback(async (data: CreateUserData) => {
-    return api.post<User>(USER_ENDPOINTS.CREATE, data);
-  }, [api]);
+  const createUser = useCallback((data: CreateUserData) => api.post<User>(USER_ENDPOINTS.CREATE, data, QUIET), [api]);
 
-  const updateUser = useCallback(async (userId: number, data: UpdateUserData) => {
-    return api.put<User>(USER_ENDPOINTS.UPDATE(userId), data);
-  }, [api]);
+  const updateUser = useCallback(
+    (userId: ID, data: UpdateUserData) => api.patch<User>(USER_ENDPOINTS.UPDATE(userId), data, QUIET),
+    [api],
+  );
 
-  const deleteUser = useCallback(async (userId: number) => {
-    return api.delete(USER_ENDPOINTS.DELETE(userId));
-  }, [api]);
+  const deleteUser = useCallback((userId: ID) => api.delete<void>(USER_ENDPOINTS.DELETE(userId), QUIET), [api]);
 
-  return {
-    listUsers,
-    getUser,
-    createUser,
-    updateUser,
-    deleteUser,
-  };
+  /** Replaces the user's roles; role ids come from ROLE_IDS. */
+  const assignRoles = useCallback(
+    (userId: ID, roleIds: number[]) => api.put<User>(USER_ENDPOINTS.ROLES(userId), { role_ids: roleIds }, QUIET),
+    [api],
+  );
+
+  return useMemo(
+    () => ({ listUsers, getUser, createUser, updateUser, deleteUser, assignRoles }),
+    [listUsers, getUser, createUser, updateUser, deleteUser, assignRoles],
+  );
 }

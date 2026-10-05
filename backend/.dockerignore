@@ -1,0 +1,9 @@
+.env
+.task/
+tmp/
+bin/
+**/*_test.go
+docs/
+api/bruno/
+test/
+deploy/

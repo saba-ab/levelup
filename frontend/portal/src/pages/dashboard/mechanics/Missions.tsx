@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Target, Calendar, Users, ChevronRight, Check, Sparkles, X, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Target, Calendar, Sparkles, Loader2, Play, TrendingUp, CheckCircle2, ListChecks } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -22,43 +21,101 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { cn } from '@/lib/utils';
+import CursorPager from '@/components/CursorPager';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PlayerActionDialog } from '@/components/mechanics/PlayerActionDialog';
+import { changedFields, dateToRfc3339, optionalNumber, rfc3339ToDate } from '@/components/mechanics/patch';
 import {
   useMissionsQuery,
+  useMissionAttemptsQuery,
+  useAllBadgesQuery,
   useCreateMissionMutation,
   useUpdateMissionMutation,
   useDeleteMissionMutation,
-  useBadgesQuery,
+  useStartMissionMutation,
+  useUpdateMissionProgressMutation,
+  useCompleteMissionMutation,
+  describeMechanicsError,
 } from '@/services/queries/mechanics';
-import type { Mission, CreateMissionData, MissionObjective } from '@/services/api/types';
+import type {
+  Mission,
+  MissionFilters,
+  MissionStatus,
+  MissionType,
+  MissionAttemptStatus,
+  CreateMissionData,
+  UpdateMissionData,
+} from '@/services/api/types';
 
-interface ObjectiveInput {
-  key: string;
-  label: string;
-  target: number;
-}
+const typeLabels: Record<MissionType, string> = {
+  one_time: 'One-time',
+  daily: 'Daily',
+  weekly: 'Weekly',
+  repeating: 'Repeating',
+};
+
+const statusLabels: Record<MissionStatus, string> = {
+  draft: 'Draft',
+  active: 'Active',
+  paused: 'Paused',
+  expired: 'Expired',
+  archived: 'Archived',
+};
+
+/** Mission state machine (backend missions/domain): allowed next statuses. */
+const transitions: Record<MissionStatus, MissionStatus[]> = {
+  draft: ['active', 'archived'],
+  active: ['paused', 'expired', 'archived'],
+  paused: ['active', 'expired', 'archived'],
+  expired: ['archived'],
+  archived: [],
+};
+
+const attemptStatusClass: Record<MissionAttemptStatus, string> = {
+  in_progress: 'border-blue-500/50 text-blue-500 bg-blue-500/10',
+  completed: 'border-green-500/50 text-green-500 bg-green-500/10',
+  expired: 'border-muted-foreground text-muted-foreground',
+  abandoned: 'border-muted-foreground text-muted-foreground',
+};
+
+const missionErrors: Record<string, string> = {
+  slug_taken: 'A mission with this name/slug already exists.',
+  invalid_status_transition: 'That status change is not allowed.',
+  mission_type_immutable: 'The type can only change while the mission is a draft.',
+  invalid_mission_window: 'The end date must be after the start date.',
+  invalid_max_completions: 'A one-time mission completes at most once per player.',
+  version_conflict: 'The mission was changed by someone else. Reload and try again.',
+  mission_not_available: 'The mission is not active or is outside its schedule.',
+  mission_limit_reached: 'The player reached this mission\'s completion limit.',
+  mission_already_started: 'The player already started this mission for the current period.',
+  mission_not_started: 'The player has not started this mission.',
+  mission_not_completed: 'The mission target has not been reached yet.',
+  attempt_not_in_progress: 'The player\'s attempt is not in progress.',
+  player_inactive: 'This player is inactive.',
+};
+
+const ALL = 'all';
+const NO_BADGE = 'none';
 
 interface MissionFormData {
   name: string;
   description: string;
-  type: 'one_time' | 'daily' | 'weekly' | 'monthly' | 'recurring' | 'event';
-  status: 'draft' | 'active' | 'paused' | 'completed' | 'expired' | 'cancelled';
-  objectives: ObjectiveInput[];
+  type: MissionType;
+  status: MissionStatus;
+  target: number;
+  criteria: string;
   points_reward: number;
   xp_reward: number;
-  badge_reward_id: number | undefined;
-  start_date: string;
-  end_date: string;
-  max_completions: number | undefined;
-  cooldown_hours: number | undefined;
-  is_active: boolean;
-  is_secret: boolean;
+  badge_reward_id: string;
+  starts_at: string;
+  ends_at: string;
+  max_completions_per_player: string;
 }
 
 const initialFormData: MissionFormData = {
@@ -66,202 +123,148 @@ const initialFormData: MissionFormData = {
   description: '',
   type: 'one_time',
   status: 'draft',
-  objectives: [],
+  target: 1,
+  criteria: '{}',
   points_reward: 0,
   xp_reward: 0,
-  badge_reward_id: undefined,
-  start_date: '',
-  end_date: '',
-  max_completions: undefined,
-  cooldown_hours: undefined,
-  is_active: true,
-  is_secret: false,
+  badge_reward_id: '',
+  starts_at: '',
+  ends_at: '',
+  max_completions_per_player: '',
 };
 
-export default function Missions() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingMission, setEditingMission] = useState<Mission | null>(null);
-  const [wizardStep, setWizardStep] = useState(1);
-  const [formData, setFormData] = useState<MissionFormData>(initialFormData);
-  const { toast } = useToast();
+type PlayerAction = { kind: 'start' | 'progress' | 'complete'; mission: Mission };
 
-  const { data: missionsData, isLoading } = useMissionsQuery();
-  const { data: badgesData } = useBadgesQuery();
+export default function Missions() {
+  const [statusFilter, setStatusFilter] = useState<string>(ALL);
+  const [typeFilter, setTypeFilter] = useState<string>(ALL);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingMission, setEditingMission] = useState<Mission | null>(null);
+  const [formData, setFormData] = useState<MissionFormData>(initialFormData);
+  const [playerAction, setPlayerAction] = useState<PlayerAction | null>(null);
+  const [increment, setIncrement] = useState(1);
+  const [attemptsMission, setAttemptsMission] = useState<Mission | null>(null);
+  const { toast } = useToast();
+  const pager = useCursorPagination(20);
+  const attemptsPager = useCursorPagination(20);
+
+  const filters: MissionFilters = {
+    limit: pager.limit,
+    cursor: pager.cursor,
+    status: statusFilter === ALL ? undefined : (statusFilter as MissionStatus),
+    type: typeFilter === ALL ? undefined : (typeFilter as MissionType),
+  };
+  const { data: missionsData, isLoading, isFetching, error } = useMissionsQuery(filters);
+  const { data: badges = [] } = useAllBadgesQuery();
+  const attemptsQuery = useMissionAttemptsQuery(attemptsMission?.id ?? '', {
+    limit: attemptsPager.limit,
+    cursor: attemptsPager.cursor,
+  });
   const createMutation = useCreateMissionMutation();
   const updateMutation = useUpdateMissionMutation();
   const deleteMutation = useDeleteMissionMutation();
+  const startMutation = useStartMissionMutation();
+  const progressMutation = useUpdateMissionProgressMutation();
+  const completeMutation = useCompleteMissionMutation();
 
-  const missions = missionsData?.data || [];
-  const badges = badgesData?.data || [];
+  const missions = missionsData?.data ?? [];
+  const badgeName = (id: string | null) => (id ? badges.find((b) => b.id === id)?.name ?? 'Badge' : null);
 
-  const filteredMissions = missions.filter((mission: Mission) =>
-    mission.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    mission.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Reset form when dialog closes
-  useEffect(() => {
-    if (!isDialogOpen && !isEditDialogOpen) {
-      setFormData(initialFormData);
-      setWizardStep(1);
-      setEditingMission(null);
-    }
-  }, [isDialogOpen, isEditDialogOpen]);
-
-  // Populate form when editing
-  useEffect(() => {
-    if (editingMission) {
-      const objectives: ObjectiveInput[] = editingMission.objectives
-        ? Object.entries(editingMission.objectives).map(([key, obj]) => ({
-            key,
-            label: obj.label,
-            target: obj.target,
-          }))
-        : [];
-
-      setFormData({
-        name: editingMission.name,
-        description: editingMission.description || '',
-        type: editingMission.type,
-        status: editingMission.status,
-        objectives,
-        points_reward: editingMission.points_reward,
-        xp_reward: editingMission.xp_reward,
-        badge_reward_id: editingMission.badge_reward_id,
-        start_date: editingMission.start_date || '',
-        end_date: editingMission.end_date || '',
-        max_completions: editingMission.max_completions,
-        cooldown_hours: editingMission.cooldown_hours,
-        is_active: editingMission.is_active,
-        is_secret: editingMission.is_secret,
-      });
-    }
-  }, [editingMission]);
-
-  const addObjective = () => {
-    setFormData({
-      ...formData,
-      objectives: [
-        ...formData.objectives,
-        { key: `objective_${Date.now()}`, label: '', target: 1 },
-      ],
-    });
+  const setFilter = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    pager.reset();
   };
 
-  const removeObjective = (index: number) => {
-    setFormData({
-      ...formData,
-      objectives: formData.objectives.filter((_, i) => i !== index),
-    });
+  const openCreate = () => {
+    setEditingMission(null);
+    setFormData(initialFormData);
+    setIsDialogOpen(true);
   };
 
-  const updateObjective = (index: number, field: 'label' | 'target', value: string | number) => {
-    const updated = [...formData.objectives];
-    updated[index] = { ...updated[index], [field]: value };
-    setFormData({ ...formData, objectives: updated });
-  };
-
-  const transformFormDataToAPI = (data: MissionFormData): CreateMissionData => {
-    const objectives: Record<string, MissionObjective> = {};
-    data.objectives.forEach((obj) => {
-      if (obj.label.trim()) {
-        objectives[obj.key] = {
-          label: obj.label,
-          target: obj.target,
-        };
-      }
-    });
-
-    return {
-      name: data.name,
-      description: data.description || undefined,
-      type: data.type,
-      status: data.status,
-      objectives: Object.keys(objectives).length > 0 ? objectives : undefined,
-      points_reward: data.points_reward || undefined,
-      xp_reward: data.xp_reward || undefined,
-      badge_reward_id: data.badge_reward_id || undefined,
-      start_date: data.start_date || undefined,
-      end_date: data.end_date || undefined,
-      max_completions: data.max_completions || undefined,
-      cooldown_hours: data.cooldown_hours || undefined,
-      is_active: data.is_active,
-      is_secret: data.is_secret,
-    };
-  };
-
-  const handleCreate = async () => {
-    if (wizardStep < 4) {
-      setWizardStep(wizardStep + 1);
-      return;
-    }
-
-    // Validation
-    if (!formData.name.trim()) {
-      toast({
-        title: 'Validation Error',
-        description: 'Mission name is required',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      const apiData = transformFormDataToAPI(formData);
-      await createMutation.mutateAsync(apiData);
-      toast({
-        title: 'Mission created',
-        description: 'New mission has been created successfully.',
-      });
-      setIsDialogOpen(false);
-      setFormData(initialFormData);
-      setWizardStep(1);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create mission',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleEdit = (mission: Mission) => {
+  const openEdit = (mission: Mission) => {
     setEditingMission(mission);
-    setIsEditDialogOpen(true);
+    setFormData({
+      name: mission.name,
+      description: mission.description,
+      type: mission.type,
+      status: mission.status,
+      target: mission.target,
+      criteria: JSON.stringify(mission.criteria ?? {}, null, 2),
+      points_reward: mission.points_reward,
+      xp_reward: mission.xp_reward,
+      badge_reward_id: mission.badge_reward_id ?? '',
+      starts_at: rfc3339ToDate(mission.starts_at),
+      ends_at: rfc3339ToDate(mission.ends_at),
+      max_completions_per_player: mission.max_completions_per_player?.toString() ?? '',
+    });
+    setIsDialogOpen(true);
   };
 
-  const handleUpdate = async () => {
-    if (!editingMission) return;
+  const parseCriteria = (): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(formData.criteria || '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // fall through
+    }
+    return null;
+  };
 
-    // Validation
-    if (!formData.name.trim()) {
-      toast({
-        title: 'Validation Error',
-        description: 'Mission name is required',
-        variant: 'destructive',
-      });
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const criteria = parseCriteria();
+    if (!criteria) {
+      toast({ title: 'Validation Error', description: 'Criteria must be a JSON object.', variant: 'destructive' });
       return;
     }
 
     try {
-      const apiData = transformFormDataToAPI(formData);
-      await updateMutation.mutateAsync({
-        missionId: editingMission.id,
-        data: apiData,
-      });
-      toast({
-        title: 'Mission updated',
-        description: `${formData.name} has been updated successfully.`,
-      });
-      setIsEditDialogOpen(false);
-      setEditingMission(null);
-      setFormData(initialFormData);
-    } catch (error) {
+      if (editingMission) {
+        const next: UpdateMissionData = {
+          name: formData.name,
+          description: formData.description,
+          type: formData.type,
+          status: formData.status,
+          target: formData.target,
+          criteria,
+          points_reward: formData.points_reward,
+          xp_reward: formData.xp_reward,
+          badge_reward_id: formData.badge_reward_id || undefined,
+          max_completions_per_player: optionalNumber(formData.max_completions_per_player),
+          starts_at: dateToRfc3339(formData.starts_at),
+          ends_at: dateToRfc3339(formData.ends_at),
+        };
+        const patch = changedFields(editingMission, next);
+        // Dates round-trip through <input type="date">: only send them when the day changed.
+        if (formData.starts_at === rfc3339ToDate(editingMission.starts_at)) delete patch.starts_at;
+        if (formData.ends_at === rfc3339ToDate(editingMission.ends_at)) delete patch.ends_at;
+        if (Object.keys(patch).length > 0) {
+          await updateMutation.mutateAsync({ missionId: editingMission.id, data: patch });
+        }
+        toast({ title: 'Mission updated', description: `${formData.name} has been updated successfully.` });
+      } else {
+        const data: CreateMissionData = {
+          name: formData.name,
+          description: formData.description || undefined,
+          type: formData.type,
+          status: formData.status === 'active' ? 'active' : 'draft',
+          target: formData.target,
+          criteria,
+          points_reward: formData.points_reward,
+          xp_reward: formData.xp_reward,
+          badge_reward_id: formData.badge_reward_id || undefined,
+          max_completions_per_player: optionalNumber(formData.max_completions_per_player),
+          starts_at: dateToRfc3339(formData.starts_at),
+          ends_at: dateToRfc3339(formData.ends_at),
+        };
+        await createMutation.mutateAsync(data);
+        toast({ title: 'Mission created', description: 'New mission has been created successfully.' });
+      }
+      setIsDialogOpen(false);
+    } catch (err) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update mission',
+        description: describeMechanicsError(err, 'Failed to save mission', missionErrors),
         variant: 'destructive',
       });
     }
@@ -270,36 +273,63 @@ export default function Missions() {
   const handleDelete = async (mission: Mission) => {
     try {
       await deleteMutation.mutateAsync(mission.id);
-      toast({
-        title: 'Mission deleted',
-        description: `${mission.name} has been deleted.`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to delete mission',
-        variant: 'destructive',
-      });
+      toast({ title: 'Mission deleted', description: `${mission.name} has been deleted.` });
+    } catch (err) {
+      toast({ title: 'Error', description: describeMechanicsError(err, 'Failed to delete mission'), variant: 'destructive' });
     }
   };
 
-  const resetWizard = () => {
-    setIsDialogOpen(false);
-    setWizardStep(1);
+  const openPlayerAction = (kind: PlayerAction['kind'], mission: Mission) => {
+    setIncrement(1);
+    setPlayerAction({ kind, mission });
   };
 
-  // Connect this to your MySQL backend
+  const handlePlayerAction = async (playerId: string) => {
+    if (!playerAction) return;
+    const { kind, mission } = playerAction;
+    try {
+      if (kind === 'start') {
+        await startMutation.mutateAsync({ mission_id: mission.id, player_id: playerId });
+        toast({ title: 'Mission started', description: `${mission.name} started for the player.` });
+      } else if (kind === 'progress') {
+        const result = await progressMutation.mutateAsync({ mission_id: mission.id, player_id: playerId, increment });
+        const attempt = result.attempt;
+        toast({
+          title: result.duplicate ? 'Already applied' : result.completed ? 'Mission completed' : 'Progress added',
+          description: attempt ? `Progress ${attempt.progress} / ${attempt.target}.` : undefined,
+        });
+      } else {
+        await completeMutation.mutateAsync({ mission_id: mission.id, player_id: playerId });
+        toast({ title: 'Mission completed', description: `${mission.name} completed; rewards are being granted.` });
+      }
+    } catch (err) {
+      toast({
+        title: 'Action failed',
+        description: describeMechanicsError(err, 'Mission action failed', missionErrors),
+        variant: 'destructive',
+      });
+      throw err;
+    }
+  };
+
   const handleAIGenerate = async (prompt: string): Promise<string> => {
     await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Mission Idea:\n\n"${prompt}"\n\nName: Challenge Champion\nDescription: A multi-step mission that drives engagement.\n\nObjectives:\n1. Complete your daily check-in\n2. Engage with 3 community posts\n3. Refer a friend to the platform\n\nSuggested Rewards:\n- 750 XP\n- Exclusive "Champion" badge`;
+    return `Generated Mission Idea:\n\n"${prompt}"\n\nName: Challenge Champion\nDescription: A mission that drives engagement.\nType: Weekly\nTarget: 3\nCriteria: {"event_type": "purchase_completed"}\n\nSuggested Rewards:\n- 750 XP\n- Exclusive "Champion" badge`;
   };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const statusOptions: MissionStatus[] = editingMission
+    ? [editingMission.status, ...transitions[editingMission.status]]
+    : ['draft', 'active'];
+  const playerActionPending = startMutation.isPending || progressMutation.isPending || completeMutation.isPending;
+  const hasFilters = statusFilter !== ALL || typeFilter !== ALL;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Missions</h1>
-          <p className="text-muted-foreground mt-1">Create and manage user missions and objectives.</p>
+          <p className="text-muted-foreground mt-1">Create and manage player missions.</p>
         </div>
         <div className="flex gap-2">
           <AIGenerateDialog
@@ -311,572 +341,233 @@ export default function Missions() {
             }
             title="Generate Mission Ideas"
             placeholder="E.g., Create a weekly mission that encourages social engagement..."
-            context="Generate mission names, objectives, and reward structures"
+            context="Generate mission names, targets, and reward structures"
             onGenerate={handleAIGenerate}
           />
-          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setWizardStep(1); }}>
-            <DialogTrigger asChild>
-              <Button variant="glow">
-                <Plus className="w-4 h-4" />
-                Create Mission
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create New Mission</DialogTitle>
-                <DialogDescription>Step {wizardStep} of 4</DialogDescription>
-              </DialogHeader>
+          <Button variant="glow" onClick={openCreate}>
+            <Plus className="w-4 h-4" />
+            Create Mission
+          </Button>
+        </div>
+      </div>
 
-              {/* Progress Steps */}
-              <div className="flex items-center justify-center gap-2 py-4">
-                {[1, 2, 3, 4].map((step) => (
-                  <React.Fragment key={step}>
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all",
-                      step < wizardStep ? "bg-primary text-primary-foreground" :
-                      step === wizardStep ? "bg-primary text-primary-foreground" :
-                      "bg-secondary text-muted-foreground"
-                    )}>
-                      {step < wizardStep ? <Check className="w-5 h-5" /> : step}
-                    </div>
-                    {step < 4 && (
-                      <div className={cn(
-                        "w-12 h-1 rounded-full transition-all",
-                        step < wizardStep ? "bg-primary" : "bg-secondary"
-                      )} />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
+      {/* Create / Edit Mission Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSubmit}>
+            <DialogHeader>
+              <DialogTitle>{editingMission ? 'Edit Mission' : 'Create New Mission'}</DialogTitle>
+              <DialogDescription>
+                {editingMission ? 'Update mission details.' : 'A mission counts progress towards a target.'}
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="py-4">
-                {wizardStep === 1 && (
-                  <div className="space-y-4">
-                    <h3 className="font-semibold">Basic Information</h3>
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Mission Name *</Label>
-                      <Input
-                        id="name"
-                        placeholder="e.g., Spring Challenge"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Describe what users need to do..."
-                        rows={3}
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="type">Mission Type</Label>
-                        <Select
-                          value={formData.type}
-                          onValueChange={(value) => setFormData({ ...formData, type: value as MissionFormData['type'] })}
-                        >
-                          <SelectTrigger id="type"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="one_time">One-time</SelectItem>
-                            <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
-                            <SelectItem value="recurring">Recurring</SelectItem>
-                            <SelectItem value="event">Event</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="status">Status</Label>
-                        <Select
-                          value={formData.status}
-                          onValueChange={(value) => setFormData({ ...formData, status: value as MissionFormData['status'] })}
-                        >
-                          <SelectTrigger id="status"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="paused">Paused</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="expired">Expired</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 pt-2">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="is_active"
-                          checked={formData.is_active}
-                          onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                        />
-                        <Label htmlFor="is_active">Active</Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="is_secret"
-                          checked={formData.is_secret}
-                          onCheckedChange={(checked) => setFormData({ ...formData, is_secret: checked })}
-                        />
-                        <Label htmlFor="is_secret">Secret Mission</Label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {wizardStep === 2 && (
-                  <div className="space-y-4">
-                    <h3 className="font-semibold">Objectives</h3>
-                    <p className="text-sm text-muted-foreground">Define what users need to complete.</p>
-                    <div className="space-y-3 max-h-64 overflow-y-auto">
-                      {formData.objectives.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No objectives yet. Click "Add Objective" to get started.
-                        </p>
-                      ) : (
-                        formData.objectives.map((obj, index) => (
-                          <div key={obj.key} className="flex gap-2 items-start">
-                            <div className="flex-1 space-y-2">
-                              <Input
-                                placeholder={`Objective ${index + 1}: e.g., Complete your profile`}
-                                value={obj.label}
-                                onChange={(e) => updateObjective(index, 'label', e.target.value)}
-                              />
-                              <div className="flex items-center gap-2">
-                                <Label className="text-xs text-muted-foreground">Target:</Label>
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  className="w-20"
-                                  value={obj.target}
-                                  onChange={(e) => updateObjective(index, 'target', parseInt(e.target.value) || 1)}
-                                />
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeObjective(index)}
-                              className="mt-1"
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={addObjective}
-                      className="w-full"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Objective
-                    </Button>
-                  </div>
-                )}
-
-                {wizardStep === 3 && (
-                  <div className="space-y-4">
-                    <h3 className="font-semibold">Rewards</h3>
-                    <p className="text-sm text-muted-foreground">Set rewards for completing the mission.</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="xp_reward">XP Reward</Label>
-                        <Input
-                          id="xp_reward"
-                          type="number"
-                          min="0"
-                          placeholder="500"
-                          value={formData.xp_reward || ''}
-                          onChange={(e) => setFormData({ ...formData, xp_reward: parseInt(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="points_reward">Points Reward</Label>
-                        <Input
-                          id="points_reward"
-                          type="number"
-                          min="0"
-                          placeholder="100"
-                          value={formData.points_reward || ''}
-                          onChange={(e) => setFormData({ ...formData, points_reward: parseInt(e.target.value) || 0 })}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="badge_reward">Badge Reward (Optional)</Label>
-                      <Select
-                        value={formData.badge_reward_id?.toString() || 'none'}
-                        onValueChange={(value) => setFormData({ ...formData, badge_reward_id: value === 'none' ? undefined : parseInt(value) })}
-                      >
-                        <SelectTrigger id="badge_reward">
-                          <SelectValue placeholder="Select a badge" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {badges.map((badge) => (
-                            <SelectItem key={badge.id} value={badge.id.toString()}>
-                              {badge.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-
-                {wizardStep === 4 && (
-                  <div className="space-y-4">
-                    <h3 className="font-semibold">Schedule & Limits</h3>
-                    <p className="text-sm text-muted-foreground">Set when the mission is available and completion limits.</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="start_date">Start Date</Label>
-                        <Input
-                          id="start_date"
-                          type="date"
-                          value={formData.start_date}
-                          onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="end_date">End Date</Label>
-                        <Input
-                          id="end_date"
-                          type="date"
-                          value={formData.end_date}
-                          onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="max_completions">Max Completions (Optional)</Label>
-                        <Input
-                          id="max_completions"
-                          type="number"
-                          min="1"
-                          placeholder="Unlimited"
-                          value={formData.max_completions || ''}
-                          onChange={(e) => setFormData({ ...formData, max_completions: e.target.value ? parseInt(e.target.value) : undefined })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cooldown_hours">Cooldown Hours (Optional)</Label>
-                        <Input
-                          id="cooldown_hours"
-                          type="number"
-                          min="0"
-                          placeholder="No cooldown"
-                          value={formData.cooldown_hours || ''}
-                          onChange={(e) => setFormData({ ...formData, cooldown_hours: e.target.value ? parseInt(e.target.value) : undefined })}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter>
-                {wizardStep > 1 && (
-                  <Button type="button" variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>
-                    Back
-                  </Button>
-                )}
-                <Button type="button" variant="outline" onClick={resetWizard}>Cancel</Button>
-                <Button
-                  type="button"
-                  variant="glow"
-                  onClick={handleCreate}
-                  disabled={createMutation.isPending}
-                >
-                  {createMutation.isPending ? (
-                    'Creating...'
-                  ) : wizardStep === 4 ? (
-                    'Create Mission'
-                  ) : (
-                    <>
-                      Continue
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Edit Mission Dialog */}
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Edit Mission</DialogTitle>
-                <DialogDescription>Update mission details</DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-6 py-4">
-                {/* Basic Information */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Basic Information</h3>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-name">Mission Name *</Label>
-                    <Input
-                      id="edit-name"
-                      placeholder="e.g., Spring Challenge"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-description">Description</Label>
-                    <Textarea
-                      id="edit-description"
-                      placeholder="Describe what users need to do..."
-                      rows={3}
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-type">Mission Type</Label>
-                      <Select
-                        value={formData.type}
-                        onValueChange={(value) => setFormData({ ...formData, type: value as MissionFormData['type'] })}
-                      >
-                        <SelectTrigger id="edit-type"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="one_time">One-time</SelectItem>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="recurring">Recurring</SelectItem>
-                          <SelectItem value="event">Event</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-status">Status</Label>
-                      <Select
-                        value={formData.status}
-                        onValueChange={(value) => setFormData({ ...formData, status: value as MissionFormData['status'] })}
-                      >
-                        <SelectTrigger id="edit-status"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="paused">Paused</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="expired">Expired</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="edit-is_active"
-                        checked={formData.is_active}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                      />
-                      <Label htmlFor="edit-is_active">Active</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="edit-is_secret"
-                        checked={formData.is_secret}
-                        onCheckedChange={(checked) => setFormData({ ...formData, is_secret: checked })}
-                      />
-                      <Label htmlFor="edit-is_secret">Secret Mission</Label>
-                    </div>
-                  </div>
+            <div className="space-y-6 py-4">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="font-semibold">Basic Information</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="mission-name">Mission Name *</Label>
+                  <Input
+                    id="mission-name"
+                    required
+                    maxLength={255}
+                    placeholder="e.g., Spring Challenge"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
                 </div>
-
-                {/* Objectives */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Objectives</h3>
-                  <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {formData.objectives.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No objectives yet. Click "Add Objective" to get started.
-                      </p>
-                    ) : (
-                      formData.objectives.map((obj, index) => (
-                        <div key={obj.key} className="flex gap-2 items-start">
-                          <div className="flex-1 space-y-2">
-                            <Input
-                              placeholder={`Objective ${index + 1}`}
-                              value={obj.label}
-                              onChange={(e) => updateObjective(index, 'label', e.target.value)}
-                            />
-                            <div className="flex items-center gap-2">
-                              <Label className="text-xs text-muted-foreground">Target:</Label>
-                              <Input
-                                type="number"
-                                min="1"
-                                className="w-20"
-                                value={obj.target}
-                                onChange={(e) => updateObjective(index, 'target', parseInt(e.target.value) || 1)}
-                              />
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeObjective(index)}
-                            className="mt-1"
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addObjective}
-                    className="w-full"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Objective
-                  </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="mission-description">Description</Label>
+                  <Textarea
+                    id="mission-description"
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Describe what players need to do..."
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  />
                 </div>
-
-                {/* Rewards */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Rewards</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-xp_reward">XP Reward</Label>
-                      <Input
-                        id="edit-xp_reward"
-                        type="number"
-                        min="0"
-                        value={formData.xp_reward || ''}
-                        onChange={(e) => setFormData({ ...formData, xp_reward: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-points_reward">Points Reward</Label>
-                      <Input
-                        id="edit-points_reward"
-                        type="number"
-                        min="0"
-                        value={formData.points_reward || ''}
-                        onChange={(e) => setFormData({ ...formData, points_reward: parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                  </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-badge_reward">Badge Reward (Optional)</Label>
+                    <Label htmlFor="mission-type">Mission Type</Label>
                     <Select
-                      value={formData.badge_reward_id?.toString() || 'none'}
-                      onValueChange={(value) => setFormData({ ...formData, badge_reward_id: value === 'none' ? undefined : parseInt(value) })}
+                      value={formData.type}
+                      onValueChange={(value) => setFormData({ ...formData, type: value as MissionType })}
+                      disabled={!!editingMission && editingMission.status !== 'draft'}
                     >
-                      <SelectTrigger id="edit-badge_reward">
-                        <SelectValue placeholder="Select a badge" />
-                      </SelectTrigger>
+                      <SelectTrigger id="mission-type"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {badges.map((badge) => (
-                          <SelectItem key={badge.id} value={badge.id.toString()}>
-                            {badge.name}
-                          </SelectItem>
+                        {(Object.keys(typeLabels) as MissionType[]).map((t) => (
+                          <SelectItem key={t} value={t}>{typeLabels[t]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {editingMission && editingMission.status !== 'draft' && (
+                      <p className="text-xs text-muted-foreground">Type can only change while the mission is a draft.</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value) => setFormData({ ...formData, status: value as MissionStatus })}
+                      disabled={statusOptions.length <= 1}
+                    >
+                      <SelectTrigger id="mission-status"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((s) => (
+                          <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+              </div>
 
-                {/* Schedule */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Schedule & Limits</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-start_date">Start Date</Label>
-                      <Input
-                        id="edit-start_date"
-                        type="date"
-                        value={formData.start_date}
-                        onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-end_date">End Date</Label>
-                      <Input
-                        id="edit-end_date"
-                        type="date"
-                        value={formData.end_date}
-                        onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                      />
-                    </div>
+              {/* Goal */}
+              <div className="space-y-4">
+                <h3 className="font-semibold">Goal</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-target">Target *</Label>
+                    <Input
+                      id="mission-target"
+                      type="number"
+                      min="1"
+                      required
+                      value={formData.target}
+                      onChange={(e) => setFormData({ ...formData, target: Math.max(1, Number(e.target.value) || 1) })}
+                    />
+                    <p className="text-xs text-muted-foreground">Units of progress needed to complete.</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-max_completions">Max Completions (Optional)</Label>
-                      <Input
-                        id="edit-max_completions"
-                        type="number"
-                        min="1"
-                        placeholder="Unlimited"
-                        value={formData.max_completions || ''}
-                        onChange={(e) => setFormData({ ...formData, max_completions: e.target.value ? parseInt(e.target.value) : undefined })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-cooldown_hours">Cooldown Hours (Optional)</Label>
-                      <Input
-                        id="edit-cooldown_hours"
-                        type="number"
-                        min="0"
-                        placeholder="No cooldown"
-                        value={formData.cooldown_hours || ''}
-                        onChange={(e) => setFormData({ ...formData, cooldown_hours: e.target.value ? parseInt(e.target.value) : undefined })}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-max">Max completions per player</Label>
+                    <Input
+                      id="mission-max"
+                      type="number"
+                      min="1"
+                      placeholder={formData.type === 'one_time' ? '1' : 'Unlimited'}
+                      value={formData.max_completions_per_player}
+                      onChange={(e) => setFormData({ ...formData, max_completions_per_player: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mission-criteria">Criteria (JSON)</Label>
+                  <Textarea
+                    id="mission-criteria"
+                    rows={3}
+                    className="font-mono text-sm"
+                    placeholder='{"event_type": "purchase_completed", "min_amount": 100}'
+                    value={formData.criteria}
+                    onChange={(e) => setFormData({ ...formData, criteria: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Documents which activities count; rules evaluate it and send progress.
+                  </p>
+                </div>
+              </div>
+
+              {/* Rewards */}
+              <div className="space-y-4">
+                <h3 className="font-semibold">Rewards</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-xp">XP Reward</Label>
+                    <Input
+                      id="mission-xp"
+                      type="number"
+                      min="0"
+                      value={formData.xp_reward}
+                      onChange={(e) => setFormData({ ...formData, xp_reward: Math.max(0, Number(e.target.value) || 0) })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-points">Points Reward</Label>
+                    <Input
+                      id="mission-points"
+                      type="number"
+                      min="0"
+                      value={formData.points_reward}
+                      onChange={(e) => setFormData({ ...formData, points_reward: Math.max(0, Number(e.target.value) || 0) })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-badge">Badge Reward</Label>
+                    <Select
+                      value={formData.badge_reward_id || NO_BADGE}
+                      onValueChange={(value) => setFormData({ ...formData, badge_reward_id: value === NO_BADGE ? '' : value })}
+                    >
+                      <SelectTrigger id="mission-badge"><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_BADGE}>None</SelectItem>
+                        {badges.map((badge) => (
+                          <SelectItem key={badge.id} value={badge.id}>{badge.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsEditDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="glow"
-                  onClick={handleUpdate}
-                  disabled={updateMutation.isPending}
-                >
-                  {updateMutation.isPending ? 'Updating...' : 'Update Mission'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+              {/* Schedule */}
+              <div className="space-y-4">
+                <h3 className="font-semibold">Schedule</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-start">Starts</Label>
+                    <Input
+                      id="mission-start"
+                      type="date"
+                      value={formData.starts_at}
+                      onChange={(e) => setFormData({ ...formData, starts_at: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mission-end">Ends</Label>
+                    <Input
+                      id="mission-end"
+                      type="date"
+                      value={formData.ends_at}
+                      onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search missions..."
-          className="pl-9"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+              <Button type="submit" variant="glow" disabled={isSaving}>
+                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {editingMission ? 'Update Mission' : 'Create Mission'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Filters (server-side: ?status&type) */}
+      <div className="flex flex-wrap gap-3">
+        <Select value={statusFilter} onValueChange={setFilter(setStatusFilter)}>
+          <SelectTrigger className="w-40" aria-label="Filter by status"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All statuses</SelectItem>
+            {(Object.keys(statusLabels) as MissionStatus[]).map((s) => (
+              <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={setFilter(setTypeFilter)}>
+          <SelectTrigger className="w-40" aria-label="Filter by type"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All types</SelectItem>
+            {(Object.keys(typeLabels) as MissionType[]).map((t) => (
+              <SelectItem key={t} value={t}>{typeLabels[t]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Missions Grid */}
@@ -894,16 +585,20 @@ export default function Missions() {
             </Card>
           ))}
         </div>
-      ) : filteredMissions.length === 0 ? (
+      ) : error ? (
+        <Card className="p-8 text-center border-destructive">
+          <p className="text-destructive">Failed to load missions: {error.message}</p>
+        </Card>
+      ) : missions.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Target className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-medium mb-2">No missions found</h3>
             <p className="text-muted-foreground mb-4">
-              {searchQuery ? 'Try adjusting your search query.' : 'Create your first mission to get started.'}
+              {hasFilters ? 'Try different filters.' : 'Create your first mission to get started.'}
             </p>
-            {!searchQuery && (
-              <Button onClick={() => setIsDialogOpen(true)}>
+            {!hasFilters && (
+              <Button onClick={openCreate}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Mission
               </Button>
@@ -912,12 +607,11 @@ export default function Missions() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredMissions.map((mission: Mission, index: number) => {
-            const objectives = mission.objectives ? Object.entries(mission.objectives) : [];
-            const objectiveLabels = objectives.map(([_, obj]) => obj.label);
-
+          {missions.map((mission, index) => {
+            const criteriaKeys = Object.keys(mission.criteria ?? {});
+            const reward = badgeName(mission.badge_reward_id);
             return (
-              <Card key={mission.id} className="stat-card overflow-hidden" style={{ animationDelay: `${index * 100}ms` }}>
+              <Card key={mission.id} className="stat-card overflow-hidden group" style={{ animationDelay: `${index * 100}ms` }}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -942,7 +636,7 @@ export default function Missions() {
                           "capitalize",
                           mission.status === 'active'
                             ? "border-green-500/50 text-green-500 bg-green-500/10"
-                            : mission.status === 'draft'
+                            : mission.status === 'draft' || mission.status === 'paused'
                             ? "border-amber-500/50 text-amber-500 bg-amber-500/10"
                             : "border-muted-foreground"
                         )}
@@ -951,64 +645,53 @@ export default function Missions() {
                       </Badge>
                       <ItemActionsMenu
                         itemName={mission.name}
-                        onEdit={() => handleEdit(mission)}
+                        onEdit={() => openEdit(mission)}
                         onDelete={() => handleDelete(mission)}
+                        actions={[
+                          { label: 'Start for player', icon: Play, onClick: () => openPlayerAction('start', mission), disabled: mission.status !== 'active' },
+                          { label: 'Add progress', icon: TrendingUp, onClick: () => openPlayerAction('progress', mission), disabled: mission.status !== 'active' },
+                          { label: 'Complete for player', icon: CheckCircle2, onClick: () => openPlayerAction('complete', mission), disabled: mission.status !== 'active' },
+                          { label: 'View attempts', icon: ListChecks, onClick: () => { attemptsPager.reset(); setAttemptsMission(mission); } },
+                        ]}
                         showInGroup
                       />
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Mission Type */}
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="capitalize">
-                      {mission.type.replace('_', '-')}
-                    </Badge>
-                    {mission.is_secret && (
-                      <Badge variant="outline">Secret</Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{typeLabels[mission.type]}</Badge>
+                    <Badge variant="outline">Target: {mission.target}</Badge>
+                    {mission.max_completions_per_player !== null && (
+                      <Badge variant="outline">Max {mission.max_completions_per_player}× per player</Badge>
                     )}
                   </div>
 
-                  {/* Objectives */}
-                  {objectiveLabels.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Objectives</p>
-                      <div className="space-y-1">
-                        {objectiveLabels.map((label, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <div className="w-4 h-4 rounded-full border border-muted-foreground flex items-center justify-center">
-                              {i < Math.floor(objectiveLabels.length * 0.5) && (
-                                <Check className="w-3 h-3 text-green-500" />
-                              )}
-                            </div>
-                            {label}
-                          </div>
-                        ))}
-                      </div>
+                  {criteriaKeys.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Criteria</p>
+                      <code className="block text-xs bg-secondary rounded px-2 py-1 overflow-x-auto">
+                        {JSON.stringify(mission.criteria)}
+                      </code>
                     </div>
                   )}
 
-                  {/* Meta Info */}
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {mission.end_date && (
+                      {(mission.starts_at || mission.ends_at) && (
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
-                          {new Date(mission.end_date).toLocaleDateString()}
+                          {mission.starts_at ? new Date(mission.starts_at).toLocaleDateString() : '…'}
+                          {' – '}
+                          {mission.ends_at ? new Date(mission.ends_at).toLocaleDateString() : '…'}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {mission.xp_reward > 0 && (
-                        <Badge variant="secondary">+{mission.xp_reward} XP</Badge>
-                      )}
-                      {mission.points_reward > 0 && (
-                        <Badge variant="secondary">+{mission.points_reward} Points</Badge>
-                      )}
-                      {mission.badge_reward && (
-                        <Badge variant="outline" className="border-primary/50 text-primary">
-                          🏅 {mission.badge_reward.name}
-                        </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {mission.xp_reward > 0 && <Badge variant="secondary">+{mission.xp_reward} XP</Badge>}
+                      {mission.points_reward > 0 && <Badge variant="secondary">+{mission.points_reward} Points</Badge>}
+                      {reward && (
+                        <Badge variant="outline" className="border-primary/50 text-primary">🏅 {reward}</Badge>
                       )}
                     </div>
                   </div>
@@ -1018,6 +701,98 @@ export default function Missions() {
           })}
         </div>
       )}
+
+      <CursorPager
+        page={pager.page}
+        hasPrevious={pager.hasPrevious}
+        nextCursor={missionsData?.next_cursor}
+        onPrevious={pager.previous}
+        onNext={pager.next}
+        isFetching={isFetching}
+      />
+
+      {/* Player actions: start / progress / complete */}
+      <PlayerActionDialog
+        open={!!playerAction}
+        onOpenChange={(open) => !open && setPlayerAction(null)}
+        title={
+          playerAction?.kind === 'start'
+            ? `Start "${playerAction.mission.name}"`
+            : playerAction?.kind === 'progress'
+            ? `Add progress to "${playerAction.mission.name}"`
+            : `Complete "${playerAction?.mission.name ?? ''}"`
+        }
+        description={
+          playerAction?.kind === 'progress'
+            ? 'Adds progress; starts an attempt if none is open and completes it when the target is reached.'
+            : playerAction?.kind === 'complete'
+            ? 'Completes the player\'s open attempt once its target is reached.'
+            : 'Opens an attempt for the current period.'
+        }
+        submitLabel={playerAction?.kind === 'start' ? 'Start' : playerAction?.kind === 'progress' ? 'Add Progress' : 'Complete'}
+        isPending={playerActionPending}
+        onSubmit={handlePlayerAction}
+      >
+        {playerAction?.kind === 'progress' && (
+          <div className="space-y-2">
+            <Label htmlFor="mission-increment">Increment</Label>
+            <Input
+              id="mission-increment"
+              type="number"
+              min={1}
+              max={1000000}
+              value={increment}
+              onChange={(e) => setIncrement(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
+        )}
+      </PlayerActionDialog>
+
+      {/* Attempts */}
+      <Dialog open={!!attemptsMission} onOpenChange={(open) => !open && setAttemptsMission(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Attempts: {attemptsMission?.name}</DialogTitle>
+            <DialogDescription>Each player's runs at this mission, newest first.</DialogDescription>
+          </DialogHeader>
+          {attemptsQuery.isLoading ? (
+            <p className="text-sm text-muted-foreground py-4">Loading attempts...</p>
+          ) : attemptsQuery.error ? (
+            <p className="text-sm text-destructive py-4">{attemptsQuery.error.message}</p>
+          ) : (attemptsQuery.data?.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No attempts yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {attemptsQuery.data!.data.map((attempt) => (
+                <div key={attempt.id} className="rounded-md border border-border p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <code className="text-xs text-muted-foreground truncate">{attempt.player_id}</code>
+                    <Badge variant="outline" className={cn('capitalize', attemptStatusClass[attempt.status])}>
+                      {attempt.status.replace('_', ' ')}
+                    </Badge>
+                  </div>
+                  <Progress value={Math.min(100, (attempt.progress / Math.max(1, attempt.target)) * 100)} />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{attempt.progress} / {attempt.target} · period {attempt.period_key}</span>
+                    <span>
+                      Started {new Date(attempt.started_at).toLocaleDateString()}
+                      {attempt.completed_at && ` · completed ${new Date(attempt.completed_at).toLocaleDateString()}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <CursorPager
+            page={attemptsPager.page}
+            hasPrevious={attemptsPager.hasPrevious}
+            nextCursor={attemptsQuery.data?.next_cursor}
+            onPrevious={attemptsPager.previous}
+            onNext={attemptsPager.next}
+            isFetching={attemptsQuery.isFetching}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,189 +3,146 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Code, Copy, Check, Terminal, FileCode } from "lucide-react";
-import { PORTAL_ROUTES } from "@/lib/constants";
+import { API_URL, PORTAL_ROUTES } from "@/lib/constants";
+
+// Real requests against the LevelUp API (Go, /api/v1). There is no SDK yet:
+// these are plain HTTP calls. Shapes match backend/api/docs/swagger.json.
+const API = API_URL;
 
 const codeExamples = {
+  sendActivity: {
+    title: "Send an Activity",
+    description: "Report what a player did. Rules evaluate it asynchronously and award points, XP, badges and more. Safe to retry: event_id is deduplicated.",
+    javascript: `// Your backend reports an activity; LevelUp's rules decide the rewards.
+const res = await fetch('${API}/api/v1/activities', {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    event_id: 'order_789',            // your id: retries never double-award
+    event_type: 'purchase_completed',
+    player_external_id: 'user_123',   // the player's id in your system
+    properties: { amount: 99.99, product_id: 'prod_456' },
+  }),
+});
+
+console.log(res.status, await res.json());
+// 202 { activity_id: '01a1...', status: 'pending', duplicate: false }`,
+    python: `import os, requests
+
+# Your backend reports an activity; LevelUp's rules decide the rewards.
+res = requests.post(
+    "${API}/api/v1/activities",
+    headers={"Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}"},
+    json={
+        "event_id": "order_789",            # your id: retries never double-award
+        "event_type": "purchase_completed",
+        "player_external_id": "user_123",   # the player's id in your system
+        "properties": {"amount": 99.99, "product_id": "prod_456"},
+    },
+)
+
+print(res.status_code, res.json())
+# 202 {'activity_id': '01a1...', 'status': 'pending', 'duplicate': False}`,
+    curl: `curl -X POST ${API}/api/v1/activities \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "event_id": "order_789",
+    "event_type": "purchase_completed",
+    "player_external_id": "user_123",
+    "properties": { "amount": 99.99, "product_id": "prod_456" }
+  }'
+
+# 202 {"activity_id":"01a1...","status":"pending","duplicate":false}`
+  },
+  creditPoints: {
+    title: "Credit Points",
+    description: "Add points to a player's wallet. Every movement is an immutable ledger entry; the Idempotency-Key makes retries safe.",
+    javascript: `const playerId = '01a10cdf-5e1c-70a0-a223-4589108b5a25';
+
+const res = await fetch(\`${API}/api/v1/players/\${playerId}/wallet/credit\`, {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': 'order_789-points',   // required for money movements
+  },
+  body: JSON.stringify({ amount: 500, kind: 'earn', description: 'Purchase reward' }),
+});
+
+console.log(await res.json());
+// { id: '01a1...', kind: 'earn', direction: 'credit', amount: 500,
+//   balance_before: 1000, balance_after: 1500, ... }`,
+    python: `import os, requests
+
+player_id = "01a10cdf-5e1c-70a0-a223-4589108b5a25"
+
+res = requests.post(
+    f"${API}/api/v1/players/{player_id}/wallet/credit",
+    headers={
+        "Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}",
+        "Idempotency-Key": "order_789-points",   # required for money movements
+    },
+    json={"amount": 500, "kind": "earn", "description": "Purchase reward"},
+)
+
+print(res.json())
+# {'id': '01a1...', 'kind': 'earn', 'direction': 'credit', 'amount': 500,
+#  'balance_before': 1000, 'balance_after': 1500, ...}`,
+    curl: `curl -X POST ${API}/api/v1/players/01a10cdf-5e1c-70a0-a223-4589108b5a25/wallet/credit \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: order_789-points" \\
+  -d '{ "amount": 500, "kind": "earn", "description": "Purchase reward" }'
+
+# Debiting more than the balance returns 422 with
+# {"code":"insufficient_balance", "detail":"requested 600, available 500: ..."}`
+  },
   awardBadge: {
     title: "Award a Badge",
-    description: "Award a badge to a user when they complete an achievement",
-    javascript: `import { LevelUpOS } from '@levelupos/sdk';
+    description: "Award a badge directly. Already earned? You get a 409 with code badge_already_earned, never a duplicate.",
+    javascript: `const badgeId = '01a10ce1-26ab-761e-8dcc-6266f4f0cc94';   // "First Purchase"
 
-const client = new LevelUpOS({
-  apiKey: 'your-api-key',
-  orgId: 'your-org-id'
-});
-
-// Award a badge to a user
-const response = await client.badges.award({
-  userId: 'user_123',
-  badgeId: 'first_purchase',
-  tier: 'gold',
-  metadata: {
-    purchaseAmount: 99.99,
-    productId: 'prod_456'
-  }
-});
-
-console.log(response.badge);
-// { id: 'badge_789', name: 'First Purchase', tier: 'gold', ... }`,
-    python: `from levelupos import LevelUpOS
-
-client = LevelUpOS(
-    api_key="your-api-key",
-    org_id="your-org-id"
-)
-
-# Award a badge to a user
-response = client.badges.award(
-    user_id="user_123",
-    badge_id="first_purchase",
-    tier="gold",
-    metadata={
-        "purchase_amount": 99.99,
-        "product_id": "prod_456"
-    }
-)
-
-print(response.badge)
-# {'id': 'badge_789', 'name': 'First Purchase', 'tier': 'gold', ...}`,
-    curl: `curl -X POST https://api.levelupos.ge/v1/badges/award \\
-  -H "Authorization: Bearer your-api-key" \\
-  -H "X-Org-Id: your-org-id" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "userId": "user_123",
-    "badgeId": "first_purchase",
-    "tier": "gold",
-    "metadata": {
-      "purchaseAmount": 99.99,
-      "productId": "prod_456"
-    }
-  }'`
+const res = await fetch(\`${API}/api/v1/badges/\${badgeId}/award\`, {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${process.env.LEVELUP_API_KEY}\`,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': 'order_789-badge',
   },
-  addPoints: {
-    title: "Add Points",
-    description: "Credit points to a user's wallet with transaction tracking",
-    javascript: `import { LevelUpOS } from '@levelupos/sdk';
-
-const client = new LevelUpOS({
-  apiKey: 'your-api-key',
-  orgId: 'your-org-id'
+  body: JSON.stringify({ player_id: '01a10cdf-5e1c-70a0-a223-4589108b5a25' }),
 });
 
-// Add points to user wallet
-const transaction = await client.points.credit({
-  userId: 'user_123',
-  amount: 500,
-  reason: 'purchase_reward',
-  reference: 'order_789',
-  metadata: {
-    orderTotal: 49.99
-  }
-});
+console.log(res.status, await res.json());
+// 201 { award_id: '01a1...', status: 'applied',
+//       player_badge: { badge_id: '01a10ce1...', earned_count: 1, ... } }`,
+    python: `import os, requests
 
-console.log(transaction);
-// { id: 'txn_abc', balance: 1500, amount: 500, ... }`,
-    python: `from levelupos import LevelUpOS
+badge_id = "01a10ce1-26ab-761e-8dcc-6266f4f0cc94"   # "First Purchase"
 
-client = LevelUpOS(
-    api_key="your-api-key",
-    org_id="your-org-id"
+res = requests.post(
+    f"${API}/api/v1/badges/{badge_id}/award",
+    headers={
+        "Authorization": f"Bearer {os.environ['LEVELUP_API_KEY']}",
+        "Idempotency-Key": "order_789-badge",
+    },
+    json={"player_id": "01a10cdf-5e1c-70a0-a223-4589108b5a25"},
 )
 
-# Add points to user wallet
-transaction = client.points.credit(
-    user_id="user_123",
-    amount=500,
-    reason="purchase_reward",
-    reference="order_789",
-    metadata={
-        "order_total": 49.99
-    }
-)
-
-print(transaction)
-# {'id': 'txn_abc', 'balance': 1500, 'amount': 500, ...}`,
-    curl: `curl -X POST https://api.levelupos.ge/v1/points/credit \\
-  -H "Authorization: Bearer your-api-key" \\
-  -H "X-Org-Id: your-org-id" \\
+print(res.status_code, res.json())
+# 201 {'award_id': '01a1...', 'status': 'applied',
+#      'player_badge': {'badge_id': '01a10ce1...', 'earned_count': 1, ...}}`,
+    curl: `curl -X POST ${API}/api/v1/badges/01a10ce1-26ab-761e-8dcc-6266f4f0cc94/award \\
+  -H "Authorization: Bearer $LEVELUP_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "userId": "user_123",
-    "amount": 500,
-    "reason": "purchase_reward",
-    "reference": "order_789",
-    "metadata": {
-      "orderTotal": 49.99
-    }
-  }'`
+  -H "Idempotency-Key: order_789-badge" \\
+  -d '{ "player_id": "01a10cdf-5e1c-70a0-a223-4589108b5a25" }'
+
+# 201 {"award_id":"01a1...","status":"applied","player_badge":{...}}`
   },
-  createMission: {
-    title: "Create Mission",
-    description: "Set up a new mission with custom objectives and rewards",
-    javascript: `import { LevelUpOS } from '@levelupos/sdk';
-
-const client = new LevelUpOS({
-  apiKey: 'your-api-key',
-  orgId: 'your-org-id'
-});
-
-// Create a weekly mission
-const mission = await client.missions.create({
-  name: 'Weekly Warrior',
-  type: 'weekly',
-  objectives: [
-    { action: 'purchase', count: 3 },
-    { action: 'review', count: 2 }
-  ],
-  rewards: {
-    points: 1000,
-    badgeId: 'weekly_warrior'
-  }
-});
-
-console.log(mission.id);
-// 'mission_xyz'`,
-    python: `from levelupos import LevelUpOS
-
-client = LevelUpOS(
-    api_key="your-api-key",
-    org_id="your-org-id"
-)
-
-# Create a weekly mission
-mission = client.missions.create(
-    name="Weekly Warrior",
-    type="weekly",
-    objectives=[
-        {"action": "purchase", "count": 3},
-        {"action": "review", "count": 2}
-    ],
-    rewards={
-        "points": 1000,
-        "badge_id": "weekly_warrior"
-    }
-)
-
-print(mission.id)
-# 'mission_xyz'`,
-    curl: `curl -X POST https://api.levelupos.ge/v1/missions \\
-  -H "Authorization: Bearer your-api-key" \\
-  -H "X-Org-Id: your-org-id" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "name": "Weekly Warrior",
-    "type": "weekly",
-    "objectives": [
-      { "action": "purchase", "count": 3 },
-      { "action": "review", "count": 2 }
-    ],
-    "rewards": {
-      "points": 1000,
-      "badgeId": "weekly_warrior"
-    }
-  }'`
-  }
 };
 
 type Language = 'javascript' | 'python' | 'curl';
@@ -198,7 +155,7 @@ const languageConfig: Record<Language, { label: string; icon: React.ReactNode }>
 };
 
 const APIPreviewSection = () => {
-  const [activeExample, setActiveExample] = useState<Example>('awardBadge');
+  const [activeExample, setActiveExample] = useState<Example>('sendActivity');
   const [activeLanguage, setActiveLanguage] = useState<Language>('javascript');
   const [copied, setCopied] = useState(false);
 
@@ -229,7 +186,7 @@ const APIPreviewSection = () => {
             </span>
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Get started in minutes with our intuitive SDKs and comprehensive documentation
+            Plain REST and JSON: get started in minutes from any language
           </p>
         </div>
 
@@ -311,7 +268,7 @@ const APIPreviewSection = () => {
           {/* Footer CTA */}
           <div className="mt-8 text-center">
             <p className="text-muted-foreground mb-4">
-              Explore our full API reference with interactive examples
+              Explore the full API reference, then preview rules against your data
             </p>
             <div className="flex gap-4 justify-center">
               <Button variant="heroOutline" className="gap-2" asChild>
@@ -321,8 +278,8 @@ const APIPreviewSection = () => {
                 </a>
               </Button>
               <Button variant="ghost" className="text-cyan hover:text-cyan/80" asChild>
-                <a href={PORTAL_ROUTES.PLAYGROUND}>
-                  Try in Playground →
+                <a href={PORTAL_ROUTES.SIMULATOR}>
+                  Try the Rule Simulator →
                 </a>
               </Button>
             </div>

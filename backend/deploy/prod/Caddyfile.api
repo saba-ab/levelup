@@ -1,0 +1,16 @@
+# api.levelupos.ge → Go API (replaces the Laravel site block).
+api.levelupos.ge {
+	log {
+		output file /var/log/caddy/api.levelupos.ge.log {
+			roll_size 50MB
+			roll_keep 10
+		}
+	}
+	encode zstd gzip
+	request_body {
+		max_size 2MB
+	}
+	reverse_proxy 127.0.0.1:18080 {
+		header_up X-Real-IP {remote_host}
+	}
+}

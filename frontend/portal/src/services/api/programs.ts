@@ -1,16 +1,24 @@
 import { useApi } from '@/hooks/useApi';
 import { useCallback } from 'react';
-import {
+import type {
   Program,
   CreateProgramData,
   UpdateProgramData,
-  Segment,
-  CreateSegmentData,
-  PaginatedResponse,
   ProgramFilters,
-  Player,
+  ProgramMember,
+  ProgramEnrollment,
+  BulkEnrollResult,
+  CursorPage,
+  CursorParams,
+  ID,
 } from './types';
-import { PROGRAM_ENDPOINTS, SEGMENT_ENDPOINTS } from '@/lib/api-routes';
+import { PROGRAM_ENDPOINTS, toQuery } from '@/lib/api-routes';
+
+/** Concurrent enroll requests during a bulk enroll. */
+const BULK_ENROLL_CONCURRENCY = 4;
+
+/** Mutations report errors to the caller, which shows them; skip the client's generic toast. */
+const QUIET = { showErrorToast: false } as const;
 
 export function useProgramsService() {
   const api = useApi();
@@ -18,127 +26,77 @@ export function useProgramsService() {
   // ==================== PROGRAMS ====================
 
   const listPrograms = useCallback(async (filters?: ProgramFilters) => {
-    const params = new URLSearchParams();
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-    }
-    const query = params.toString();
-    return api.get<PaginatedResponse<Program>>(`${PROGRAM_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
+    return api.get<CursorPage<Program>>(`${PROGRAM_ENDPOINTS.LIST}${toQuery(filters)}`);
   }, [api]);
 
-  const getProgram = useCallback(async (programId: number) => {
+  const getProgram = useCallback(async (programId: ID) => {
     return api.get<Program>(PROGRAM_ENDPOINTS.SHOW(programId));
   }, [api]);
 
   const createProgram = useCallback(async (data: CreateProgramData) => {
-    return api.post<Program>(PROGRAM_ENDPOINTS.CREATE, data);
+    return api.post<Program>(PROGRAM_ENDPOINTS.CREATE, data, QUIET);
   }, [api]);
 
-  const updateProgram = useCallback(async (programId: number, data: UpdateProgramData) => {
-    return api.put<Program>(PROGRAM_ENDPOINTS.UPDATE(programId), data);
+  const updateProgram = useCallback(async (programId: ID, data: UpdateProgramData) => {
+    return api.patch<Program>(PROGRAM_ENDPOINTS.UPDATE(programId), data, QUIET);
   }, [api]);
 
-  const deleteProgram = useCallback(async (programId: number) => {
-    return api.delete(PROGRAM_ENDPOINTS.DELETE(programId));
+  const deleteProgram = useCallback(async (programId: ID) => {
+    return api.delete(PROGRAM_ENDPOINTS.DELETE(programId), QUIET);
   }, [api]);
 
-  const activateProgram = useCallback(async (programId: number) => {
-    return api.post<Program>(PROGRAM_ENDPOINTS.ACTIVATE(programId));
+  const activateProgram = useCallback(async (programId: ID) => {
+    return api.post<Program>(PROGRAM_ENDPOINTS.ACTIVATE(programId), undefined, QUIET);
   }, [api]);
 
-  const pauseProgram = useCallback(async (programId: number) => {
-    return api.post<Program>(PROGRAM_ENDPOINTS.PAUSE(programId));
+  const pauseProgram = useCallback(async (programId: ID) => {
+    return api.post<Program>(PROGRAM_ENDPOINTS.PAUSE(programId), undefined, QUIET);
   }, [api]);
 
-  const endProgram = useCallback(async (programId: number) => {
-    return api.post<Program>(PROGRAM_ENDPOINTS.END(programId));
+  const endProgram = useCallback(async (programId: ID) => {
+    return api.post<Program>(PROGRAM_ENDPOINTS.END(programId), undefined, QUIET);
   }, [api]);
 
-  const duplicateProgram = useCallback(async (programId: number, newName: string) => {
-    return api.post<Program>(PROGRAM_ENDPOINTS.DUPLICATE(programId), { name: newName });
+  // ==================== ENROLLMENTS ====================
+
+  const getProgramPlayers = useCallback(async (programId: ID, params?: CursorParams) => {
+    return api.get<CursorPage<ProgramMember>>(`${PROGRAM_ENDPOINTS.PLAYERS(programId)}${toQuery(params)}`);
   }, [api]);
 
-  const getProgramStats = useCallback(async (programId: number) => {
-    return api.get<{
-      total_players: number;
-      active_players: number;
-      total_points_awarded: number;
-      total_badges_awarded: number;
-      total_missions_completed: number;
-      total_rewards_redeemed: number;
-    }>(PROGRAM_ENDPOINTS.STATS(programId));
+  /** 201 when newly enrolled, 200 when the player was already enrolled. */
+  const addPlayerToProgram = useCallback(async (programId: ID, playerId: ID) => {
+    return api.post<ProgramEnrollment>(PROGRAM_ENDPOINTS.ADD_PLAYER(programId), { player_id: playerId }, QUIET);
   }, [api]);
 
-  const getProgramPlayers = useCallback(async (programId: number, page = 1, perPage = 20) => {
-    return api.get<PaginatedResponse<Player>>(`${PROGRAM_ENDPOINTS.PLAYERS(programId)}?page=${page}&per_page=${perPage}`);
-  }, [api]);
+  /**
+   * The API enrolls one player per request. Runs a few requests at a time and
+   * collects per-player failures (with their problem code) instead of stopping.
+   */
+  const addPlayersToProgram = useCallback(async (programId: ID, playerIds: ID[]): Promise<BulkEnrollResult> => {
+    const result: BulkEnrollResult = { total: playerIds.length, enrolled: 0, alreadyEnrolled: 0, failures: [] };
+    const queue = [...playerIds];
 
-  const addPlayerToProgram = useCallback(async (programId: number, playerId: number) => {
-    return api.post(PROGRAM_ENDPOINTS.ADD_PLAYER(programId), { player_id: playerId });
-  }, [api]);
+    const worker = async () => {
+      for (let playerId = queue.shift(); playerId !== undefined; playerId = queue.shift()) {
+        const res = await addPlayerToProgram(programId, playerId);
+        if (res.success) {
+          if (res.status === 200) result.alreadyEnrolled += 1;
+          else result.enrolled += 1;
+        } else {
+          result.failures.push({ playerId, code: res.code, error: res.error || 'Failed to enroll player' });
+        }
+      }
+    };
 
-  const addPlayersToProgram = useCallback(async (programId: number, playerIds: number[]) => {
-    // Bulk add - send multiple requests in parallel
-    const results = await Promise.allSettled(
-      playerIds.map(playerId => api.post(PROGRAM_ENDPOINTS.ADD_PLAYER(programId), { player_id: playerId }))
-    );
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    const failed = results.filter(r => r.status === 'rejected').length;
-    return { success: true, data: { successful, failed, total: playerIds.length } };
-  }, [api]);
+    await Promise.all(Array.from({ length: Math.min(BULK_ENROLL_CONCURRENCY, playerIds.length) }, worker));
+    return result;
+  }, [addPlayerToProgram]);
 
-  const removePlayerFromProgram = useCallback(async (programId: number, playerId: number) => {
-    return api.delete(PROGRAM_ENDPOINTS.REMOVE_PLAYER(programId, playerId));
-  }, [api]);
-
-  // ==================== SEGMENTS ====================
-
-  const listSegments = useCallback(async () => {
-    return api.get<Segment[]>(SEGMENT_ENDPOINTS.LIST);
-  }, [api]);
-
-  const getSegment = useCallback(async (segmentId: number) => {
-    return api.get<Segment>(SEGMENT_ENDPOINTS.SHOW(segmentId));
-  }, [api]);
-
-  const createSegment = useCallback(async (data: CreateSegmentData) => {
-    return api.post<Segment>(SEGMENT_ENDPOINTS.CREATE, data);
-  }, [api]);
-
-  const updateSegment = useCallback(async (segmentId: number, data: Partial<CreateSegmentData>) => {
-    return api.put<Segment>(SEGMENT_ENDPOINTS.UPDATE(segmentId), data);
-  }, [api]);
-
-  const deleteSegment = useCallback(async (segmentId: number) => {
-    return api.delete(SEGMENT_ENDPOINTS.DELETE(segmentId));
-  }, [api]);
-
-  const getSegmentPlayers = useCallback(async (segmentId: number, page = 1, perPage = 20) => {
-    return api.get<PaginatedResponse<Player>>(`${SEGMENT_ENDPOINTS.PLAYERS(segmentId)}?page=${page}&per_page=${perPage}`);
-  }, [api]);
-
-  const addPlayerToSegment = useCallback(async (segmentId: number, playerId: number) => {
-    return api.post(SEGMENT_ENDPOINTS.ADD_PLAYER(segmentId), { player_id: playerId });
-  }, [api]);
-
-  const removePlayerFromSegment = useCallback(async (segmentId: number, playerId: number) => {
-    return api.delete(SEGMENT_ENDPOINTS.REMOVE_PLAYER(segmentId, playerId));
-  }, [api]);
-
-  const refreshDynamicSegment = useCallback(async (segmentId: number) => {
-    return api.post<Segment>(SEGMENT_ENDPOINTS.REFRESH(segmentId));
-  }, [api]);
-
-  const previewSegmentRules = useCallback(async (rules: CreateSegmentData['rules']) => {
-    return api.post<{ player_count: number; sample_players: Player[] }>(SEGMENT_ENDPOINTS.PREVIEW, { rules });
+  const removePlayerFromProgram = useCallback(async (programId: ID, playerId: ID) => {
+    return api.delete(PROGRAM_ENDPOINTS.REMOVE_PLAYER(programId, playerId), QUIET);
   }, [api]);
 
   return {
-    // Programs
     listPrograms,
     getProgram,
     createProgram,
@@ -147,22 +105,9 @@ export function useProgramsService() {
     activateProgram,
     pauseProgram,
     endProgram,
-    duplicateProgram,
-    getProgramStats,
     getProgramPlayers,
     addPlayerToProgram,
     addPlayersToProgram,
     removePlayerFromProgram,
-    // Segments
-    listSegments,
-    getSegment,
-    createSegment,
-    updateSegment,
-    deleteSegment,
-    getSegmentPlayers,
-    addPlayerToSegment,
-    removePlayerFromSegment,
-    refreshDynamicSegment,
-    previewSegmentRules,
   };
 }

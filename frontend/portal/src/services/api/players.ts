@@ -1,6 +1,9 @@
-import { useApi } from '@/hooks/useApi';
+import { useApi, type ApiOptions } from '@/hooks/useApi';
 import { useCallback } from 'react';
-import {
+import type {
+  ID,
+  CursorPage,
+  CursorParams,
   Player,
   PlayerBadge,
   PlayerMission,
@@ -8,71 +11,122 @@ import {
   PlayerReward,
   CreatePlayerData,
   UpdatePlayerData,
-  PaginatedResponse,
   PlayerFilters,
+  PlayerProgressSummary,
+  PlayerXpGrantEntry,
+  PlayerXpGrantData,
+  PlayerXpGrantResult,
+  PlayerBadgeAwardResult,
+  Wallet,
+  WalletTransaction,
+  WalletTransactionFilters,
+  CreditWalletData,
+  DebitWalletData,
+  TransferPointsData,
+  TransferPointsResult,
 } from './types';
-import { PLAYER_ENDPOINTS, BADGE_ENDPOINTS, MISSION_ENDPOINTS, STREAK_ENDPOINTS, REWARD_ENDPOINTS } from '@/lib/api-routes';
+import { PLAYER_ENDPOINTS, WALLET_ENDPOINTS, BADGE_ENDPOINTS, toQuery } from '@/lib/api-routes';
+
+/** Money mutations report their own errors (insufficient_balance etc.) in the UI. */
+const MONEY_OPTIONS: ApiOptions = { idempotencyKey: true, showErrorToast: false };
 
 export function usePlayersService() {
   const api = useApi();
 
-  // List players with filters and pagination
+  // ---------- players ----------
+
   const listPlayers = useCallback(async (filters?: PlayerFilters) => {
-    const params = new URLSearchParams();
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-    }
-    const query = params.toString();
-    return api.get<PaginatedResponse<Player>>(`${PLAYER_ENDPOINTS.LIST}${query ? `?${query}` : ''}`);
+    return api.get<CursorPage<Player>>(`${PLAYER_ENDPOINTS.LIST}${toQuery(filters)}`);
   }, [api]);
 
-  // Get single player by ID
-  const getPlayer = useCallback(async (playerId: number) => {
+  const getPlayer = useCallback(async (playerId: ID) => {
     return api.get<Player>(PLAYER_ENDPOINTS.SHOW(playerId));
   }, [api]);
 
-  // Get player by external ID
   const getPlayerByExternalId = useCallback(async (externalId: string) => {
-    return api.get<Player>(`/api/v1/players/external/${encodeURIComponent(externalId)}`);
+    return api.get<Player>(PLAYER_ENDPOINTS.BY_EXTERNAL_ID(externalId));
   }, [api]);
 
-  // Create player
   const createPlayer = useCallback(async (data: CreatePlayerData) => {
-    return api.post<Player>(PLAYER_ENDPOINTS.CREATE, data);
+    return api.post<Player>(PLAYER_ENDPOINTS.CREATE, data, { showErrorToast: false });
   }, [api]);
 
-  // Update player
-  const updatePlayer = useCallback(async (playerId: number, data: UpdatePlayerData) => {
-    return api.put<Player>(PLAYER_ENDPOINTS.UPDATE(playerId), data);
+  const updatePlayer = useCallback(async (playerId: ID, data: UpdatePlayerData) => {
+    return api.patch<Player>(PLAYER_ENDPOINTS.UPDATE(playerId), data, { showErrorToast: false });
   }, [api]);
 
-  // Delete player
-  const deletePlayer = useCallback(async (playerId: number) => {
+  const deletePlayer = useCallback(async (playerId: ID) => {
     return api.delete(PLAYER_ENDPOINTS.DELETE(playerId));
   }, [api]);
 
-  // Get player badges (via badges endpoint)
-  const getPlayerBadges = useCallback(async (playerId: number) => {
-    return api.get<PlayerBadge[]>(`${BADGE_ENDPOINTS.LIST}/players/${playerId}/badges`);
+  const activatePlayer = useCallback(async (playerId: ID) => {
+    return api.post<Player>(PLAYER_ENDPOINTS.ACTIVATE(playerId));
   }, [api]);
 
-  // Get player missions (via missions endpoint per API spec)
-  const getPlayerMissions = useCallback(async (playerId: number) => {
-    return api.get<PlayerMission[]>(`${MISSION_ENDPOINTS.LIST}/players/${playerId}/missions`);
+  const deactivatePlayer = useCallback(async (playerId: ID) => {
+    return api.post<Player>(PLAYER_ENDPOINTS.DEACTIVATE(playerId));
   }, [api]);
 
-  // Get player streaks (via streaks endpoint per API spec)
-  const getPlayerStreaks = useCallback(async (playerId: number) => {
-    return api.get<PlayerStreak[]>(`${STREAK_ENDPOINTS.LIST}/players/${playerId}/streaks`);
+  // ---------- per-player views (owned by other modules) ----------
+
+  const getPlayerBadges = useCallback(async (playerId: ID, params?: CursorParams) => {
+    return api.get<CursorPage<PlayerBadge>>(`${PLAYER_ENDPOINTS.BADGES(playerId)}${toQuery(params)}`);
   }, [api]);
 
-  // Get player rewards (via rewards endpoint per API spec)
-  const getPlayerRewards = useCallback(async (playerId: number) => {
-    return api.get<PlayerReward[]>(`${REWARD_ENDPOINTS.LIST}/players/${playerId}/rewards`);
+  const getPlayerMissions = useCallback(async (playerId: ID, params?: CursorParams) => {
+    return api.get<CursorPage<PlayerMission>>(`${PLAYER_ENDPOINTS.MISSIONS(playerId)}${toQuery(params)}`);
+  }, [api]);
+
+  const getPlayerStreaks = useCallback(async (playerId: ID, params?: CursorParams) => {
+    return api.get<CursorPage<PlayerStreak>>(`${PLAYER_ENDPOINTS.STREAKS(playerId)}${toQuery(params)}`);
+  }, [api]);
+
+  /** Reward claims (GET /players/{id}/reward-claims). */
+  const getPlayerRewards = useCallback(async (playerId: ID, params?: CursorParams) => {
+    return api.get<CursorPage<PlayerReward>>(`${PLAYER_ENDPOINTS.REWARD_CLAIMS(playerId)}${toQuery(params)}`);
+  }, [api]);
+
+  const getPlayerProgress = useCallback(async (playerId: ID) => {
+    return api.get<PlayerProgressSummary>(PLAYER_ENDPOINTS.PROGRESS(playerId));
+  }, [api]);
+
+  const getPlayerXpGrants = useCallback(async (playerId: ID, params?: CursorParams) => {
+    return api.get<CursorPage<PlayerXpGrantEntry>>(`${PLAYER_ENDPOINTS.XP_GRANTS(playerId)}${toQuery(params)}`);
+  }, [api]);
+
+  const grantPlayerXp = useCallback(async (playerId: ID, data: PlayerXpGrantData) => {
+    return api.post<PlayerXpGrantResult>(PLAYER_ENDPOINTS.XP(playerId), data, { idempotencyKey: true });
+  }, [api]);
+
+  const awardPlayerBadge = useCallback(async (playerId: ID, badgeId: ID) => {
+    return api.post<PlayerBadgeAwardResult>(BADGE_ENDPOINTS.AWARD(badgeId), { player_id: playerId }, { idempotencyKey: true });
+  }, [api]);
+
+  const revokePlayerBadge = useCallback(async (playerId: ID, badgeId: ID) => {
+    return api.delete(BADGE_ENDPOINTS.REVOKE(badgeId, playerId));
+  }, [api]);
+
+  // ---------- wallet ----------
+
+  /** Returns a zero view with opened=false when the player has no wallet yet. */
+  const getPlayerWallet = useCallback(async (playerId: ID) => {
+    return api.get<Wallet>(PLAYER_ENDPOINTS.WALLET(playerId));
+  }, [api]);
+
+  const getWalletTransactions = useCallback(async (playerId: ID, filters?: WalletTransactionFilters) => {
+    return api.get<CursorPage<WalletTransaction>>(`${PLAYER_ENDPOINTS.WALLET_TRANSACTIONS(playerId)}${toQuery(filters)}`);
+  }, [api]);
+
+  const creditWallet = useCallback(async ({ player_id, ...body }: CreditWalletData) => {
+    return api.post<WalletTransaction>(PLAYER_ENDPOINTS.WALLET_CREDIT(player_id), body, MONEY_OPTIONS);
+  }, [api]);
+
+  const debitWallet = useCallback(async ({ player_id, ...body }: DebitWalletData) => {
+    return api.post<WalletTransaction>(PLAYER_ENDPOINTS.WALLET_DEBIT(player_id), body, MONEY_OPTIONS);
+  }, [api]);
+
+  const transferPoints = useCallback(async (data: TransferPointsData) => {
+    return api.post<TransferPointsResult>(WALLET_ENDPOINTS.TRANSFER, data, MONEY_OPTIONS);
   }, [api]);
 
   return {
@@ -82,9 +136,21 @@ export function usePlayersService() {
     createPlayer,
     updatePlayer,
     deletePlayer,
+    activatePlayer,
+    deactivatePlayer,
     getPlayerBadges,
     getPlayerMissions,
     getPlayerStreaks,
     getPlayerRewards,
+    getPlayerProgress,
+    getPlayerXpGrants,
+    grantPlayerXp,
+    awardPlayerBadge,
+    revokePlayerBadge,
+    getPlayerWallet,
+    getWalletTransactions,
+    creditWallet,
+    debitWallet,
+    transferPoints,
   };
 }

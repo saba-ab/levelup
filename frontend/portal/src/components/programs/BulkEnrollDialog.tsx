@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Upload, Search, Check, X, Loader2, FileSpreadsheet, Users, AlertCircle } from 'lucide-react';
+import { Upload, Search, Check, Loader2, FileSpreadsheet, Users, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,23 +12,33 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { usePlayersQuery } from '@/services/queries/players';
-import type { Player } from '@/services/api/types';
+import type { BulkEnrollResult, ID } from '@/services/api/types';
 
 interface BulkEnrollDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  enrolledPlayerIds: Set<number>;
-  onEnroll: (playerIds: number[]) => Promise<void>;
+  /** Players known to be enrolled (hidden from the picker). */
+  enrolledPlayerIds: Set<ID>;
+  /** Enrolls the ids; resolves with per-player failures so the dialog can list them. */
+  onEnroll: (playerIds: ID[]) => Promise<BulkEnrollResult | undefined>;
   isLoading: boolean;
   programName?: string;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const FAILURE_MESSAGES: Record<string, string> = {
+  player_not_found: 'player not found',
+  player_inactive: 'player is inactive',
+  program_not_accepting_players: 'program is not accepting players',
+};
 
 interface CSVParseResult {
   playerIds: string[];
@@ -45,18 +55,19 @@ export function BulkEnrollDialog({
 }: BulkEnrollDialogProps) {
   const [activeTab, setActiveTab] = useState<'select' | 'csv'>('select');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<ID>>(new Set());
+  const [failures, setFailures] = useState<BulkEnrollResult['failures']>([]);
   const [csvPlayerIds, setCsvPlayerIds] = useState<string[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
   const [csvFileName, setCsvFileName] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: playersData, isLoading: playersLoading } = usePlayersQuery({
-    search: searchQuery,
-    per_page: 50,
+    limit: 100,
+    search: searchQuery || undefined,
   });
 
-  const allPlayers = playersData?.data || [];
+  const allPlayers = useMemo(() => playersData?.data ?? [], [playersData]);
   
   // Filter out already enrolled players
   const availablePlayers = useMemo(() => 
@@ -64,7 +75,12 @@ export function BulkEnrollDialog({
     [allPlayers, enrolledPlayerIds]
   );
 
-  const togglePlayer = (playerId: number) => {
+  const playerLabel = (playerId: ID) => {
+    const player = allPlayers.find(p => p.id === playerId);
+    return player ? player.display_name || player.external_id : playerId;
+  };
+
+  const togglePlayer = (playerId: ID) => {
     setSelectedPlayerIds(prev => {
       const next = new Set(prev);
       if (next.has(playerId)) {
@@ -120,24 +136,44 @@ export function BulkEnrollDialog({
     reader.readAsText(file);
   };
 
+  /** CSV rows are player UUIDs, or external ids matched against the loaded players. */
+  const resolveCsvIds = (): { ids: ID[]; unmatched: string[] } => {
+    const ids: ID[] = [];
+    const unmatched: string[] = [];
+    csvPlayerIds.forEach(value => {
+      if (UUID_RE.test(value)) {
+        ids.push(value);
+        return;
+      }
+      const match = allPlayers.find(p => p.external_id === value);
+      if (match) ids.push(match.id);
+      else unmatched.push(value);
+    });
+    return { ids: Array.from(new Set(ids)), unmatched };
+  };
+
   const handleEnroll = async () => {
-    let playerIdsToEnroll: number[] = [];
+    let playerIdsToEnroll: ID[];
 
     if (activeTab === 'select') {
       playerIdsToEnroll = Array.from(selectedPlayerIds);
     } else {
-      // For CSV, we need to match external_ids to player ids
-      // This is a simplified version - in production you'd want a lookup API
-      const matchedPlayers = allPlayers.filter(p => 
-        csvPlayerIds.includes(p.external_id) || csvPlayerIds.includes(String(p.id))
-      );
-      playerIdsToEnroll = matchedPlayers.map(p => p.id);
+      const { ids, unmatched } = resolveCsvIds();
+      playerIdsToEnroll = ids;
+      setCsvErrors(unmatched.map(v => `${v} (not a player id or a loaded external id)`));
     }
 
     if (playerIdsToEnroll.length === 0) return;
 
-    await onEnroll(playerIdsToEnroll);
-    
+    const result = await onEnroll(playerIdsToEnroll);
+    const failed = result?.failures ?? [];
+    setFailures(failed);
+    if (failed.length > 0) {
+      // Keep only the failed players selected so they can be retried.
+      setSelectedPlayerIds(new Set(failed.map(f => f.playerId)));
+      return;
+    }
+
     // Reset state
     setSelectedPlayerIds(new Set());
     setCsvPlayerIds([]);
@@ -154,6 +190,7 @@ export function BulkEnrollDialog({
     setCsvErrors([]);
     setCsvFileName('');
     setSearchQuery('');
+    setFailures([]);
     onOpenChange(false);
   };
 
@@ -242,7 +279,6 @@ export function BulkEnrollDialog({
                         onCheckedChange={() => togglePlayer(player.id)}
                       />
                       <Avatar className="w-8 h-8">
-                        <AvatarImage src={player.avatar_url} />
                         <AvatarFallback className="text-xs">
                           {player.display_name?.substring(0, 2).toUpperCase() || player.external_id.substring(0, 2).toUpperCase()}
                         </AvatarFallback>
@@ -251,7 +287,7 @@ export function BulkEnrollDialog({
                         <p className="font-medium text-sm truncate">
                           {player.display_name || player.external_id}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">{player.email}</p>
+                        <p className="text-xs text-muted-foreground truncate">{player.email || player.external_id}</p>
                       </div>
                     </div>
                   ))
@@ -280,7 +316,7 @@ export function BulkEnrollDialog({
                 {csvFileName || 'Click to upload CSV'}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                CSV with player IDs or external IDs (one per row)
+                CSV with player IDs (UUIDs) or external IDs (one per row)
               </p>
             </div>
 
@@ -297,7 +333,7 @@ export function BulkEnrollDialog({
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {csvErrors.length} errors found: {csvErrors.slice(0, 3).join(', ')}
+                  {csvErrors.length} not matched: {csvErrors.slice(0, 3).join(', ')}
                   {csvErrors.length > 3 && ` and ${csvErrors.length - 3} more`}
                 </AlertDescription>
               </Alert>
@@ -324,6 +360,22 @@ export function BulkEnrollDialog({
             )}
           </TabsContent>
         </Tabs>
+
+        {failures.length > 0 && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <p className="font-medium">{failures.length} player{failures.length !== 1 ? 's' : ''} could not be enrolled:</p>
+              <ul className="mt-1 max-h-32 overflow-y-auto text-sm list-disc pl-4">
+                {failures.map(f => (
+                  <li key={f.playerId}>
+                    {playerLabel(f.playerId)}: {(f.code && FAILURE_MESSAGES[f.code]) || f.error}
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={handleClose}>

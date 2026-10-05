@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useApi } from "@/hooks/useApi";
+import { PLAYER_ENDPOINTS, RULE_ENDPOINTS, toQuery } from "@/lib/api-routes";
+import type { CursorPage, Rule } from "@/services/api/types";
 import {
   CommandDialog,
   CommandEmpty,
@@ -29,7 +33,8 @@ import {
   Settings,
   Search,
   User,
-  Gamepad2,
+  Zap,
+  BookOpen,
 } from "lucide-react";
 
 const pages = [
@@ -43,36 +48,24 @@ const pages = [
   { name: "Streaks", path: "/mechanics/streaks", icon: Flame, keywords: ["daily", "consecutive"] },
   { name: "Leaderboards", path: "/mechanics/leaderboards", icon: Trophy, keywords: ["rankings", "competition"] },
   { name: "Rewards", path: "/mechanics/rewards", icon: Gift, keywords: ["catalog", "redemption", "prizes"] },
-  { name: "Users", path: "/users", icon: Users, keywords: ["members", "players", "accounts"] },
+  { name: "Events", path: "/events", icon: Zap, keywords: ["triggers", "activities", "event types"] },
+  { name: "Players", path: "/players", icon: Users, keywords: ["members", "users", "accounts"] },
   { name: "Segments", path: "/segments", icon: Filter, keywords: ["groups", "cohorts", "targeting"] },
   { name: "Analytics", path: "/analytics", icon: BarChart3, keywords: ["reports", "metrics", "data"] },
   { name: "Notifications", path: "/notifications", icon: Bell, keywords: ["alerts", "messages", "email", "push"] },
   { name: "Integrations", path: "/integrations", icon: Plug, keywords: ["api", "webhooks", "sdk"] },
   { name: "Audit & Logs", path: "/audit-logs", icon: FileText, keywords: ["history", "events", "decisions"] },
-  { name: "Settings", path: "/settings", icon: Settings, keywords: ["preferences", "configuration"] },
+  { name: "Documentation", path: "/docs", icon: BookOpen, keywords: ["api", "guides", "help"] },
+  { name: "Settings", path: "/settings", icon: Settings, keywords: ["preferences", "configuration", "team"] },
 ];
 
-const mockUsers = [
-  { id: "1", name: "John Doe", email: "john@example.com" },
-  { id: "2", name: "Jane Smith", email: "jane@example.com" },
-  { id: "3", name: "Mike Johnson", email: "mike@example.com" },
-  { id: "4", name: "Sarah Wilson", email: "sarah@example.com" },
-  { id: "5", name: "Chris Brown", email: "chris@example.com" },
-];
-
-const mockSegments = [
-  { id: "1", name: "High Value Users", userCount: 1234 },
-  { id: "2", name: "At-Risk Users", userCount: 567 },
-  { id: "3", name: "Power Users", userCount: 234 },
-  { id: "4", name: "New Users", userCount: 890 },
-];
-
-const mockRules = [
-  { id: "1", name: "Welcome Bonus", trigger: "user.registered" },
-  { id: "2", name: "Purchase Reward", trigger: "purchase.completed" },
-  { id: "3", name: "Referral Bonus", trigger: "referral.completed" },
-  { id: "4", name: "Daily Login Streak", trigger: "user.login" },
-];
+/** Minimal player shape the palette needs. */
+interface PlayerHit {
+  id: string;
+  external_id: string;
+  display_name?: string | null;
+  email?: string | null;
+}
 
 interface CommandPaletteProps {
   open?: boolean;
@@ -85,6 +78,25 @@ export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPa
   
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
+  const api = useApi();
+
+  // Loaded only while the palette is open; cmdk filters them client-side.
+  const { data: players = [] } = useQuery({
+    queryKey: ["command-palette", "players"],
+    queryFn: async () =>
+      (await api.get<CursorPage<PlayerHit>>(`${PLAYER_ENDPOINTS.LIST}${toQuery({ limit: 50 })}`, { showErrorToast: false }))
+        .data?.data ?? [],
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const { data: rules = [] } = useQuery({
+    queryKey: ["command-palette", "rules"],
+    queryFn: async () =>
+      (await api.get<CursorPage<Rule>>(`${RULE_ENDPOINTS.LIST}${toQuery({ limit: 50 })}`, { showErrorToast: false }))
+        .data?.data ?? [],
+    enabled: open,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -96,7 +108,7 @@ export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPa
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, []);
+  }, [setOpen]);
 
   const runCommand = (command: () => void) => {
     setOpen(false);
@@ -105,7 +117,7 @@ export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPa
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search pages, users, segments, rules..." />
+      <CommandInput placeholder="Search pages, players, rules..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         
@@ -124,53 +136,43 @@ export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPa
 
         <CommandSeparator />
 
-        <CommandGroup heading="Users">
-          {mockUsers.map((user) => (
-            <CommandItem
-              key={user.id}
-              value={`user ${user.name} ${user.email}`}
-              onSelect={() => runCommand(() => navigate(`/users?search=${encodeURIComponent(user.email)}`))}
-            >
-              <User className="mr-2 h-4 w-4" />
-              <span>{user.name}</span>
-              <span className="ml-2 text-xs text-muted-foreground">{user.email}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {players.length > 0 && (
+          <>
+            <CommandGroup heading="Players">
+              {players.map((player) => (
+                <CommandItem
+                  key={player.id}
+                  value={`player ${player.display_name ?? ""} ${player.external_id} ${player.email ?? ""} ${player.id}`}
+                  onSelect={() => runCommand(() => navigate(`/players/${player.id}`))}
+                >
+                  <User className="mr-2 h-4 w-4" />
+                  <span>{player.display_name || player.external_id}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{player.email ?? player.external_id}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
 
-        <CommandSeparator />
-
-        <CommandGroup heading="Segments">
-          {mockSegments.map((segment) => (
-            <CommandItem
-              key={segment.id}
-              value={`segment ${segment.name}`}
-              onSelect={() => runCommand(() => navigate("/segments"))}
-            >
-              <Filter className="mr-2 h-4 w-4" />
-              <span>{segment.name}</span>
-              <span className="ml-2 text-xs text-muted-foreground">{segment.userCount} users</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-
-        <CommandSeparator />
-
-        <CommandGroup heading="Rules">
-          {mockRules.map((rule) => (
-            <CommandItem
-              key={rule.id}
-              value={`rule ${rule.name} ${rule.trigger}`}
-              onSelect={() => runCommand(() => navigate("/rules"))}
-            >
-              <GitBranch className="mr-2 h-4 w-4" />
-              <span>{rule.name}</span>
-              <span className="ml-2 text-xs text-muted-foreground">{rule.trigger}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-
-        <CommandSeparator />
+        {rules.length > 0 && (
+          <>
+            <CommandGroup heading="Rules">
+              {rules.map((rule) => (
+                <CommandItem
+                  key={rule.id}
+                  value={`rule ${rule.name} ${rule.trigger_event} ${rule.id}`}
+                  onSelect={() => runCommand(() => navigate(`/rules/${rule.id}`))}
+                >
+                  <GitBranch className="mr-2 h-4 w-4" />
+                  <span>{rule.name}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{rule.trigger_event}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
 
         <CommandGroup heading="Quick Actions">
           <CommandItem
@@ -181,18 +183,18 @@ export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPa
             <span>Create New Rule</span>
           </CommandItem>
           <CommandItem
-            value="create new segment"
-            onSelect={() => runCommand(() => navigate("/segments"))}
+            value="simulate rules decisions"
+            onSelect={() => runCommand(() => navigate("/rules"))}
           >
-            <Filter className="mr-2 h-4 w-4" />
-            <span>Create New Segment</span>
+            <Search className="mr-2 h-4 w-4" />
+            <span>Simulate Rules / View Decisions</span>
           </CommandItem>
           <CommandItem
-            value="view analytics"
-            onSelect={() => runCommand(() => navigate("/analytics"))}
+            value="activity log send test activity"
+            onSelect={() => runCommand(() => navigate("/events"))}
           >
-            <BarChart3 className="mr-2 h-4 w-4" />
-            <span>View Analytics</span>
+            <Zap className="mr-2 h-4 w-4" />
+            <span>Activity Log</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>

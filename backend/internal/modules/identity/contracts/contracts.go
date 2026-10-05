@@ -121,11 +121,14 @@ var (
 	PermTenantDelete     = authz.Permission{Module: Module, Action: "tenant_delete"} // owner role only
 	// Platform-level: only RolePlatformAdmin, on /platform routes.
 	PermPlatformTenantsManage = authz.Permission{Module: Module, Action: "platform_tenants_manage"}
+	// Create, list and revoke API keys (admin roles; humans only, ADR-0017).
+	PermAPIKeysManage = authz.Permission{Module: Module, Action: "api_keys_manage"}
 )
 
 var AllPermissions = []authz.Permission{
 	PermUsersViewAny, PermUsersCreate, PermUsersUpdate, PermUsersDelete, PermUsersAssignRoles,
 	PermTenantView, PermTenantUpdate, PermTenantDelete, PermPlatformTenantsManage,
+	PermAPIKeysManage,
 }
 
 // TenantSnapshot is what other modules may know about a tenant.

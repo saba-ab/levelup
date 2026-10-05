@@ -1,76 +1,135 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { ApiResponse, ValidationErrors } from '@/hooks/useApi';
 import { useMechanicsService } from '../api/mechanics';
+import { fetchAllPages } from '../api/pagination';
 import { queryKeys } from './keys';
-import {
-  Badge,
+import type {
+  ID,
+  CursorParams,
+  BadgeFilters,
   CreateBadgeData,
   UpdateBadgeData,
-  Level,
+  AwardBadgeData,
+  LevelFilters,
   CreateLevelData,
   UpdateLevelData,
-  Mission,
+  MissionFilters,
   CreateMissionData,
-  Streak,
-  CreateStreakData,
-  Leaderboard,
-  CreateLeaderboardData,
-  Reward,
-  CreateRewardData,
-  Rule,
-  CreateRuleData,
-  MechanicsFilters,
-  WalletTransactionFilters,
-  RuleExecutionFilters,
+  UpdateMissionData,
+  MissionAttemptFilters,
   StartMissionData,
   UpdateMissionProgressData,
+  CompleteMissionData,
+  StreakFilters,
+  CreateStreakData,
+  UpdateStreakData,
   RecordStreakActivityData,
+  LeaderboardFilters,
+  CreateLeaderboardData,
+  UpdateLeaderboardData,
+  LeaderboardEntriesParams,
+  RewardFilters,
+  CreateRewardData,
+  UpdateRewardData,
+  RewardClaim,
   ClaimRewardData,
-  CreditWalletData,
-  DebitWalletData,
-  TransferPointsData,
-  ExecuteRulesData,
-  AwardBadgeData,
 } from '../api/types';
+
+// ==================== ERRORS ====================
+
+/**
+ * A failed mechanics call. Carries the problem+json `code` so pages can
+ * branch on it (badge_already_earned, level_number_taken, ...).
+ */
+export class MechanicsApiError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+  readonly validationErrors: ValidationErrors | null;
+
+  constructor(message: string, code: string | null, status: number, validationErrors: ValidationErrors | null) {
+    super(message);
+    this.name = 'MechanicsApiError';
+    this.code = code;
+    this.status = status;
+    this.validationErrors = validationErrors;
+  }
+}
+
+function unwrap<T>(res: ApiResponse<T>, fallback: string): T {
+  if (!res.success) {
+    throw new MechanicsApiError(res.error || fallback, res.code, res.status, res.validationErrors);
+  }
+  return res.data as T;
+}
+
+/**
+ * Message for a failed mutation: a per-code override when the page has one,
+ * else the server's detail plus the first field error.
+ */
+export function describeMechanicsError(
+  err: unknown,
+  fallback: string,
+  codeMessages: Record<string, string> = {},
+): string {
+  if (err instanceof MechanicsApiError) {
+    if (err.code && codeMessages[err.code]) return codeMessages[err.code];
+    const fieldErrors = err.validationErrors
+      ? Object.entries(err.validationErrors).map(([field, msgs]) => `${field}: ${msgs.join(', ')}`)
+      : [];
+    return fieldErrors.length > 0 ? `${err.message} (${fieldErrors.join('; ')})` : err.message;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
+
+/** Query keys this module needs beyond ./keys (which is shared and frozen). */
+const localKeys = {
+  allBadges: (filters?: BadgeFilters) => [...queryKeys.badges.lists(), 'all', filters] as const,
+  missionAttempts: (missionId: ID, filters?: MissionAttemptFilters) =>
+    [...queryKeys.missions.detail(missionId), 'attempts', filters] as const,
+  rewardClaim: (claimId: ID) => [...queryKeys.rewards.all, 'claim', claimId] as const,
+  leaderboardEntries: (id: ID, params?: LeaderboardEntriesParams) =>
+    [...queryKeys.leaderboards.entries(id, params?.period, params?.cursor), params?.limit] as const,
+  leaderboardLists: () => [...queryKeys.leaderboards.list()] as const,
+};
 
 // ==================== BADGES ====================
 
-export function useBadgesQuery(filters?: MechanicsFilters) {
+/** One page of badges (?tier&category&active&limit&cursor). */
+export function useBadgesQuery(filters?: BadgeFilters) {
   const { listBadges } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.badges.list(filters),
-    queryFn: async () => {
-      const response = await listBadges(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch badges');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await listBadges(filters), 'Failed to fetch badges'),
   });
 }
 
-export function useBadgeQuery(badgeId: number) {
-  const { getBadge } = useMechanicsService();
+/** Every badge (walks all pages) for selects such as "badge reward". */
+export function useAllBadgesQuery(filters?: Omit<BadgeFilters, 'cursor' | 'limit'>) {
+  const { listBadges } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.allBadges(filters),
+    queryFn: async () =>
+      unwrap(
+        await fetchAllPages((cursor) => listBadges({ ...filters, limit: 100, cursor })),
+        'Failed to fetch badges',
+      ).data,
+  });
+}
 
+export function useBadgeQuery(badgeId: ID) {
+  const { getBadge } = useMechanicsService();
   return useQuery({
     queryKey: queryKeys.badges.detail(badgeId),
-    queryFn: async () => {
-      const response = await getBadge(badgeId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch badge');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getBadge(badgeId), 'Failed to fetch badge'),
     enabled: !!badgeId,
   });
 }
 
-export function usePlayerBadgesQuery(playerId: number) {
+export function usePlayerBadgesQuery(playerId: ID, params?: CursorParams) {
   const { getPlayerBadges } = useMechanicsService();
-
   return useQuery({
-    queryKey: queryKeys.badges.playerBadges(playerId),
-    queryFn: async () => {
-      const response = await getPlayerBadges(playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player badges');
-      return response.data!;
-    },
+    queryKey: [...queryKeys.badges.playerBadges(playerId), params],
+    queryFn: async () => unwrap(await getPlayerBadges(playerId, params), 'Failed to fetch player badges'),
     enabled: !!playerId,
   });
 }
@@ -78,46 +137,20 @@ export function usePlayerBadgesQuery(playerId: number) {
 export function useCreateBadgeMutation() {
   const queryClient = useQueryClient();
   const { createBadge } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: CreateBadgeData) => {
-      const response = await createBadge(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create badge');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.badges.lists() });
-    },
+    mutationFn: async (data: CreateBadgeData) => unwrap(await createBadge(data), 'Failed to create badge'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.badges.lists() }),
   });
 }
 
 export function useUpdateBadgeMutation() {
   const queryClient = useQueryClient();
   const { updateBadge } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ badgeId, data }: { badgeId: number; data: UpdateBadgeData }) => {
-      const response = await updateBadge(badgeId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update badge');
-      return response.data!;
-    },
-    onMutate: async ({ badgeId, data }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.badges.detail(badgeId) });
-      const previousBadge = queryClient.getQueryData<Badge>(queryKeys.badges.detail(badgeId));
-
-      if (previousBadge) {
-        queryClient.setQueryData<Badge>(queryKeys.badges.detail(badgeId), { ...previousBadge, ...data });
-      }
-
-      return { previousBadge };
-    },
-    onError: (err, { badgeId }, context) => {
-      if (context?.previousBadge) {
-        queryClient.setQueryData(queryKeys.badges.detail(badgeId), context.previousBadge);
-      }
-    },
-    onSettled: (data, error, { badgeId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.badges.detail(badgeId) });
+    mutationFn: async ({ badgeId, data }: { badgeId: ID; data: UpdateBadgeData }) =>
+      unwrap(await updateBadge(badgeId, data), 'Failed to update badge'),
+    onSuccess: (badge, { badgeId }) => {
+      queryClient.setQueryData(queryKeys.badges.detail(badgeId), badge);
       queryClient.invalidateQueries({ queryKey: queryKeys.badges.lists() });
     },
   });
@@ -126,30 +159,22 @@ export function useUpdateBadgeMutation() {
 export function useDeleteBadgeMutation() {
   const queryClient = useQueryClient();
   const { deleteBadge } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (badgeId: number) => {
-      const response = await deleteBadge(badgeId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete badge');
+    mutationFn: async (badgeId: ID) => {
+      unwrap(await deleteBadge(badgeId), 'Failed to delete badge');
       return badgeId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.badges.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.badges.all }),
   });
 }
 
+/** 409 codes: badge_already_earned, badge_max_awards_reached, badge_inactive. */
 export function useAwardBadgeMutation() {
   const queryClient = useQueryClient();
   const { awardBadge } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: AwardBadgeData) => {
-      const response = await awardBadge(data);
-      if (!response.success) throw new Error(response.error || 'Failed to award badge');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
+    mutationFn: async (data: AwardBadgeData) => unwrap(await awardBadge(data), 'Failed to award badge'),
+    onSuccess: (_result, { player_id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(player_id) });
     },
@@ -159,151 +184,109 @@ export function useAwardBadgeMutation() {
 export function useRevokeBadgeMutation() {
   const queryClient = useQueryClient();
   const { revokeBadge } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ playerId, badgeId }: { playerId: number; badgeId: number }) => {
-      const response = await revokeBadge(playerId, badgeId);
-      if (!response.success) throw new Error(response.error || 'Failed to revoke badge');
+    mutationFn: async ({ playerId, badgeId }: { playerId: ID; badgeId: ID }) => {
+      unwrap(await revokeBadge(playerId, badgeId), 'Failed to revoke badge');
     },
-    onSuccess: (data, { playerId }) => {
+    onSuccess: (_result, { playerId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(playerId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(playerId) });
     },
   });
 }
 
-
 // ==================== LEVELS ====================
 
-export function useLevelsQuery(filters?: MechanicsFilters) {
+/** The whole level ladder, sorted by level_number. */
+export function useLevelsQuery(filters?: Omit<LevelFilters, 'cursor' | 'limit'>) {
   const { listLevels } = useMechanicsService();
-
   return useQuery({
-    queryKey: queryKeys.levels.list(filters),
+    queryKey: [...queryKeys.levels.lists(), filters],
     queryFn: async () => {
-      const response = await listLevels(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch levels');
-      return response.data!;
+      const page = unwrap(
+        await fetchAllPages((cursor) => listLevels({ ...filters, limit: 100, cursor })),
+        'Failed to fetch levels',
+      );
+      return [...page.data].sort((a, b) => a.level_number - b.level_number);
     },
   });
 }
 
-export function useLevelQuery(levelId: number) {
+export function useLevelQuery(levelId: ID) {
   const { getLevel } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.levels.detail(levelId),
-    queryFn: async () => {
-      const response = await getLevel(levelId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch level');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getLevel(levelId), 'Failed to fetch level'),
     enabled: !!levelId,
   });
 }
 
+/** 409 level_number_taken; 422 xp_required_not_increasing. */
 export function useCreateLevelMutation() {
   const queryClient = useQueryClient();
   const { createLevel } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: CreateLevelData) => {
-      const response = await createLevel(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create level');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.levels.lists() });
-    },
+    mutationFn: async (data: CreateLevelData) => unwrap(await createLevel(data), 'Failed to create level'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.levels.all }),
   });
 }
 
 export function useUpdateLevelMutation() {
   const queryClient = useQueryClient();
   const { updateLevel } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ levelId, data }: { levelId: number; data: UpdateLevelData }) => {
-      const response = await updateLevel(levelId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update level');
-      return response.data!;
-    },
-    onMutate: async ({ levelId, data }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.levels.detail(levelId) });
-      const previousLevel = queryClient.getQueryData<Level>(queryKeys.levels.detail(levelId));
-
-      if (previousLevel) {
-        queryClient.setQueryData<Level>(queryKeys.levels.detail(levelId), { ...previousLevel, ...data });
-      }
-
-      return { previousLevel };
-    },
-    onError: (err, { levelId }, context) => {
-      if (context?.previousLevel) {
-        queryClient.setQueryData(queryKeys.levels.detail(levelId), context.previousLevel);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.levels.all });
-    },
+    mutationFn: async ({ levelId, data }: { levelId: ID; data: UpdateLevelData }) =>
+      unwrap(await updateLevel(levelId, data), 'Failed to update level'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.levels.all }),
   });
 }
 
 export function useDeleteLevelMutation() {
   const queryClient = useQueryClient();
   const { deleteLevel } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (levelId: number) => {
-      const response = await deleteLevel(levelId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete level');
+    mutationFn: async (levelId: ID) => {
+      unwrap(await deleteLevel(levelId), 'Failed to delete level');
       return levelId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.levels.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.levels.all }),
   });
 }
 
 // ==================== MISSIONS ====================
 
-export function useMissionsQuery(filters?: MechanicsFilters) {
+export function useMissionsQuery(filters?: MissionFilters) {
   const { listMissions } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.missions.list(filters),
-    queryFn: async () => {
-      const response = await listMissions(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch missions');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await listMissions(filters), 'Failed to fetch missions'),
   });
 }
 
-export function useMissionQuery(missionId: number) {
+export function useMissionQuery(missionId: ID) {
   const { getMission } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.missions.detail(missionId),
-    queryFn: async () => {
-      const response = await getMission(missionId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch mission');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getMission(missionId), 'Failed to fetch mission'),
     enabled: !!missionId,
   });
 }
 
-export function usePlayerMissionsQuery(playerId: number) {
-  const { getPlayerMissions } = useMechanicsService();
-
+/** Attempts at one mission (?player_id&status&limit&cursor). */
+export function useMissionAttemptsQuery(missionId: ID, filters?: MissionAttemptFilters) {
+  const { listMissionAttempts } = useMechanicsService();
   return useQuery({
-    queryKey: queryKeys.missions.playerMissions(playerId),
-    queryFn: async () => {
-      const response = await getPlayerMissions(playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player missions');
-      return response.data!;
-    },
+    queryKey: localKeys.missionAttempts(missionId, filters),
+    queryFn: async () => unwrap(await listMissionAttempts(missionId, filters), 'Failed to fetch attempts'),
+    enabled: !!missionId,
+  });
+}
+
+export function usePlayerMissionsQuery(playerId: ID, params?: CursorParams) {
+  const { getPlayerMissions } = useMechanicsService();
+  return useQuery({
+    queryKey: [...queryKeys.missions.playerMissions(playerId), params],
+    queryFn: async () => unwrap(await getPlayerMissions(playerId, params), 'Failed to fetch player missions'),
     enabled: !!playerId,
   });
 }
@@ -311,31 +294,21 @@ export function usePlayerMissionsQuery(playerId: number) {
 export function useCreateMissionMutation() {
   const queryClient = useQueryClient();
   const { createMission } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: CreateMissionData) => {
-      const response = await createMission(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create mission');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.lists() });
-    },
+    mutationFn: async (data: CreateMissionData) => unwrap(await createMission(data), 'Failed to create mission'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.missions.lists() }),
   });
 }
 
 export function useUpdateMissionMutation() {
   const queryClient = useQueryClient();
   const { updateMission } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ missionId, data }: { missionId: number; data: Partial<CreateMissionData> }) => {
-      const response = await updateMission(missionId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update mission');
-      return response.data!;
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.all });
+    mutationFn: async ({ missionId, data }: { missionId: ID; data: UpdateMissionData }) =>
+      unwrap(await updateMission(missionId, data), 'Failed to update mission'),
+    onSuccess: (mission, { missionId }) => {
+      queryClient.setQueryData(queryKeys.missions.detail(missionId), mission);
+      queryClient.invalidateQueries({ queryKey: queryKeys.missions.lists() });
     },
   });
 }
@@ -343,122 +316,89 @@ export function useUpdateMissionMutation() {
 export function useDeleteMissionMutation() {
   const queryClient = useQueryClient();
   const { deleteMission } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (missionId: number) => {
-      const response = await deleteMission(missionId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete mission');
+    mutationFn: async (missionId: ID) => {
+      unwrap(await deleteMission(missionId), 'Failed to delete mission');
       return missionId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.missions.all }),
   });
 }
 
-export function useStartMissionMutation() {
+function useInvalidateMissionPlayer() {
   const queryClient = useQueryClient();
-  const { startMission } = useMechanicsService();
+  return (missionId: ID, playerId: ID) => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.missions.detail(missionId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(playerId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.players.missions(playerId) });
+  };
+}
 
+/** 409 mission_not_available / mission_limit_reached / mission_already_started. */
+export function useStartMissionMutation() {
+  const { startMission } = useMechanicsService();
+  const invalidate = useInvalidateMissionPlayer();
   return useMutation({
-    mutationFn: async (data: StartMissionData) => {
-      const response = await startMission(data);
-      if (!response.success) throw new Error(response.error || 'Failed to start mission');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(player_id) });
-    },
+    mutationFn: async (data: StartMissionData) => unwrap(await startMission(data), 'Failed to start mission'),
+    onSuccess: (_attempt, { mission_id, player_id }) => invalidate(mission_id, player_id),
   });
 }
 
 export function useUpdateMissionProgressMutation() {
-  const queryClient = useQueryClient();
   const { updateMissionProgress } = useMechanicsService();
-
+  const invalidate = useInvalidateMissionPlayer();
   return useMutation({
-    mutationFn: async ({ playerId, missionId, data }: { playerId: number; missionId: number; data: UpdateMissionProgressData }) => {
-      const response = await updateMissionProgress(playerId, missionId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update mission progress');
-      return response.data!;
-    },
-    onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(playerId) });
-    },
+    mutationFn: async (data: UpdateMissionProgressData) =>
+      unwrap(await updateMissionProgress(data), 'Failed to update mission progress'),
+    onSuccess: (_result, { mission_id, player_id }) => invalidate(mission_id, player_id),
   });
 }
 
+/** 409 mission_not_completed when the target is not reached. */
 export function useCompleteMissionMutation() {
-  const queryClient = useQueryClient();
   const { completeMission } = useMechanicsService();
-
+  const invalidate = useInvalidateMissionPlayer();
   return useMutation({
-    mutationFn: async ({ playerId, missionId }: { playerId: number; missionId: number }) => {
-      const response = await completeMission(playerId, missionId);
-      if (!response.success) throw new Error(response.error || 'Failed to complete mission');
-      return response.data!;
-    },
-    onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(playerId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(playerId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.level(playerId) });
-    },
+    mutationFn: async (data: CompleteMissionData) =>
+      unwrap(await completeMission(data), 'Failed to complete mission'),
+    onSuccess: (_attempt, { mission_id, player_id }) => invalidate(mission_id, player_id),
   });
 }
 
 // ==================== STREAKS ====================
 
-export function useStreaksQuery(filters?: MechanicsFilters) {
+export function useStreaksQuery(filters?: StreakFilters) {
   const { listStreaks } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.streaks.list(filters),
-    queryFn: async () => {
-      const response = await listStreaks(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch streaks');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await listStreaks(filters), 'Failed to fetch streaks'),
   });
 }
 
-export function useStreakQuery(streakId: number) {
+export function useStreakQuery(streakId: ID) {
   const { getStreak } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.streaks.detail(streakId),
-    queryFn: async () => {
-      const response = await getStreak(streakId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch streak');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getStreak(streakId), 'Failed to fetch streak'),
     enabled: !!streakId,
   });
 }
 
-export function usePlayerStreakQuery(playerId: number, streakId: number) {
+/** The player's state in one streak, or null when they never recorded it. */
+export function usePlayerStreakQuery(playerId: ID, streakId: ID) {
   const { getPlayerStreak } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.streaks.playerStreak(playerId, streakId),
-    queryFn: async () => {
-      const response = await getPlayerStreak(playerId, streakId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player streak');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getPlayerStreak(playerId, streakId), 'Failed to fetch player streak'),
     enabled: !!playerId && !!streakId,
   });
 }
 
-export function usePlayerStreaksQuery(playerId: number) {
+export function usePlayerStreaksQuery(playerId: ID, params?: CursorParams) {
   const { getPlayerStreaks } = useMechanicsService();
-
   return useQuery({
-    queryKey: queryKeys.streaks.playerStreaks(playerId),
-    queryFn: async () => {
-      const response = await getPlayerStreaks(playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player streaks');
-      return response.data!;
-    },
+    queryKey: [...queryKeys.streaks.playerStreaks(playerId), params],
+    queryFn: async () => unwrap(await getPlayerStreaks(playerId, params), 'Failed to fetch player streaks'),
     enabled: !!playerId,
   });
 }
@@ -466,31 +406,21 @@ export function usePlayerStreaksQuery(playerId: number) {
 export function useCreateStreakMutation() {
   const queryClient = useQueryClient();
   const { createStreak } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: CreateStreakData) => {
-      const response = await createStreak(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create streak');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.lists() });
-    },
+    mutationFn: async (data: CreateStreakData) => unwrap(await createStreak(data), 'Failed to create streak'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.streaks.lists() }),
   });
 }
 
 export function useUpdateStreakMutation() {
   const queryClient = useQueryClient();
   const { updateStreak } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ streakId, data }: { streakId: number; data: Partial<CreateStreakData> }) => {
-      const response = await updateStreak(streakId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update streak');
-      return response.data!;
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.all });
+    mutationFn: async ({ streakId, data }: { streakId: ID; data: UpdateStreakData }) =>
+      unwrap(await updateStreak(streakId, data), 'Failed to update streak'),
+    onSuccess: (streak, { streakId }) => {
+      queryClient.setQueryData(queryKeys.streaks.detail(streakId), streak);
+      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.lists() });
     },
   });
 }
@@ -498,32 +428,24 @@ export function useUpdateStreakMutation() {
 export function useDeleteStreakMutation() {
   const queryClient = useQueryClient();
   const { deleteStreak } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (streakId: number) => {
-      const response = await deleteStreak(streakId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete streak');
+    mutationFn: async (streakId: ID) => {
+      unwrap(await deleteStreak(streakId), 'Failed to delete streak');
       return streakId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.streaks.all }),
   });
 }
 
 export function useRecordStreakActivityMutation() {
   const queryClient = useQueryClient();
   const { recordStreakActivity } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: RecordStreakActivityData) => {
-      const response = await recordStreakActivity(data);
-      if (!response.success) throw new Error(response.error || 'Failed to record streak activity');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.playerStreaks(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
+    mutationFn: async (data: RecordStreakActivityData) =>
+      unwrap(await recordStreakActivity(data), 'Failed to record streak activity'),
+    onSuccess: (_result, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.streaks.all, 'player', player_id] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.streaks(player_id) });
     },
   });
 }
@@ -531,164 +453,144 @@ export function useRecordStreakActivityMutation() {
 export function useResetStreakMutation() {
   const queryClient = useQueryClient();
   const { resetStreak } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ playerId, streakId }: { playerId: number; streakId: number }) => {
-      const response = await resetStreak(playerId, streakId);
-      if (!response.success) throw new Error(response.error || 'Failed to reset streak');
-      return response.data!;
-    },
-    onSuccess: (data, { playerId, streakId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.playerStreak(playerId, streakId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.streaks.playerStreaks(playerId) });
+    mutationFn: async ({ playerId, streakId }: { playerId: ID; streakId: ID }) =>
+      unwrap(await resetStreak(playerId, streakId), 'Failed to reset streak'),
+    onSuccess: (_result, { playerId }) => {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.streaks.all, 'player', playerId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.players.streaks(playerId) });
     },
   });
 }
 
 // ==================== LEADERBOARDS ====================
 
-export function useLeaderboardsQuery() {
+export function useLeaderboardsQuery(filters?: LeaderboardFilters) {
   const { listLeaderboards } = useMechanicsService();
-
   return useQuery({
-    queryKey: queryKeys.leaderboards.list(),
-    queryFn: async () => {
-      const response = await listLeaderboards();
-      if (!response.success) throw new Error(response.error || 'Failed to fetch leaderboards');
-      return response.data!;
-    },
+    queryKey: [...queryKeys.leaderboards.list(), filters],
+    queryFn: async () => unwrap(await listLeaderboards(filters), 'Failed to fetch leaderboards'),
   });
 }
 
-export function useLeaderboardQuery(leaderboardId: number) {
+export function useLeaderboardQuery(leaderboardId: ID) {
   const { getLeaderboard } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.leaderboards.detail(leaderboardId),
-    queryFn: async () => {
-      const response = await getLeaderboard(leaderboardId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch leaderboard');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getLeaderboard(leaderboardId), 'Failed to fetch leaderboard'),
     enabled: !!leaderboardId,
   });
 }
 
-export function useLeaderboardEntriesQuery(leaderboardId: number, limit = 100, offset = 0) {
+/** One page of standings (?period=current|<RFC3339>&limit&cursor). */
+export function useLeaderboardEntriesQuery(leaderboardId: ID, params?: LeaderboardEntriesParams) {
   const { getLeaderboardEntries } = useMechanicsService();
-
   return useQuery({
-    queryKey: queryKeys.leaderboards.entries(leaderboardId, limit, offset),
-    queryFn: async () => {
-      const response = await getLeaderboardEntries(leaderboardId, limit, offset);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch leaderboard entries');
-      return response.data!;
-    },
+    queryKey: localKeys.leaderboardEntries(leaderboardId, params),
+    queryFn: async () =>
+      unwrap(await getLeaderboardEntries(leaderboardId, params), 'Failed to fetch leaderboard entries'),
     enabled: !!leaderboardId,
   });
 }
 
-export function usePlayerRankQuery(leaderboardId: number, playerId: number) {
+/** 404 player_not_ranked when the player has no entry. */
+export function usePlayerRankQuery(leaderboardId: ID, playerId: ID, params?: { period?: string; around?: number }) {
   const { getPlayerRank } = useMechanicsService();
-
   return useQuery({
-    queryKey: queryKeys.leaderboards.playerRank(leaderboardId, playerId),
-    queryFn: async () => {
-      const response = await getPlayerRank(leaderboardId, playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player rank');
-      return response.data!;
-    },
+    queryKey: [...queryKeys.leaderboards.playerRank(leaderboardId, playerId), params],
+    queryFn: async () => unwrap(await getPlayerRank(leaderboardId, playerId, params), 'Failed to fetch player rank'),
     enabled: !!leaderboardId && !!playerId,
+    retry: false,
   });
 }
 
 export function useCreateLeaderboardMutation() {
   const queryClient = useQueryClient();
   const { createLeaderboard } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: CreateLeaderboardData) => {
-      const response = await createLeaderboard(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create leaderboard');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.list() });
-    },
+    mutationFn: async (data: CreateLeaderboardData) =>
+      unwrap(await createLeaderboard(data), 'Failed to create leaderboard'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: localKeys.leaderboardLists() }),
   });
 }
 
 export function useUpdateLeaderboardMutation() {
   const queryClient = useQueryClient();
   const { updateLeaderboard } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ leaderboardId, data }: { leaderboardId: number; data: Partial<CreateLeaderboardData> }) => {
-      const response = await updateLeaderboard(leaderboardId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update leaderboard');
-      return response.data!;
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all });
-    },
+    mutationFn: async ({ leaderboardId, data }: { leaderboardId: ID; data: UpdateLeaderboardData }) =>
+      unwrap(await updateLeaderboard(leaderboardId, data), 'Failed to update leaderboard'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all }),
   });
 }
 
 export function useDeleteLeaderboardMutation() {
   const queryClient = useQueryClient();
   const { deleteLeaderboard } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (leaderboardId: number) => {
-      const response = await deleteLeaderboard(leaderboardId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete leaderboard');
+    mutationFn: async (leaderboardId: ID) => {
+      unwrap(await deleteLeaderboard(leaderboardId), 'Failed to delete leaderboard');
       return leaderboardId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all }),
+  });
+}
+
+/** Recomputes standings from the source ledgers. */
+export function useRebuildLeaderboardMutation() {
+  const queryClient = useQueryClient();
+  const { rebuildLeaderboard } = useMechanicsService();
+  return useMutation({
+    mutationFn: async (leaderboardId: ID) =>
+      unwrap(await rebuildLeaderboard(leaderboardId), 'Failed to rebuild leaderboard'),
+    onSuccess: (_result, leaderboardId) =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.detail(leaderboardId) }),
   });
 }
 
 // ==================== REWARDS ====================
 
-export function useRewardsQuery(filters?: MechanicsFilters) {
+export function useRewardsQuery(filters?: RewardFilters) {
   const { listRewards } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.rewards.list(filters),
-    queryFn: async () => {
-      const response = await listRewards(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch rewards');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await listRewards(filters), 'Failed to fetch rewards'),
   });
 }
 
-export function useRewardQuery(rewardId: number) {
+export function useRewardQuery(rewardId: ID) {
   const { getReward } = useMechanicsService();
-
   return useQuery({
     queryKey: queryKeys.rewards.detail(rewardId),
-    queryFn: async () => {
-      const response = await getReward(rewardId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch reward');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await getReward(rewardId), 'Failed to fetch reward'),
     enabled: !!rewardId,
   });
 }
 
-export function usePlayerRewardsQuery(playerId: number) {
-  const { getPlayerRewards } = useMechanicsService();
-
+/**
+ * One claim. While it is pending_payment / refund_pending (paid rewards
+ * settle asynchronously) it is polled every `pollMs` (default 2s).
+ */
+export function useRewardClaimQuery(claimId: ID, options?: { pollMs?: number | false }) {
+  const { getRewardClaim } = useMechanicsService();
+  const pollMs = options?.pollMs ?? 2000;
   return useQuery({
-    queryKey: queryKeys.rewards.playerRewards(playerId),
-    queryFn: async () => {
-      const response = await getPlayerRewards(playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player rewards');
-      return response.data!;
+    queryKey: localKeys.rewardClaim(claimId),
+    queryFn: async () => unwrap(await getRewardClaim(claimId), 'Failed to fetch reward claim'),
+    enabled: !!claimId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'pending_payment' || status === 'refund_pending' ? pollMs : false;
     },
+  });
+}
+
+/** A player's reward claims (GET /players/{id}/reward-claims). */
+export function usePlayerRewardsQuery(playerId: ID, params?: CursorParams) {
+  const { getPlayerRewards } = useMechanicsService();
+  return useQuery({
+    queryKey: [...queryKeys.rewards.playerRewards(playerId), params],
+    queryFn: async () => unwrap(await getPlayerRewards(playerId, params), 'Failed to fetch player rewards'),
     enabled: !!playerId,
   });
 }
@@ -696,46 +598,21 @@ export function usePlayerRewardsQuery(playerId: number) {
 export function useCreateRewardMutation() {
   const queryClient = useQueryClient();
   const { createReward } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (data: CreateRewardData) => {
-      const response = await createReward(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create reward');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.lists() });
-    },
+    mutationFn: async (data: CreateRewardData) => unwrap(await createReward(data), 'Failed to create reward'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.rewards.lists() }),
   });
 }
 
 export function useUpdateRewardMutation() {
   const queryClient = useQueryClient();
   const { updateReward } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async ({ rewardId, data }: { rewardId: number; data: Partial<CreateRewardData> }) => {
-      const response = await updateReward(rewardId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update reward');
-      return response.data!;
-    },
-    onMutate: async ({ rewardId, data }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.rewards.detail(rewardId) });
-      const previousReward = queryClient.getQueryData<Reward>(queryKeys.rewards.detail(rewardId));
-
-      if (previousReward) {
-        queryClient.setQueryData<Reward>(queryKeys.rewards.detail(rewardId), { ...previousReward, ...data });
-      }
-
-      return { previousReward };
-    },
-    onError: (err, { rewardId }, context) => {
-      if (context?.previousReward) {
-        queryClient.setQueryData(queryKeys.rewards.detail(rewardId), context.previousReward);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.all });
+    mutationFn: async ({ rewardId, data }: { rewardId: ID; data: UpdateRewardData }) =>
+      unwrap(await updateReward(rewardId, data), 'Failed to update reward'),
+    onSuccess: (reward, { rewardId }) => {
+      queryClient.setQueryData(queryKeys.rewards.detail(rewardId), reward);
+      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.lists() });
     },
   });
 }
@@ -743,274 +620,56 @@ export function useUpdateRewardMutation() {
 export function useDeleteRewardMutation() {
   const queryClient = useQueryClient();
   const { deleteReward } = useMechanicsService();
-
   return useMutation({
-    mutationFn: async (rewardId: number) => {
-      const response = await deleteReward(rewardId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete reward');
+    mutationFn: async (rewardId: ID) => {
+      unwrap(await deleteReward(rewardId), 'Failed to delete reward');
       return rewardId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.rewards.all }),
   });
 }
 
+function useInvalidateClaim() {
+  const queryClient = useQueryClient();
+  return (claim: RewardClaim) => {
+    queryClient.setQueryData(localKeys.rewardClaim(claim.id), claim);
+    queryClient.invalidateQueries({ queryKey: queryKeys.rewards.playerRewards(claim.player_id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.rewards.lists() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.players.rewards(claim.player_id) });
+  };
+}
+
+/**
+ * Claims a reward. The returned claim's status is `claimed` (free reward,
+ * 201) or `pending_payment` (paid reward, 202: points are debited
+ * asynchronously; poll useRewardClaimQuery). 409 codes include
+ * reward_not_available, reward_depleted, player_limit_reached,
+ * level_requirement_not_met.
+ */
 export function useClaimRewardMutation() {
-  const queryClient = useQueryClient();
   const { claimReward } = useMechanicsService();
-
+  const invalidate = useInvalidateClaim();
   return useMutation({
-    mutationFn: async (data: ClaimRewardData) => {
-      const response = await claimReward(data);
-      if (!response.success) throw new Error(response.error || 'Failed to claim reward');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.playerRewards(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
-    },
+    mutationFn: async (data: ClaimRewardData) => unwrap(await claimReward(data), 'Failed to claim reward'),
+    onSuccess: (claim) => invalidate(claim),
   });
 }
 
+/** Redeems a claimed reward (by claim id). 409 invalid_status_transition / claim_expired. */
 export function useRedeemRewardMutation() {
-  const queryClient = useQueryClient();
-  const { redeemReward } = useMechanicsService();
-
+  const { redeemRewardClaim } = useMechanicsService();
+  const invalidate = useInvalidateClaim();
   return useMutation({
-    mutationFn: async ({ playerId, rewardId }: { playerId: number; rewardId: number }) => {
-      const response = await redeemReward(playerId, rewardId);
-      if (!response.success) throw new Error(response.error || 'Failed to redeem reward');
-      return response.data!;
-    },
-    onSuccess: (data, { playerId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rewards.playerRewards(playerId) });
-    },
+    mutationFn: async (claimId: ID) => unwrap(await redeemRewardClaim(claimId), 'Failed to redeem reward'),
+    onSuccess: (claim) => invalidate(claim),
   });
 }
 
-// ==================== WALLETS ====================
-
-export function usePlayerWalletQuery(playerId: number) {
-  const { getPlayerWallet } = useMechanicsService();
-
-  return useQuery({
-    queryKey: queryKeys.wallets.player(playerId),
-    queryFn: async () => {
-      const response = await getPlayerWallet(playerId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch player wallet');
-      return response.data!;
-    },
-    enabled: !!playerId,
-  });
-}
-
-export function useWalletTransactionsQuery(playerId: number, filters?: WalletTransactionFilters) {
-  const { getWalletTransactions } = useMechanicsService();
-
-  return useQuery({
-    queryKey: queryKeys.wallets.transactions(playerId, filters),
-    queryFn: async () => {
-      const response = await getWalletTransactions(playerId, filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch wallet transactions');
-      return response.data!;
-    },
-    enabled: !!playerId,
-  });
-}
-
-export function useCreditWalletMutation() {
-  const queryClient = useQueryClient();
-  const { creditWallet } = useMechanicsService();
-
+export function useCancelRewardClaimMutation() {
+  const { cancelRewardClaim } = useMechanicsService();
+  const invalidate = useInvalidateClaim();
   return useMutation({
-    mutationFn: async (data: CreditWalletData) => {
-      const response = await creditWallet(data);
-      if (!response.success) throw new Error(response.error || 'Failed to credit wallet');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(player_id) });
-    },
-  });
-}
-
-export function useDebitWalletMutation() {
-  const queryClient = useQueryClient();
-  const { debitWallet } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async (data: DebitWalletData) => {
-      const response = await debitWallet(data);
-      if (!response.success) throw new Error(response.error || 'Failed to debit wallet');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(player_id) });
-    },
-  });
-}
-
-export function useTransferPointsMutation() {
-  const queryClient = useQueryClient();
-  const { transferPoints } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async (data: TransferPointsData) => {
-      const response = await transferPoints(data);
-      if (!response.success) throw new Error(response.error || 'Failed to transfer points');
-      return response.data!;
-    },
-    onSuccess: (result, { from_player_id, to_player_id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(from_player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(to_player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(from_player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.transactions(to_player_id) });
-    },
-  });
-}
-
-// ==================== RULES ====================
-
-export function useRulesQuery(filters?: MechanicsFilters) {
-  const { listRules } = useMechanicsService();
-
-  return useQuery({
-    queryKey: queryKeys.rules.list(filters),
-    queryFn: async () => {
-      const response = await listRules(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch rules');
-      return response.data!;
-    },
-  });
-}
-
-export function useRuleQuery(ruleId: number) {
-  const { getRule } = useMechanicsService();
-
-  return useQuery({
-    queryKey: queryKeys.rules.detail(ruleId),
-    queryFn: async () => {
-      const response = await getRule(ruleId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch rule');
-      return response.data!;
-    },
-    enabled: !!ruleId,
-  });
-}
-
-export function useRuleExecutionsQuery(filters?: RuleExecutionFilters) {
-  const { getRuleExecutions } = useMechanicsService();
-
-  return useQuery({
-    queryKey: queryKeys.rules.executions(filters),
-    queryFn: async () => {
-      const response = await getRuleExecutions(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch rule executions');
-      return response.data!;
-    },
-  });
-}
-
-export function useCreateRuleMutation() {
-  const queryClient = useQueryClient();
-  const { createRule } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async (data: CreateRuleData) => {
-      const response = await createRule(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create rule');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rules.lists() });
-    },
-  });
-}
-
-export function useUpdateRuleMutation() {
-  const queryClient = useQueryClient();
-  const { updateRule } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async ({ ruleId, data }: { ruleId: number; data: Partial<CreateRuleData> }) => {
-      const response = await updateRule(ruleId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update rule');
-      return response.data!;
-    },
-    onMutate: async ({ ruleId, data }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.rules.detail(ruleId) });
-      const previousRule = queryClient.getQueryData<Rule>(queryKeys.rules.detail(ruleId));
-
-      if (previousRule) {
-        queryClient.setQueryData<Rule>(queryKeys.rules.detail(ruleId), { ...previousRule, ...data });
-      }
-
-      return { previousRule };
-    },
-    onError: (err, { ruleId }, context) => {
-      if (context?.previousRule) {
-        queryClient.setQueryData(queryKeys.rules.detail(ruleId), context.previousRule);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rules.all });
-    },
-  });
-}
-
-export function useDeleteRuleMutation() {
-  const queryClient = useQueryClient();
-  const { deleteRule } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async (ruleId: number) => {
-      const response = await deleteRule(ruleId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete rule');
-      return ruleId;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rules.all });
-    },
-  });
-}
-
-export function useCreateRuleVersionMutation() {
-  const queryClient = useQueryClient();
-  const { createRuleVersion } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async ({ ruleId, data }: { ruleId: number; data: CreateRuleData }) => {
-      const response = await createRuleVersion(ruleId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to create rule version');
-      return response.data!;
-    },
-    onSuccess: (data, { ruleId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.rules.detail(ruleId) });
-    },
-  });
-}
-
-export function useExecuteRulesMutation() {
-  const queryClient = useQueryClient();
-  const { executeRules } = useMechanicsService();
-
-  return useMutation({
-    mutationFn: async (data: ExecuteRulesData) => {
-      const response = await executeRules(data);
-      if (!response.success) throw new Error(response.error || 'Failed to execute rules');
-      return response.data!;
-    },
-    onSuccess: (data, { player_id }) => {
-      // Invalidate all player-related queries since rules can affect anything
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.players.level(player_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.rules.executions() });
-    },
+    mutationFn: async (claimId: ID) => unwrap(await cancelRewardClaim(claimId), 'Failed to cancel claim'),
+    onSuccess: (claim) => invalidate(claim),
   });
 }

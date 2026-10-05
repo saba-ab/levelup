@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, Filter, ChevronDown, ChevronRight, FileText, Activity, Webhook, CheckCircle2, XCircle, Clock, AlertTriangle, Download, RefreshCw } from "lucide-react";
+import FeatureUnavailable from '@/components/FeatureUnavailable';
 
 const decisionLogs = [
   { id: "1", ruleId: "rule_001", ruleName: "Welcome Bonus", userId: "user_123", decision: "granted", points: 100, timestamp: "2024-01-20 14:32:15", executionTime: 12, conditions: [{ name: "is_new_user", result: true }, { name: "email_verified", result: true }] },
@@ -38,7 +39,8 @@ const webhookLogs = [
 
 const eventTypes = ["all", "points.earned", "points.redeemed", "badge.unlocked", "level.up", "mission.completed", "reward.redeemed", "streak.milestone"];
 
-export default function AuditLogs() {
+/** Planned layout only: this module has no Go API yet. Rendered inert below the banner. */
+function AuditLogsPreview() {
   const [decisionSearch, setDecisionSearch] = useState("");
   const [decisionFilter, setDecisionFilter] = useState("all");
   const [expandedDecisions, setExpandedDecisions] = useState<Record<string, boolean>>({});
@@ -431,6 +433,16 @@ export default function AuditLogs() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+export default function AuditLogs() {
+  return (
+    <div className="animate-fade-in">
+      <FeatureUnavailable feature="Audit logs" hint="Rule decisions (why a rule matched and what it did) are under Rules → Decisions; ingested activities under Events → Activity Log.">
+        <AuditLogsPreview />
+      </FeatureUnavailable>
     </div>
   );
 }

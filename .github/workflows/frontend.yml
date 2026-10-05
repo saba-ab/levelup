@@ -30,7 +30,4 @@ jobs:
           cache-dependency-path: frontend/${{ matrix.app }}/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      # The portal arrived with pre-existing lint errors; report them without
-      # blocking until they are fixed, then drop continue-on-error.
       - run: npm run lint
-        continue-on-error: ${{ matrix.app == 'portal' }}

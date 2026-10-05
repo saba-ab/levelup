@@ -22,6 +22,12 @@ func Go() []*goose.Migration {
 			&goose.GoFunc{RunTx: upSeedDefaultGrants},
 			&goose.GoFunc{RunTx: downSeedDefaultGrants},
 		),
+		// 4 is 0004_api_keys.sql. Seeds are idempotent, so re-running both
+		// catalogues picks up the api_keys_manage permission and its grant.
+		goose.NewGoMigration(5,
+			&goose.GoFunc{RunTx: upSeedPermissionsAndGrants},
+			&goose.GoFunc{RunTx: downNoop},
+		),
 	}
 }
 
@@ -46,6 +52,7 @@ var DefaultGrants = []Grant{
 	{contracts.PermTenantUpdate, contracts.AdminRoles},
 	{contracts.PermTenantDelete, []int64{contracts.RoleOwner}},
 	{contracts.PermPlatformTenantsManage, []int64{contracts.RolePlatformAdmin}},
+	{contracts.PermAPIKeysManage, contracts.AdminRoles},
 }
 
 func upSeedPermissions(ctx context.Context, tx *sql.Tx) error {
@@ -88,3 +95,13 @@ func downSeedDefaultGrants(ctx context.Context, tx *sql.Tx) error {
 		`DELETE FROM authz_svc.casbin_rule WHERE ptype = 'p' AND v1 LIKE $1`, contracts.Module+":%")
 	return err
 }
+
+func upSeedPermissionsAndGrants(ctx context.Context, tx *sql.Tx) error {
+	if err := upSeedPermissions(ctx, tx); err != nil {
+		return err
+	}
+	return upSeedDefaultGrants(ctx, tx)
+}
+
+// downNoop: rolling back 5 leaves rows that 2 and 3's downs remove.
+func downNoop(context.Context, *sql.Tx) error { return nil }

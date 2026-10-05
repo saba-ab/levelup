@@ -17,6 +17,12 @@ export {
   useAwardBadgeMutation,
   useRevokeBadgeMutation,
   useGrantXpMutation,
+  // Wallets
+  usePlayerWalletQuery,
+  useWalletTransactionsQuery,
+  useCreditWalletMutation,
+  useDebitWalletMutation,
+  useTransferPointsMutation,
 } from './players';
 
 // Mechanics queries and mutations
@@ -71,22 +77,43 @@ export {
   useDeleteRewardMutation,
   useClaimRewardMutation,
   useRedeemRewardMutation,
-  // Wallets
-  usePlayerWalletQuery,
-  useWalletTransactionsQuery,
-  useCreditWalletMutation,
-  useDebitWalletMutation,
-  useTransferPointsMutation,
-  // Rules
+} from './mechanics';
+
+// Rules (Go rules module). POST /rules/execute is gone: use simulate or
+// POST /activities; decisions replace the Laravel execution log.
+export {
+  ruleKeys,
+  ApiRequestError,
   useRulesQuery,
   useRuleQuery,
-  useRuleExecutionsQuery,
+  useRuleVersionsQuery,
   useCreateRuleMutation,
   useUpdateRuleMutation,
   useDeleteRuleMutation,
   useCreateRuleVersionMutation,
-  useExecuteRulesMutation,
-} from './mechanics';
+  usePublishRuleMutation,
+  useSimulateRulesMutation,
+  useRuleDecisionsQuery,
+  useRuleDecisionQuery,
+} from './rules';
+
+// Event types (trigger catalogue) and activities
+export {
+  eventKeys,
+  useEventsQuery,
+  useEventCategoriesQuery,
+  useEventQuery,
+  useCreateEventMutation,
+  useUpdateEventMutation,
+  useDeleteEventMutation,
+} from './events';
+
+export {
+  activityKeys,
+  useActivitiesQuery,
+  useActivityQuery,
+  useIngestActivityMutation,
+} from './activities';
 
 // Users queries and mutations
 export {
@@ -94,10 +121,11 @@ export {
   useUserQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
+  useAssignUserRolesMutation,
   useDeleteUserMutation,
 } from './users';
 
-// Programs and Segments queries and mutations
+// Programs queries and mutations (segments do not exist in the Go API)
 export {
   // Programs
   useProgramsQuery,
@@ -111,13 +139,4 @@ export {
   usePauseProgramMutation,
   useEndProgramMutation,
   useDuplicateProgramMutation,
-  // Segments
-  useSegmentsQuery,
-  useSegmentQuery,
-  useSegmentPlayersQuery,
-  useCreateSegmentMutation,
-  useUpdateSegmentMutation,
-  useDeleteSegmentMutation,
-  useRefreshDynamicSegmentMutation,
-  usePreviewSegmentRulesMutation,
 } from './programs';

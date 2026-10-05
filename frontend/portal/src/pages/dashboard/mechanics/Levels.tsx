@@ -3,10 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { TrendingUp, Sparkles, Plus, Award, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
+import { changedFields } from '@/components/mechanics/patch';
 import {
   Dialog,
   DialogContent,
@@ -16,16 +19,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   useLevelsQuery,
+  useAllBadgesQuery,
   useCreateLevelMutation,
   useUpdateLevelMutation,
   useDeleteLevelMutation,
+  describeMechanicsError,
 } from '@/services/queries/mechanics';
-import { Level, CreateLevelData, UpdateLevelData } from '@/services/api/types';
+import type { Level, CreateLevelData, UpdateLevelData } from '@/services/api/types';
 
 // Color mappings based on level number ranges
 const getLevelColor = (levelNumber: number) => {
@@ -44,24 +56,48 @@ const getTierName = (levelNumber: number) => {
   return 'Bronze';
 };
 
-const initialFormState = {
-  number: 1,
+const NO_BADGE = 'none';
+
+/** Error codes of the level endpoints. */
+const levelErrors: Record<string, string> = {
+  level_number_taken: 'A level with this number already exists.',
+  xp_required_not_increasing: 'XP required must be higher than the level below and lower than the level above.',
+  invalid_level_number: 'Level number must be at least 1.',
+  invalid_xp_required: 'XP required must not be negative.',
+};
+
+interface LevelFormState {
+  level_number: number;
+  name: string;
+  description: string;
+  xp_required: number;
+  points_reward: number;
+  icon_url: string;
+  badge_reward_id: string;
+  is_active: boolean;
+}
+
+const initialFormState: LevelFormState = {
+  level_number: 1,
   name: '',
   description: '',
   xp_required: 0,
   points_reward: 0,
   icon_url: '',
-  color: '',
+  badge_reward_id: '',
+  is_active: true,
 };
+
+const levelLabel = (level: Pick<Level, 'name' | 'level_number'>) => level.name || `Level ${level.level_number}`;
 
 export default function Levels() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLevel, setEditingLevel] = useState<Level | null>(null);
-  const [formState, setFormState] = useState(initialFormState);
+  const [formState, setFormState] = useState<LevelFormState>(initialFormState);
   const { toast } = useToast();
 
-  // API hooks
   const { data: levelsData, isLoading, error } = useLevelsQuery();
+  const { data: badges = [] } = useAllBadgesQuery();
   const createMutation = useCreateLevelMutation();
   const updateMutation = useUpdateLevelMutation();
   const deleteMutation = useDeleteLevelMutation();
@@ -72,19 +108,22 @@ export default function Levels() {
     if (level) {
       setEditingLevel(level);
       setFormState({
-        number: level.number,
-        name: level.name || '',
-        description: level.description || '',
+        level_number: level.level_number,
+        name: level.name,
+        description: level.description,
         xp_required: level.xp_required,
         points_reward: level.points_reward,
-        icon_url: level.icon_url || '',
-        color: level.color || '',
+        icon_url: level.icon_url,
+        badge_reward_id: level.badge_reward_id ?? '',
+        is_active: level.is_active,
       });
     } else {
       setEditingLevel(null);
+      const top = levels[levels.length - 1];
       setFormState({
         ...initialFormState,
-        number: levels.length > 0 ? Math.max(...levels.map(l => l.number)) + 1 : 1,
+        level_number: top ? top.level_number + 1 : 1,
+        xp_required: top ? top.xp_required + 100 : 0,
       });
     }
     setIsDialogOpen(true);
@@ -101,41 +140,40 @@ export default function Levels() {
 
     try {
       if (editingLevel) {
-        const updateData: UpdateLevelData = {
-          number: formState.number,
-          name: formState.name || undefined,
-          description: formState.description || undefined,
+        const next: UpdateLevelData = {
+          level_number: formState.level_number,
+          name: formState.name,
+          description: formState.description,
           xp_required: formState.xp_required,
           points_reward: formState.points_reward,
-          icon_url: formState.icon_url || undefined,
-          color: formState.color || undefined,
+          icon_url: formState.icon_url,
+          badge_reward_id: formState.badge_reward_id || null,
+          is_active: formState.is_active,
         };
-        await updateMutation.mutateAsync({ levelId: editingLevel.id, data: updateData });
-        toast({
-          title: 'Level updated',
-          description: 'Level has been updated successfully.',
-        });
+        const patch = changedFields(editingLevel, next);
+        if (Object.keys(patch).length > 0) {
+          await updateMutation.mutateAsync({ levelId: editingLevel.id, data: patch });
+        }
+        toast({ title: 'Level updated', description: 'Level has been updated successfully.' });
       } else {
         const createData: CreateLevelData = {
-          number: formState.number,
+          level_number: formState.level_number,
           name: formState.name || undefined,
           description: formState.description || undefined,
           xp_required: formState.xp_required,
           points_reward: formState.points_reward,
           icon_url: formState.icon_url || undefined,
-          color: formState.color || undefined,
+          badge_reward_id: formState.badge_reward_id || undefined,
+          is_active: formState.is_active,
         };
         await createMutation.mutateAsync(createData);
-        toast({
-          title: 'Level created',
-          description: 'New level has been added successfully.',
-        });
+        toast({ title: 'Level created', description: 'New level has been added successfully.' });
       }
       handleCloseDialog();
     } catch (err) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'An error occurred',
+        description: describeMechanicsError(err, 'An error occurred', levelErrors),
         variant: 'destructive',
       });
     }
@@ -144,14 +182,11 @@ export default function Levels() {
   const handleDelete = async (level: Level) => {
     try {
       await deleteMutation.mutateAsync(level.id);
-      toast({
-        title: 'Level deleted',
-        description: 'Level has been removed successfully.',
-      });
+      toast({ title: 'Level deleted', description: 'Level has been removed successfully.' });
     } catch (err) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to delete level',
+        description: describeMechanicsError(err, 'Failed to delete level', levelErrors),
         variant: 'destructive',
       });
     }
@@ -164,6 +199,15 @@ export default function Levels() {
 
   const isMutating = createMutation.isPending || updateMutation.isPending;
 
+  // Neighbours in the ladder, for the "strictly increasing XP" hint.
+  const others = levels.filter((l) => l.id !== editingLevel?.id);
+  const below = [...others].reverse().find((l) => l.level_number < formState.level_number);
+  const above = others.find((l) => l.level_number > formState.level_number);
+  const xpOutOfOrder =
+    (below !== undefined && formState.xp_required <= below.xp_required) ||
+    (above !== undefined && formState.xp_required >= above.xp_required);
+  const numberTaken = others.some((l) => l.level_number === formState.level_number);
+
   if (error) {
     return (
       <div className="p-6 text-center">
@@ -171,7 +215,7 @@ export default function Levels() {
       </div>
     );
   }
-console.log('levels', levelsData);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
@@ -209,7 +253,7 @@ console.log('levels', levelsData);
                     <div
                       className={cn(
                         "w-16 h-16 rounded-full flex items-center justify-center shrink-0 border-2 transition-all",
-                        getLevelColor(formState.number).bg
+                        getLevelColor(formState.level_number).bg
                       )}
                     >
                       {formState.icon_url ? (
@@ -227,14 +271,14 @@ console.log('levels', levelsData);
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-semibold text-lg truncate">
-                        {formState.name || `Level ${formState.number}`}
+                        {levelLabel(formState)}
                       </h4>
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {formState.description || 'Level description will appear here...'}
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        <Badge variant="outline" className={cn("text-xs", getLevelColor(formState.number).text, getLevelColor(formState.number).border)}>
-                          {getTierName(formState.number)} Tier
+                        <Badge variant="outline" className={cn("text-xs", getLevelColor(formState.level_number).text, getLevelColor(formState.level_number).border)}>
+                          {getTierName(formState.level_number)} Tier
                         </Badge>
                         <Badge variant="outline" className="text-xs bg-secondary">
                           {formState.xp_required.toLocaleString()} XP Required
@@ -259,51 +303,65 @@ console.log('levels', levelsData);
                 <div className="space-y-4 py-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Level Number *</label>
+                      <Label htmlFor="level_number">Level Number *</Label>
                       <Input
+                        id="level_number"
                         type="number"
                         min="1"
-                        value={formState.number}
-                        onChange={(e) => setFormState(prev => ({ ...prev, number: parseInt(e.target.value) || 1 }))}
+                        value={formState.level_number}
+                        onChange={(e) => setFormState(prev => ({ ...prev, level_number: Math.max(1, Number(e.target.value) || 1) }))}
                         required
                       />
+                      {numberTaken && (
+                        <p className="text-xs text-destructive">Level {formState.level_number} already exists.</p>
+                      )}
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Level Name</label>
+                      <Label htmlFor="level_name">Level Name</Label>
                       <Input
+                        id="level_name"
                         placeholder="e.g., Elite Champion"
                         value={formState.name}
+                        maxLength={255}
                         onChange={(e) => setFormState(prev => ({ ...prev, name: e.target.value }))}
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">XP Required *</label>
+                      <Label htmlFor="xp_required">XP Required *</Label>
                       <Input
+                        id="xp_required"
                         type="number"
                         min="0"
                         placeholder="5000"
                         value={formState.xp_required}
-                        onChange={(e) => setFormState(prev => ({ ...prev, xp_required: parseInt(e.target.value) || 0 }))}
+                        onChange={(e) => setFormState(prev => ({ ...prev, xp_required: Math.max(0, Number(e.target.value) || 0) }))}
                         required
                       />
+                      <p className={cn('text-xs', xpOutOfOrder ? 'text-destructive' : 'text-muted-foreground')}>
+                        Must be strictly between {below ? `${below.xp_required.toLocaleString()} (level ${below.level_number})` : '-'}
+                        {' and '}
+                        {above ? `${above.xp_required.toLocaleString()} (level ${above.level_number})` : '∞'}.
+                      </p>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Points Reward</label>
+                      <Label htmlFor="points_reward">Points Reward</Label>
                       <Input
+                        id="points_reward"
                         type="number"
                         min="0"
                         placeholder="100"
                         value={formState.points_reward}
-                        onChange={(e) => setFormState(prev => ({ ...prev, points_reward: parseInt(e.target.value) || 0 }))}
+                        onChange={(e) => setFormState(prev => ({ ...prev, points_reward: Math.max(0, Number(e.target.value) || 0) }))}
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Icon URL</label>
+                      <Label htmlFor="icon_url">Icon URL</Label>
                       <Input
+                        id="icon_url"
                         type="url"
                         placeholder="https://example.com/icon.png"
                         value={formState.icon_url}
@@ -311,22 +369,39 @@ console.log('levels', levelsData);
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Color</label>
-                      <Input
-                        placeholder="#10b981"
-                        value={formState.color}
-                        onChange={(e) => setFormState(prev => ({ ...prev, color: e.target.value }))}
-                      />
+                      <Label htmlFor="badge_reward">Badge Reward</Label>
+                      <Select
+                        value={formState.badge_reward_id || NO_BADGE}
+                        onValueChange={(value) => setFormState(prev => ({ ...prev, badge_reward_id: value === NO_BADGE ? '' : value }))}
+                      >
+                        <SelectTrigger id="badge_reward"><SelectValue placeholder="None" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_BADGE}>None</SelectItem>
+                          {badges.map((badge) => (
+                            <SelectItem key={badge.id} value={badge.id}>{badge.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Description</label>
+                    <Label htmlFor="level_description">Description</Label>
                     <Textarea
+                      id="level_description"
                       placeholder="What benefits does this level unlock?"
                       value={formState.description}
+                      maxLength={1000}
                       onChange={(e) => setFormState(prev => ({ ...prev, description: e.target.value }))}
                       rows={3}
                     />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="level_active"
+                      checked={formState.is_active}
+                      onCheckedChange={(checked) => setFormState(prev => ({ ...prev, is_active: checked }))}
+                    />
+                    <Label htmlFor="level_active">Active</Label>
                   </div>
                 </div>
                 <DialogFooter>
@@ -376,7 +451,7 @@ console.log('levels', levelsData);
                   {levels.slice(0, 10).map((level) => (
                     <div
                       key={level.id}
-                      className={cn("h-full flex-1", getLevelColor(level.number).bg)}
+                      className={cn("h-full flex-1", getLevelColor(level.level_number).bg)}
                     />
                   ))}
                 </div>
@@ -389,12 +464,12 @@ console.log('levels', levelsData);
                     <div
                       className={cn(
                         "w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center",
-                        getLevelColor(level.number).bg
+                        getLevelColor(level.level_number).bg
                       )}
                     >
                       <TrendingUp className="w-6 h-6 text-white" />
                     </div>
-                    <p className="font-semibold text-sm">{level.name || `Level ${level.number}`}</p>
+                    <p className="font-semibold text-sm">{levelLabel(level)}</p>
                     <p className="text-xs text-muted-foreground">{level.xp_required.toLocaleString()} XP</p>
                   </div>
                 ))}
@@ -436,36 +511,33 @@ console.log('levels', levelsData);
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Tier</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">XP Required</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Points Reward</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Badge Reward</th>
                     <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {levels.map((level) => {
-                    const colors = getLevelColor(level.number);
+                    const colors = getLevelColor(level.level_number);
+                    const badgeReward = level.badge_reward_id ? badges.find((b) => b.id === level.badge_reward_id) : undefined;
                     return (
                       <tr key={level.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "w-10 h-10 rounded-lg flex items-center justify-center",
-                                colors.bg
-                              )}
-                            >
+                            <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", colors.bg)}>
                               <TrendingUp className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                              <span className="font-medium">{level.name || `Level ${level.number}`}</span>
-                              <p className="text-xs text-muted-foreground">#{level.number}</p>
+                              <span className="font-medium">{levelLabel(level)}</span>
+                              <p className="text-xs text-muted-foreground">
+                                #{level.level_number}
+                                {!level.is_active && ' · inactive'}
+                              </p>
                             </div>
                           </div>
                         </td>
                         <td className="p-4">
-                          <Badge
-                            variant="outline"
-                            className={cn("capitalize", colors.text, colors.border)}
-                          >
-                            {getTierName(level.number)}
+                          <Badge variant="outline" className={cn("capitalize", colors.text, colors.border)}>
+                            {getTierName(level.level_number)}
                           </Badge>
                         </td>
                         <td className="p-4 font-mono">
@@ -477,9 +549,12 @@ console.log('levels', levelsData);
                             <span>{level.points_reward.toLocaleString()}</span>
                           </div>
                         </td>
+                        <td className="p-4 text-sm text-muted-foreground">
+                          {level.badge_reward_id ? (badgeReward?.name ?? 'Badge') : '-'}
+                        </td>
                         <td className="p-4 text-right">
                           <ItemActionsMenu
-                            itemName={level.name || `Level ${level.number}`}
+                            itemName={levelLabel(level)}
                             onEdit={() => handleOpenDialog(level)}
                             onDelete={() => handleDelete(level)}
                             showInGroup
