@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink, Zap, Award } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ProgramFormDialog } from '@/components/programs/ProgramFormDialog';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
 import {
+  describeProgramError,
+  useDuplicateProgramMutation,
   useProgramsQuery,
   useCreateProgramMutation,
   useUpdateProgramMutation,
@@ -61,21 +64,15 @@ export default function Programs() {
   const [deletingProgram, setDeletingProgram] = useState<Program | null>(null);
 
   const { toast } = useToast();
+  const pager = useCursorPagination(25);
 
-  // Build filters for API
-  const filters = useMemo(() => {
-    const apiFilters: { search?: string; status?: ProgramStatus } = {};
-    if (searchQuery) {
-      apiFilters.search = searchQuery;
-    }
-    if (statusFilter !== 'all') {
-      apiFilters.status = statusFilter;
-    }
-    return apiFilters;
-  }, [searchQuery, statusFilter]);
-
-  // Queries
-  const { data: programsData, isLoading, error, refetch } = useProgramsQuery(filters);
+  // Status is filtered server-side; the API has no text search, so the search
+  // box narrows the current page only.
+  const { data: programsData, isLoading, error, refetch } = useProgramsQuery({
+    limit: pager.limit,
+    cursor: pager.cursor,
+    ...(statusFilter !== 'all' && { status: statusFilter }),
+  });
   // Mutations
   const createMutation = useCreateProgramMutation();
   const updateMutation = useUpdateProgramMutation();
@@ -83,8 +80,23 @@ export default function Programs() {
   const activateMutation = useActivateProgramMutation();
   const pauseMutation = usePauseProgramMutation();
   const endMutation = useEndProgramMutation();
+  const duplicateMutation = useDuplicateProgramMutation();
 
-  const programs = programsData?.data || [];
+  const programs = useMemo(() => {
+    const page = programsData?.data || [];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return page;
+    return page.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.slug.toLowerCase().includes(q) ||
+        (p.description ?? '').toLowerCase().includes(q),
+    );
+  }, [programsData, searchQuery]);
+  const nextCursor = programsData?.next_cursor ?? '';
+
+  const showError = (err: unknown, fallback: string) =>
+    toast({ title: 'Error', description: describeProgramError(err, fallback), variant: 'destructive' });
 
   const handleCreate = () => {
     setEditingProgram(null);
@@ -99,7 +111,7 @@ export default function Programs() {
   const handleFormSubmit = async (data: CreateProgramData | UpdateProgramData) => {
     try {
       if (editingProgram) {
-        await updateMutation.mutateAsync({ programId: editingProgram.id, data });
+        await updateMutation.mutateAsync({ programId: editingProgram.id, data: data as UpdateProgramData });
         toast({
           title: 'Program updated',
           description: `"${data.name || editingProgram.name}" has been updated successfully.`,
@@ -114,11 +126,7 @@ export default function Programs() {
       setIsFormOpen(false);
       setEditingProgram(null);
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Something went wrong',
-        variant: 'destructive',
-      });
+      showError(err, 'Something went wrong');
     }
   };
 
@@ -132,11 +140,7 @@ export default function Programs() {
       });
       setDeletingProgram(null);
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to delete program',
-        variant: 'destructive',
-      });
+      showError(err, 'Failed to delete program');
     }
   };
 
@@ -148,11 +152,7 @@ export default function Programs() {
         description: `"${program.name}" is now active.`,
       });
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to activate program',
-        variant: 'destructive',
-      });
+      showError(err, 'Failed to activate program');
     }
   };
 
@@ -164,11 +164,7 @@ export default function Programs() {
         description: `"${program.name}" has been paused.`,
       });
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to pause program',
-        variant: 'destructive',
-      });
+      showError(err, 'Failed to pause program');
     }
   };
 
@@ -180,15 +176,21 @@ export default function Programs() {
         description: `"${program.name}" has been ended.`,
       });
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to end program',
-        variant: 'destructive',
-      });
+      showError(err, 'Failed to end program');
+    }
+  };
+
+  const handleDuplicate = async (program: Program) => {
+    try {
+      const copy = await duplicateMutation.mutateAsync({ programId: program.id, newName: `${program.name} (copy)` });
+      toast({ title: 'Program duplicated', description: `"${copy.name}" was created as a draft.` });
+    } catch (err) {
+      showError(err, 'Failed to duplicate program');
     }
   };
 
   const isAnyMutating =
+    duplicateMutation.isPending ||
     createMutation.isPending ||
     updateMutation.isPending ||
     activateMutation.isPending ||
@@ -218,13 +220,16 @@ export default function Programs() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search programs..."
+                placeholder="Filter this page by name..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ProgramStatus | 'all')}>
+            <Select value={statusFilter} onValueChange={(value) => {
+                setStatusFilter(value as ProgramStatus | 'all');
+                pager.reset();
+              }}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -249,7 +254,6 @@ export default function Programs() {
                 <tr className="border-b border-border">
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Name</th>
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Players</th>
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Dates</th>
                   <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
@@ -265,14 +269,13 @@ export default function Programs() {
                         </div>
                       </td>
                       <td className="p-4"><Skeleton className="h-5 w-16" /></td>
-                      <td className="p-4"><Skeleton className="h-4 w-12" /></td>
                       <td className="p-4"><Skeleton className="h-4 w-24" /></td>
                       <td className="p-4"><Skeleton className="h-8 w-8 ml-auto" /></td>
                     </tr>
                   ))
                 ) : error ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center">
+                    <td colSpan={4} className="p-8 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <p className="text-destructive font-medium">Failed to load programs</p>
                         <p className="text-sm text-muted-foreground">
@@ -286,7 +289,7 @@ export default function Programs() {
                   </tr>
                 ) : programs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center">
+                    <td colSpan={4} className="p-8 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
                           <FolderOpen className="w-8 h-8 text-muted-foreground" />
@@ -332,15 +335,12 @@ export default function Programs() {
                           {program.status}
                         </Badge>
                       </td>
-                      <td className="p-4 text-muted-foreground">
-                        {program.player_count?.toLocaleString() || 0}
-                      </td>
                       <td className="p-4 text-muted-foreground text-sm">
-                        {program.start_date || program.end_date ? (
+                        {program.starts_at || program.ends_at ? (
                           <span>
-                            {program.start_date ? format(new Date(program.start_date), 'MMM d, yyyy') : '—'}
+                            {program.starts_at ? format(new Date(program.starts_at), 'MMM d, yyyy') : '—'}
                             {' → '}
-                            {program.end_date ? format(new Date(program.end_date), 'MMM d, yyyy') : '—'}
+                            {program.ends_at ? format(new Date(program.ends_at), 'MMM d, yyyy') : '—'}
                           </span>
                         ) : (
                           <span className="text-muted-foreground/60">No dates set</span>
@@ -370,10 +370,16 @@ export default function Programs() {
                               </DropdownMenuItem>
                             )}
                             {program.status === 'active' && (
-                              <DropdownMenuItem onClick={() => handlePause(program)}>
-                                <Pause className="w-4 h-4 mr-2" />
-                                Pause
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuItem onClick={() => handlePause(program)}>
+                                  <Pause className="w-4 h-4 mr-2" />
+                                  Pause
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEnd(program)}>
+                                  <StopCircle className="w-4 h-4 mr-2" />
+                                  End Program
+                                </DropdownMenuItem>
+                              </>
                             )}
                             {program.status === 'paused' && (
                               <>
@@ -391,6 +397,10 @@ export default function Programs() {
                             <DropdownMenuItem onClick={() => handleEdit(program)}>
                               <Pencil className="w-4 h-4 mr-2" />
                               Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDuplicate(program)}>
+                              <Copy className="w-4 h-4 mr-2" />
+                              Duplicate
                             </DropdownMenuItem>
                             {program.status !== 'ended' && (
                               <DropdownMenuItem
@@ -410,6 +420,17 @@ export default function Programs() {
               </tbody>
             </table>
           </div>
+          {(pager.hasPrevious || !!nextCursor) && (
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-border/50">
+              <Button variant="outline" size="icon" disabled={!pager.hasPrevious} onClick={pager.previous}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm">Page {pager.page}</span>
+              <Button variant="outline" size="icon" disabled={!nextCursor} onClick={() => pager.next(nextCursor)}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -429,7 +450,7 @@ export default function Programs() {
             <AlertDialogTitle>Delete Program</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deletingProgram?.name}"? This action cannot be undone
-              and will remove all associated data.
+              and will remove all associated data. Only admins can delete programs.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -36,21 +36,14 @@ export function AIGenerateDialog({
   const [copied, setCopied] = useState(false);
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
-    
+    if (!prompt.trim() || !onGenerate) return;
+
     setIsLoading(true);
     setResult('');
-    
+
     try {
-      if (onGenerate) {
-        const generated = await onGenerate(prompt);
-        setResult(generated);
-      } else {
-        // Placeholder response when no backend is connected
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        setResult(`[AI Generated Content]\n\nBased on your prompt: "${prompt}"\n\nThis is a placeholder response. Connect your MySQL backend to the onGenerate prop to get real AI-generated content.`);
-      }
-    } catch (error) {
+      setResult(await onGenerate(prompt));
+    } catch {
       setResult('Error generating content. Please try again.');
     } finally {
       setIsLoading(false);
@@ -91,6 +84,12 @@ export function AIGenerateDialog({
         </DialogHeader>
         
         <div className="space-y-4 py-4">
+          {!onGenerate && (
+            <div role="status" className="p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm text-amber-600 dark:text-amber-400">
+              AI generation is coming soon: it is not available in this API version.
+            </div>
+          )}
+
           {context && (
             <div className="p-3 bg-secondary/50 rounded-lg text-sm text-muted-foreground">
               <span className="font-medium text-foreground">Context:</span> {context}
@@ -110,7 +109,7 @@ export function AIGenerateDialog({
           
           <Button 
             onClick={handleGenerate} 
-            disabled={isLoading || !prompt.trim()}
+            disabled={isLoading || !prompt.trim() || !onGenerate}
             className="w-full gap-2"
           >
             {isLoading ? (

@@ -23,6 +23,7 @@ import {
   FunnelChart,
   LabelList,
 } from "recharts";
+import FeatureUnavailable from '@/components/FeatureUnavailable';
 
 // Mock data for analytics
 const dailyActiveUsers = [
@@ -177,7 +178,8 @@ const CohortTable = () => (
   </div>
 );
 
-export default function Analytics() {
+/** Planned layout only: this module has no Go API yet. Rendered inert below the banner. */
+function AnalyticsPreview() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -631,6 +633,16 @@ export default function Analytics() {
           </div>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+export default function Analytics() {
+  return (
+    <div className="animate-fade-in">
+      <FeatureUnavailable feature="Analytics" hint="Live counts and recent activity charts are on the Overview page.">
+        <AnalyticsPreview />
+      </FeatureUnavailable>
     </div>
   );
 }

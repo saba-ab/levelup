@@ -1,38 +1,48 @@
-// Player-related utility functions and constants
+// Player-related display helpers. Levels, XP and balances come from the API
+// (GET /players/{id}/progress and /wallet); nothing here invents numbers.
+import type { Player, WalletTransactionType } from '@/services/api/types';
 
-export type PlayerLevel = 'diamond' | 'platinum' | 'gold' | 'silver' | 'bronze';
+export type ActivityType = 'points' | 'badge' | 'mission' | 'level' | 'streak' | 'reward' | 'xp';
 
-export type ActivityType = 'points' | 'badge' | 'mission' | 'level' | 'streak' | 'reward';
+/** Name to show for a player: display_name, else email, else external_id. */
+export function getPlayerName(player: Pick<Player, 'display_name' | 'email' | 'external_id'>): string {
+  return player.display_name?.trim() || player.email || player.external_id;
+}
 
-export const LEVEL_THRESHOLDS = {
-  diamond: 50000,
-  platinum: 15000,
-  gold: 5000,
-  silver: 1000,
-  bronze: 0,
-} as const;
-
-export const LEVEL_ORDER: PlayerLevel[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond'];
-
-export function getLevelColor(level: string): string {
-  switch (level.toLowerCase()) {
-    case 'diamond':
-      return 'border-cyan-400 text-cyan-400 bg-cyan-400/10';
-    case 'platinum':
-      return 'border-slate-300 text-slate-300 bg-slate-300/10';
-    case 'gold':
-      return 'border-yellow-500 text-yellow-500 bg-yellow-500/10';
-    case 'silver':
-      return 'border-gray-400 text-gray-400 bg-gray-400/10';
-    default:
-      return 'border-amber-700 text-amber-700 bg-amber-700/10';
+/** Up to two initials from a display name ("Ana Diaz" -> "AD", "ana@x.io" -> "A"). */
+export function getPlayerInitials(name: string | null | undefined): string {
+  const clean = (name ?? '').trim();
+  if (!clean) return '?';
+  const words = clean.split(/[\s._-]+/).filter(Boolean);
+  if (words.length >= 2 && !clean.includes('@')) {
+    return (words[0][0] + words[1][0]).toUpperCase();
   }
+  return clean[0].toUpperCase();
+}
+
+/** @deprecated use getPlayerInitials. */
+export const getPlayerInitial = getPlayerInitials;
+
+const LEVEL_COLORS = [
+  'border-amber-700 text-amber-700 bg-amber-700/10',
+  'border-gray-400 text-gray-500 bg-gray-400/10',
+  'border-yellow-500 text-yellow-600 bg-yellow-500/10',
+  'border-slate-400 text-slate-500 bg-slate-300/10',
+  'border-cyan-400 text-cyan-500 bg-cyan-400/10',
+];
+
+/** Badge colour for a level, by its level_number (tenants name levels freely). */
+export function getLevelColor(levelNumber: number | null | undefined): string {
+  if (!levelNumber || levelNumber < 1) return 'border-border text-muted-foreground';
+  return LEVEL_COLORS[Math.min(levelNumber, LEVEL_COLORS.length) - 1];
 }
 
 export function getActivityIcon(type: ActivityType | string): string {
   switch (type) {
     case 'points':
       return '⚡';
+    case 'xp':
+      return '✨';
     case 'badge':
       return '🏅';
     case 'mission':
@@ -48,28 +58,31 @@ export function getActivityIcon(type: ActivityType | string): string {
   }
 }
 
-export function calculateLevelProgress(currentXp: number, currentLevel: string) {
-  const level = currentLevel.toLowerCase() as PlayerLevel;
-  
-  if (level === 'diamond') {
-    return { progress: 100, nextLevelXp: currentXp, currentLevelXp: LEVEL_THRESHOLDS.diamond };
-  }
+const KIND_LABELS: Record<WalletTransactionType, string> = {
+  earn: 'Earn',
+  bonus: 'Bonus',
+  reward: 'Reward',
+  adjustment: 'Adjustment',
+  spend: 'Spend',
+  redeem: 'Redeem',
+  penalty: 'Penalty',
+  expire: 'Expire',
+  transfer: 'Transfer',
+  refund: 'Refund',
+};
 
-  const levelIndex = LEVEL_ORDER.indexOf(level);
-  const nextLevel = LEVEL_ORDER[levelIndex + 1];
-  const currentLevelXp = LEVEL_THRESHOLDS[level];
-  const nextLevelXp = LEVEL_THRESHOLDS[nextLevel];
-
-  const progress = ((currentXp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100;
-  
-  return {
-    progress: Math.min(100, Math.max(0, progress)),
-    nextLevelXp,
-    currentLevelXp,
-    xpToNext: nextLevelXp - currentXp,
-  };
+export function getTransactionKindLabel(kind: string): string {
+  return KIND_LABELS[kind as WalletTransactionType] ?? kind;
 }
 
-export function getPlayerInitial(email: string): string {
-  return email.charAt(0).toUpperCase();
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '-';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString();
+}
+
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return '-';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
 }

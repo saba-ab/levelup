@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, Mail, Bell, MessageSquare, Smartphone, Plus, Edit, Trash2, Send, CheckCircle2, XCircle, Clock, Eye, Copy } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import FeatureUnavailable from '@/components/FeatureUnavailable';
 
 const templates = [
   { id: "1", name: "Welcome Message", trigger: "user.registered", channels: ["email", "push"], subject: "Welcome to Gamify!", status: "active", lastEdited: "2024-01-20" },
@@ -59,7 +60,8 @@ const channelIcons: Record<string, React.ElementType> = {
   "in-app": MessageSquare,
 };
 
-export default function Notifications() {
+/** Planned layout only: this module has no Go API yet. Rendered inert below the banner. */
+function NotificationsPreview() {
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [selectedChannels, setSelectedChannels] = useState<string[]>(["email", "push"]);
   const [historyFilter, setHistoryFilter] = useState("all");
@@ -511,6 +513,16 @@ export default function Notifications() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+export default function Notifications() {
+  return (
+    <div className="animate-fade-in">
+      <FeatureUnavailable feature="Notifications">
+        <NotificationsPreview />
+      </FeatureUnavailable>
     </div>
   );
 }

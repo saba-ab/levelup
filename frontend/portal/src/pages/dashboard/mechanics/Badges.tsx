@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Search, Award, Sparkles, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Award, Sparkles, Loader2, UserPlus, UserMinus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,28 +21,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import CursorPager from '@/components/CursorPager';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
+import { PlayerActionDialog } from '@/components/mechanics/PlayerActionDialog';
+import { changedFields } from '@/components/mechanics/patch';
 import {
   useBadgesQuery,
   useCreateBadgeMutation,
   useUpdateBadgeMutation,
   useDeleteBadgeMutation,
+  useAwardBadgeMutation,
+  useRevokeBadgeMutation,
+  describeMechanicsError,
 } from '@/services/queries/mechanics';
-import type { Badge, CreateBadgeData, UpdateBadgeData, BadgeTier, BadgeCategory } from '@/services/api/types';
+import type { Badge, BadgeFilters, CreateBadgeData, UpdateBadgeData, BadgeTier, BadgeCategory } from '@/services/api/types';
 
 const tierColors: Record<BadgeTier, string> = {
   bronze: 'bg-amber-700/20 text-amber-700 border-amber-700/30',
@@ -71,10 +68,21 @@ const categoryLabels: Record<BadgeCategory, string> = {
   seasonal: 'Seasonal',
 };
 
+/** Messages for the award endpoint's 409 codes. */
+const awardErrors: Record<string, string> = {
+  badge_already_earned: 'This player already has this badge (it is not stackable).',
+  badge_max_awards_reached: 'This badge has reached its maximum number of awards.',
+  badge_inactive: 'This badge is inactive. Activate it before awarding.',
+  player_inactive: 'This player is inactive.',
+  player_not_found: 'Player not found.',
+};
+
+const ALL = 'all';
+
 interface BadgeFormState {
   name: string;
   description: string;
-  image_url: string;
+  icon_url: string;
   tier: BadgeTier;
   category: BadgeCategory;
   points_value: number;
@@ -87,7 +95,7 @@ interface BadgeFormState {
 const defaultFormState: BadgeFormState = {
   name: '',
   description: '',
-  image_url: '',
+  icon_url: '',
   tier: 'bronze',
   category: 'achievement',
   points_value: 0,
@@ -98,34 +106,50 @@ const defaultFormState: BadgeFormState = {
 };
 
 export default function Badges() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [tierFilter, setTierFilter] = useState<string>(ALL);
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
+  const [activeFilter, setActiveFilter] = useState<string>(ALL);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBadge, setEditingBadge] = useState<Badge | null>(null);
-  const [deletingBadge, setDeletingBadge] = useState<Badge | null>(null);
   const [formState, setFormState] = useState<BadgeFormState>(defaultFormState);
+  const [awardingBadge, setAwardingBadge] = useState<Badge | null>(null);
+  const [revokingBadge, setRevokingBadge] = useState<Badge | null>(null);
   const { toast } = useToast();
+  const pager = useCursorPagination(24);
 
-  // Queries and mutations
-  const filters = useMemo(() => ({ search: searchQuery || undefined }), [searchQuery]);
-  const { data: badgesData, isLoading, error } = useBadgesQuery(filters);
+  const filters: BadgeFilters = {
+    limit: pager.limit,
+    cursor: pager.cursor,
+    tier: tierFilter === ALL ? undefined : (tierFilter as BadgeTier),
+    category: categoryFilter === ALL ? undefined : (categoryFilter as BadgeCategory),
+    active: activeFilter === ALL ? undefined : activeFilter === 'active',
+  };
+  const { data: badgesData, isLoading, isFetching, error } = useBadgesQuery(filters);
   const createMutation = useCreateBadgeMutation();
   const updateMutation = useUpdateBadgeMutation();
   const deleteMutation = useDeleteBadgeMutation();
+  const awardMutation = useAwardBadgeMutation();
+  const revokeMutation = useRevokeBadgeMutation();
 
-  const badges = badgesData?.data || [];
+  const badges = badgesData?.data ?? [];
+
+  const setFilter = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    pager.reset();
+  };
 
   const handleOpenDialog = (badge?: Badge) => {
     if (badge) {
       setEditingBadge(badge);
       setFormState({
         name: badge.name,
-        description: badge.description || '',
-        image_url: badge.image_url || '',
+        description: badge.description,
+        icon_url: badge.icon_url,
         tier: badge.tier,
         category: badge.category,
         points_value: badge.points_value,
         is_stackable: badge.is_stackable,
-        max_awards: badge.max_awards ?? null,
+        max_awards: badge.max_awards,
         is_active: badge.is_active,
         is_secret: badge.is_secret,
       });
@@ -144,31 +168,20 @@ export default function Badges() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     try {
       if (editingBadge) {
-        const updateData: UpdateBadgeData = {
-          name: formState.name,
-          description: formState.description || undefined,
-          image_url: formState.image_url || undefined,
-          tier: formState.tier,
-          category: formState.category,
-          points_value: formState.points_value,
-          is_stackable: formState.is_stackable,
-          max_awards: formState.max_awards ?? undefined,
-          is_active: formState.is_active,
-          is_secret: formState.is_secret,
-        };
-        await updateMutation.mutateAsync({ badgeId: editingBadge.id, data: updateData });
-        toast({
-          title: 'Badge updated',
-          description: 'Badge has been updated successfully.',
-        });
+        const next: UpdateBadgeData = { ...formState };
+        const patch = changedFields(editingBadge, next);
+        if (Object.keys(patch).length > 0) {
+          await updateMutation.mutateAsync({ badgeId: editingBadge.id, data: patch });
+        }
+        toast({ title: 'Badge updated', description: 'Badge has been updated successfully.' });
       } else {
         const createData: CreateBadgeData = {
           name: formState.name,
           description: formState.description || undefined,
-          image_url: formState.image_url || undefined,
+          icon_url: formState.icon_url || undefined,
           tier: formState.tier,
           category: formState.category,
           points_value: formState.points_value,
@@ -178,37 +191,64 @@ export default function Badges() {
           is_secret: formState.is_secret,
         };
         await createMutation.mutateAsync(createData);
-        toast({
-          title: 'Badge created',
-          description: 'New badge has been created successfully.',
-        });
+        toast({ title: 'Badge created', description: 'New badge has been created successfully.' });
       }
       handleCloseDialog();
     } catch (err) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Something went wrong',
+        description: describeMechanicsError(err, 'Something went wrong', {
+          badge_slug_taken: 'A badge with this name/slug already exists.',
+          version_conflict: 'The badge was changed by someone else. Reload and try again.',
+        }),
         variant: 'destructive',
       });
     }
   };
 
-  const handleDelete = async () => {
-    if (!deletingBadge) return;
-    
+  const handleDelete = async (badge: Badge) => {
     try {
-      await deleteMutation.mutateAsync(deletingBadge.id);
-      toast({
-        title: 'Badge deleted',
-        description: 'Badge has been removed successfully.',
-      });
-      setDeletingBadge(null);
+      await deleteMutation.mutateAsync(badge.id);
+      toast({ title: 'Badge deleted', description: 'Badge has been removed successfully.' });
     } catch (err) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to delete badge',
+        description: describeMechanicsError(err, 'Failed to delete badge'),
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleAward = async (playerId: string) => {
+    if (!awardingBadge) return;
+    try {
+      const result = await awardMutation.mutateAsync({ badge_id: awardingBadge.id, player_id: playerId });
+      toast({
+        title: result.replay ? 'Already applied' : 'Badge awarded',
+        description: `"${awardingBadge.name}" awarded (earned ${result.player_badge.earned_count}×).`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Could not award badge',
+        description: describeMechanicsError(err, 'Failed to award badge', awardErrors),
+        variant: 'destructive',
+      });
+      throw err;
+    }
+  };
+
+  const handleRevoke = async (playerId: string) => {
+    if (!revokingBadge) return;
+    try {
+      await revokeMutation.mutateAsync({ playerId, badgeId: revokingBadge.id });
+      toast({ title: 'Badge revoked', description: `"${revokingBadge.name}" was revoked from the player.` });
+    } catch (err) {
+      toast({
+        title: 'Could not revoke badge',
+        description: describeMechanicsError(err, 'Failed to revoke badge'),
+        variant: 'destructive',
+      });
+      throw err;
     }
   };
 
@@ -218,6 +258,7 @@ export default function Badges() {
   };
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const hasFilters = tierFilter !== ALL || categoryFilter !== ALL || activeFilter !== ALL;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -253,13 +294,11 @@ export default function Badges() {
                 <div className="mb-6 p-4 rounded-lg bg-secondary/50 border border-border">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Live Preview</p>
                   <div className="flex items-center gap-4">
-                    <div
-                      className="w-16 h-16 rounded-full flex items-center justify-center text-3xl bg-background border-2 border-border transition-all shrink-0"
-                    >
-                      {formState.image_url ? (
-                        <img 
-                          src={formState.image_url} 
-                          alt="Badge preview" 
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl bg-background border-2 border-border transition-all shrink-0">
+                      {formState.icon_url ? (
+                        <img
+                          src={formState.icon_url}
+                          alt="Badge preview"
                           className="w-full h-full rounded-full object-cover"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
@@ -267,7 +306,7 @@ export default function Badges() {
                           }}
                         />
                       ) : null}
-                      <span className={formState.image_url ? 'hidden' : ''}>
+                      <span className={formState.icon_url ? 'hidden' : ''}>
                         {tierIcons[formState.tier]}
                       </span>
                     </div>
@@ -318,6 +357,7 @@ export default function Badges() {
                       id="name"
                       placeholder="e.g., Super Achiever"
                       value={formState.name}
+                      maxLength={255}
                       onChange={(e) => setFormState(prev => ({ ...prev, name: e.target.value }))}
                       required
                     />
@@ -328,16 +368,18 @@ export default function Badges() {
                       id="description"
                       placeholder="What does the user need to do?"
                       value={formState.description}
+                      maxLength={1000}
                       onChange={(e) => setFormState(prev => ({ ...prev, description: e.target.value }))}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="image_url">Image URL</Label>
+                    <Label htmlFor="icon_url">Icon URL</Label>
                     <Input
-                      id="image_url"
+                      id="icon_url"
+                      type="url"
                       placeholder="https://example.com/badge.png"
-                      value={formState.image_url}
-                      onChange={(e) => setFormState(prev => ({ ...prev, image_url: e.target.value }))}
+                      value={formState.icon_url}
+                      onChange={(e) => setFormState(prev => ({ ...prev, icon_url: e.target.value }))}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -351,11 +393,11 @@ export default function Badges() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="bronze">{tierIcons.bronze} Bronze</SelectItem>
-                          <SelectItem value="silver">{tierIcons.silver} Silver</SelectItem>
-                          <SelectItem value="gold">{tierIcons.gold} Gold</SelectItem>
-                          <SelectItem value="platinum">{tierIcons.platinum} Platinum</SelectItem>
-                          <SelectItem value="diamond">{tierIcons.diamond} Diamond</SelectItem>
+                          {(Object.keys(tierIcons) as BadgeTier[]).map((tier) => (
+                            <SelectItem key={tier} value={tier} className="capitalize">
+                              {tierIcons[tier]} {tier}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -384,7 +426,7 @@ export default function Badges() {
                         type="number"
                         min="0"
                         value={formState.points_value}
-                        onChange={(e) => setFormState(prev => ({ ...prev, points_value: parseInt(e.target.value) || 0 }))}
+                        onChange={(e) => setFormState(prev => ({ ...prev, points_value: Math.max(0, Number(e.target.value) || 0) }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -395,9 +437,9 @@ export default function Badges() {
                         min="1"
                         placeholder="Unlimited"
                         value={formState.max_awards ?? ''}
-                        onChange={(e) => setFormState(prev => ({ 
-                          ...prev, 
-                          max_awards: e.target.value ? parseInt(e.target.value) : null 
+                        onChange={(e) => setFormState(prev => ({
+                          ...prev,
+                          max_awards: e.target.value ? Number(e.target.value) : null,
                         }))}
                       />
                     </div>
@@ -444,15 +486,34 @@ export default function Badges() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search badges..."
-          className="pl-9"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      {/* Filters (server-side: ?tier&category&active) */}
+      <div className="flex flex-wrap gap-3">
+        <Select value={tierFilter} onValueChange={setFilter(setTierFilter)}>
+          <SelectTrigger className="w-40" aria-label="Filter by tier"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All tiers</SelectItem>
+            {(Object.keys(tierIcons) as BadgeTier[]).map((tier) => (
+              <SelectItem key={tier} value={tier} className="capitalize">{tierIcons[tier]} {tier}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter} onValueChange={setFilter(setCategoryFilter)}>
+          <SelectTrigger className="w-44" aria-label="Filter by category"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All categories</SelectItem>
+            {Object.entries(categoryLabels).map(([key, label]) => (
+              <SelectItem key={key} value={key}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={activeFilter} onValueChange={setFilter(setActiveFilter)}>
+          <SelectTrigger className="w-36" aria-label="Filter by status"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Any status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Loading State */}
@@ -479,7 +540,7 @@ export default function Badges() {
       )}
 
       {/* Badges Grid */}
-      {!isLoading && !error && (
+      {!isLoading && !error && badges.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {badges.map((badge, index) => (
             <Card
@@ -492,15 +553,17 @@ export default function Badges() {
                   <ItemActionsMenu
                     itemName={badge.name}
                     onEdit={() => handleOpenDialog(badge)}
-                    onDelete={() => setDeletingBadge(badge)}
+                    onDelete={() => handleDelete(badge)}
+                    actions={[
+                      { label: 'Award to player', icon: UserPlus, onClick: () => setAwardingBadge(badge), disabled: !badge.is_active },
+                      { label: 'Revoke from player', icon: UserMinus, onClick: () => setRevokingBadge(badge) },
+                    ]}
                     showInGroup
                   />
                 </div>
-                <div
-                  className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl transition-transform group-hover:scale-110 bg-secondary"
-                >
-                  {badge.image_url ? (
-                    <img src={badge.image_url} alt={badge.name} className="w-full h-full rounded-full object-cover" />
+                <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl transition-transform group-hover:scale-110 bg-secondary">
+                  {badge.icon_url ? (
+                    <img src={badge.icon_url} alt={badge.name} className="w-full h-full rounded-full object-cover" />
                   ) : (
                     tierIcons[badge.tier]
                   )}
@@ -517,6 +580,15 @@ export default function Badges() {
                     <Award className="w-3 h-3 mr-1" />
                     {badge.points_value} pts
                   </BadgeUI>
+                  {badge.is_stackable && (
+                    <BadgeUI variant="outline" className="bg-secondary">Stackable</BadgeUI>
+                  )}
+                  {badge.max_awards !== null && (
+                    <BadgeUI variant="outline" className="bg-secondary">Max {badge.max_awards}</BadgeUI>
+                  )}
+                  {badge.is_secret && (
+                    <BadgeUI variant="outline" className="bg-amber-500/20 text-amber-500 border-amber-500/30">🔒 Secret</BadgeUI>
+                  )}
                 </div>
                 {!badge.is_active && (
                   <BadgeUI variant="outline" className="mt-2 bg-muted text-muted-foreground">
@@ -538,35 +610,43 @@ export default function Badges() {
             </div>
             <div>
               <p className="font-medium">No badges found</p>
-              <p className="text-sm text-muted-foreground">Create your first badge to reward your users.</p>
+              <p className="text-sm text-muted-foreground">
+                {hasFilters ? 'Try different filters.' : 'Create your first badge to reward your users.'}
+              </p>
             </div>
           </div>
         </Card>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingBadge} onOpenChange={(open) => !open && setDeletingBadge(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Badge</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{deletingBadge?.name}"? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : null}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CursorPager
+        page={pager.page}
+        hasPrevious={pager.hasPrevious}
+        nextCursor={badgesData?.next_cursor}
+        onPrevious={pager.previous}
+        onNext={pager.next}
+        isFetching={isFetching}
+      />
+
+      <PlayerActionDialog
+        open={!!awardingBadge}
+        onOpenChange={(open) => !open && setAwardingBadge(null)}
+        title={`Award "${awardingBadge?.name ?? ''}"`}
+        description="Grants the badge (and its points) to a player. Safe to retry: the request is idempotent."
+        submitLabel="Award Badge"
+        isPending={awardMutation.isPending}
+        onSubmit={handleAward}
+      />
+
+      <PlayerActionDialog
+        open={!!revokingBadge}
+        onOpenChange={(open) => !open && setRevokingBadge(null)}
+        title={`Revoke "${revokingBadge?.name ?? ''}"`}
+        description="Removes the badge from a player."
+        submitLabel="Revoke Badge"
+        isPending={revokeMutation.isPending}
+        onSubmit={handleRevoke}
+        destructive
+      />
     </div>
   );
 }

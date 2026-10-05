@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus, Trash2, Users, Filter, Save, Play, X, GripVertical } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import FeatureUnavailable from '@/components/FeatureUnavailable';
 
 interface Condition {
   id: string;
@@ -85,7 +86,8 @@ const previewUsers = [
   { id: "5", name: "Chris Brown", email: "chris@example.com", points: 3200, level: 8, tier: "Platinum", lastActive: "2024-01-20" },
 ];
 
-export default function Segments() {
+/** Planned layout only: this module has no Go API yet. Rendered inert below the banner. */
+function SegmentsPreview() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [segmentName, setSegmentName] = useState("");
   const [segmentDescription, setSegmentDescription] = useState("");
@@ -517,6 +519,16 @@ export default function Segments() {
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+export default function Segments() {
+  return (
+    <div className="animate-fade-in">
+      <FeatureUnavailable feature="Segments" hint="Use programs to group players: enroll them under Programs.">
+        <SegmentsPreview />
+      </FeatureUnavailable>
     </div>
   );
 }

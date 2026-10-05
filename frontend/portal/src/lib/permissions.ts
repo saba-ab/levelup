@@ -1,4 +1,5 @@
-export type TeamRole = 'owner' | 'super_admin' | 'admin' | 'analyst' | 'program_manager' | 'developer';
+/** Portal roles: the tenant API roles (platform_admin maps to super_admin in AuthContext). */
+export type TeamRole = 'owner' | 'super_admin' | 'admin' | 'program_manager' | 'developer';
 
 export type Permission = 
   | 'view:overview'
@@ -50,10 +51,6 @@ const rolePermissions: Record<TeamRole, Permission[]> = {
     'view:analytics', 'view:notifications', 'manage:notifications',
     'view:docs', 'view:settings',
   ],
-  analyst: [
-    'view:overview', 'view:programs', 'view:rules', 'view:mechanics',
-    'view:players', 'view:segments', 'view:analytics', 'view:docs',
-  ],
   program_manager: [
     'view:overview', 'view:ai-hub', 'view:programs', 'manage:programs',
     'view:rules', 'manage:rules', 'view:mechanics', 'manage:mechanics',
@@ -73,6 +70,7 @@ export const routePermissions: Record<string, Permission> = {
   '/programs': 'view:programs',
   '/rules': 'view:rules',
   '/rules/new': 'manage:rules',
+  '/events': 'view:rules',
   '/mechanics': 'view:mechanics',
   '/mechanics/points': 'view:mechanics',
   '/mechanics/badges': 'view:mechanics',
@@ -114,6 +112,12 @@ export function canAccessRoute(role: TeamRole | undefined, path: string): boolea
   if (path.startsWith('/players/')) {
     return hasPermission(role, 'view:players');
   }
+  if (path.startsWith('/programs/')) {
+    return hasPermission(role, 'view:programs');
+  }
+  if (path.startsWith('/rules/')) {
+    return hasPermission(role, 'manage:rules');
+  }
   
   // Default allow for unknown routes
   return true;
@@ -136,6 +140,7 @@ export const navPermissions: NavPermission[] = [
   { path: '/ai-hub', permission: 'view:ai-hub' },
   { path: '/programs', permission: 'view:programs' },
   { path: '/rules', permission: 'view:rules' },
+  { path: '/events', permission: 'view:rules' },
   { 
     path: '/mechanics', 
     permission: 'view:mechanics',

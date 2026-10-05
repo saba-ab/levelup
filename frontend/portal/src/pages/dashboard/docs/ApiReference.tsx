@@ -7,47 +7,112 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 
-const endpoints = [
+interface Endpoint {
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  path: string;
+  description: string;
+  auth: boolean;
+  body?: string;
+  response?: string;
+}
+
+const LIST_RESPONSE = `{
+  "data": [ { "id": "01a10d23-0055-7290-9a84-e33fee1fcc63", ... } ],
+  "next_cursor": "MTc5MTIy..."
+}`;
+
+/** A selection of the Go API (/api/v1). The full contract is the OpenAPI document (swagger.json). */
+const endpoints: { category: string; items: Endpoint[] }[] = [
   {
-    category: 'Points',
+    category: 'Auth',
     items: [
-      { method: 'POST', path: '/v1/points/award', description: 'Award points to a user', auth: true },
-      { method: 'POST', path: '/v1/points/deduct', description: 'Deduct points from a user', auth: true },
-      { method: 'GET', path: '/v1/points/{user_id}', description: 'Get user point balance', auth: true },
-      { method: 'GET', path: '/v1/points/{user_id}/history', description: 'Get point transaction history', auth: true },
+      {
+        method: 'POST',
+        path: '/api/v1/auth/login',
+        description: 'Sign in; returns an access token (Bearer) and a single-use refresh token',
+        auth: false,
+        body: `{ "email": "you@company.com", "password": "••••••••" }`,
+        response: `{
+  "user": { "id": "...", "email": "you@company.com", "roles": [...] },
+  "tenant": { "id": "...", "name": "Acme" },
+  "access_token": "eyJ...",
+  "refresh_token": "...",
+  "token_type": "Bearer",
+  "expires_in": 900
+}`,
+      },
+      { method: 'POST', path: '/api/v1/auth/refresh', description: 'Exchange a refresh token for a new session', auth: false, body: `{ "refresh_token": "..." }` },
+      { method: 'GET', path: '/api/v1/auth/me', description: 'Current user and tenant', auth: true },
     ],
   },
   {
-    category: 'Badges',
+    category: 'Activities',
     items: [
-      { method: 'POST', path: '/v1/badges/award', description: 'Award a badge to a user', auth: true },
-      { method: 'GET', path: '/v1/badges', description: 'List all badges', auth: true },
-      { method: 'GET', path: '/v1/badges/{user_id}', description: "Get user's earned badges", auth: true },
-      { method: 'POST', path: '/v1/badges', description: 'Create a new badge', auth: true },
+      {
+        method: 'POST',
+        path: '/api/v1/activities',
+        description: 'Report an activity; rules evaluate it asynchronously (idempotent on event_id)',
+        auth: true,
+        body: `{
+  "event_id": "order-1042",
+  "event_type": "purchase_completed",
+  "player_external_id": "user-123",
+  "properties": { "amount": 150 }
+}`,
+        response: `{ "activity_id": "01a10d23-...", "status": "pending", "duplicate": false }`,
+      },
+      { method: 'POST', path: '/api/v1/activities/batch', description: 'Report up to 100 activities at once', auth: true, body: `{ "items": [ { "event_id": "...", "event_type": "...", "player_external_id": "..." } ] }` },
+      { method: 'GET', path: '/api/v1/activities', description: 'List activities (?status=pending|decided|rejected)', auth: true, response: LIST_RESPONSE },
     ],
   },
   {
-    category: 'Levels',
+    category: 'Players',
     items: [
-      { method: 'GET', path: '/v1/levels', description: 'List all level tiers', auth: true },
-      { method: 'GET', path: '/v1/levels/{user_id}', description: "Get user's current level", auth: true },
-      { method: 'POST', path: '/v1/levels', description: 'Create a new level tier', auth: true },
+      { method: 'GET', path: '/api/v1/players', description: 'List players (cursor paginated)', auth: true, response: LIST_RESPONSE },
+      { method: 'POST', path: '/api/v1/players', description: 'Create a player', auth: true, body: `{ "external_id": "user-123", "display_name": "Ada" }` },
+      { method: 'GET', path: '/api/v1/players/by-external-id/{external_id}', description: 'Find a player by your id', auth: true },
+      { method: 'GET', path: '/api/v1/players/{id}/wallet', description: "Player's points balance", auth: true },
+      { method: 'POST', path: '/api/v1/players/{id}/wallet/credit', description: 'Credit points (send an Idempotency-Key header)', auth: true, body: `{ "amount": 100, "kind": "bonus", "description": "Welcome bonus" }` },
+      { method: 'GET', path: '/api/v1/players/{id}/badges', description: "Player's earned badges", auth: true },
+      { method: 'GET', path: '/api/v1/players/{id}/progress', description: "Player's level and XP", auth: true },
     ],
   },
   {
-    category: 'Users',
+    category: 'Rules',
     items: [
-      { method: 'GET', path: '/v1/users', description: 'List all users', auth: true },
-      { method: 'GET', path: '/v1/users/{user_id}', description: 'Get user details', auth: true },
-      { method: 'POST', path: '/v1/users', description: 'Create a new user', auth: true },
-      { method: 'DELETE', path: '/v1/users/{user_id}', description: 'Delete a user', auth: true },
+      { method: 'GET', path: '/api/v1/rules', description: 'List rules (?status=&trigger_event=)', auth: true, response: LIST_RESPONSE },
+      {
+        method: 'POST',
+        path: '/api/v1/rules',
+        description: 'Create a rule (draft version 1)',
+        auth: true,
+        body: `{
+  "name": "Big purchase bonus",
+  "trigger_event": "purchase_completed",
+  "conditions": [ { "source": "trigger", "field": "amount", "operator": "gte", "value": 100 } ],
+  "actions": [ { "type": "credit_points", "amount": 50 } ],
+  "limits": { "max_per_player_per_day": 1 }
+}`,
+      },
+      { method: 'POST', path: '/api/v1/rules/{id}/publish', description: 'Make a version live', auth: true, body: `{ "version": 1 }` },
+      {
+        method: 'POST',
+        path: '/api/v1/rules/simulate',
+        description: 'Evaluate a hypothetical activity against live rules (no writes)',
+        auth: true,
+        body: `{ "event_type": "purchase_completed", "player_external_id": "user-123", "properties": { "amount": 150 } }`,
+      },
+      { method: 'GET', path: '/api/v1/rules/decisions', description: 'Decisions (?activity_id=&player_id=)', auth: true, response: LIST_RESPONSE },
     ],
   },
   {
-    category: 'Events',
+    category: 'Catalogue',
     items: [
-      { method: 'POST', path: '/v1/events', description: 'Track a user event', auth: true },
-      { method: 'GET', path: '/v1/events/{user_id}', description: 'Get user event history', auth: true },
+      { method: 'GET', path: '/api/v1/events', description: 'Event types (triggers), global and tenant', auth: true, response: LIST_RESPONSE },
+      { method: 'GET', path: '/api/v1/badges', description: 'List badges', auth: true, response: LIST_RESPONSE },
+      { method: 'POST', path: '/api/v1/badges/{id}/award', description: 'Award a badge (send an Idempotency-Key header)', auth: true, body: `{ "player_id": "..." }` },
+      { method: 'GET', path: '/api/v1/levels', description: 'List levels', auth: true, response: LIST_RESPONSE },
+      { method: 'GET', path: '/api/v1/leaderboards/{id}/entries', description: 'Leaderboard ranking for the current period', auth: true, response: LIST_RESPONSE },
     ],
   },
 ];
@@ -56,13 +121,14 @@ const methodColors: Record<string, string> = {
   GET: 'bg-green-500/20 text-green-500',
   POST: 'bg-blue-500/20 text-blue-500',
   PUT: 'bg-amber-500/20 text-amber-500',
+  PATCH: 'bg-amber-500/20 text-amber-500',
   DELETE: 'bg-red-500/20 text-red-500',
 };
 
 export default function ApiReference() {
   const { baseUrl } = useEnvironment();
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
-  const [selectedEndpoint, setSelectedEndpoint] = useState(endpoints[0].items[0]);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint>(endpoints[0].items[0]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -75,7 +141,7 @@ export default function ApiReference() {
       <div>
         <h1 className="text-3xl font-bold mb-2">API Reference</h1>
         <p className="text-muted-foreground">
-          Complete REST API documentation for integrating with LevelUpOs.
+          Key REST endpoints for integrating with LevelUpOs. The complete contract is the API's OpenAPI document. Lists are cursor paginated (?limit=&cursor=) and errors are application/problem+json.
         </p>
       </div>
 
@@ -106,11 +172,11 @@ export default function ApiReference() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Authentication</CardTitle>
-          <CardDescription>All API requests require authentication via Bearer token</CardDescription>
+          <CardDescription>Requests carry the access token from POST /api/v1/auth/login; refresh it with /api/v1/auth/refresh</CardDescription>
         </CardHeader>
         <CardContent>
           <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-            <code>{`Authorization: Bearer YOUR_API_KEY`}</code>
+            <code>{`Authorization: Bearer ACCESS_TOKEN`}</code>
           </pre>
         </CardContent>
       </Card>
@@ -134,11 +200,11 @@ export default function ApiReference() {
                   </div>
                   {group.items.map((endpoint) => (
                     <button
-                      key={endpoint.path}
+                      key={`${endpoint.method} ${endpoint.path}`}
                       onClick={() => setSelectedEndpoint(endpoint)}
                       className={cn(
                         "w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-secondary/50 transition-colors border-b border-border/30",
-                        selectedEndpoint.path === endpoint.path && "bg-secondary/50"
+                        selectedEndpoint === endpoint && "bg-secondary/50"
                       )}
                     >
                       <Badge variant="secondary" className={cn("text-[10px] font-mono", methodColors[endpoint.method])}>
@@ -178,25 +244,15 @@ export default function ApiReference() {
               </TabsList>
               <TabsContent value="request" className="mt-4">
                 <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                  <code>{`curl -X ${selectedEndpoint.method} ${baseUrl}${selectedEndpoint.path} \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json"${selectedEndpoint.method === 'POST' ? ` \\
-  -d '{
-    "user_id": "usr_123",
-    "amount": 100
-  }'` : ''}`}</code>
+                  <code>{`curl -X ${selectedEndpoint.method} ${baseUrl}${selectedEndpoint.path}${selectedEndpoint.auth ? ` \\
+  -H "Authorization: Bearer ACCESS_TOKEN"` : ''} \\
+  -H "Content-Type: application/json"${selectedEndpoint.body ? ` \\
+  -d '${selectedEndpoint.body}'` : ''}`}</code>
                 </pre>
               </TabsContent>
               <TabsContent value="response" className="mt-4">
                 <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                  <code>{`{
-  "success": true,
-  "data": {
-    "id": "txn_abc123",
-    "user_id": "usr_123",
-    "created_at": "2024-03-20T14:30:00Z"
-  }
-}`}</code>
+                  <code>{selectedEndpoint.response ?? '{ ... }  (see the OpenAPI document for this response)'}</code>
                 </pre>
               </TabsContent>
             </Tabs>

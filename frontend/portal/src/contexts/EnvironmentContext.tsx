@@ -100,9 +100,10 @@ export function EnvironmentProvider({ children }: { children: ReactNode }) {
       return envDefault;
     }
 
-    // Fallback to localStorage if no env var is set
+    // Fallback to localStorage if no env var is set. A dev server talks to
+    // the local Go API by default, never to production.
     const stored = localStorage.getItem('levelupos_active_env');
-    return stored || 'prod';
+    return stored || (import.meta.env.DEV ? 'localhost' : 'prod');
   });
 
   const activeEnvironment = environments.find(e => e.id === activeEnvId) || environments[0];

@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils';
-import { getPlayerInitial } from '@/lib/player-utils';
+import { getPlayerInitials } from '@/lib/player-utils';
 
 interface PlayerAvatarProps {
-  email: string;
+  /** Display name (or email) the initials are derived from. */
+  name: string | null | undefined;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -13,16 +14,16 @@ const sizeClasses = {
   lg: 'w-20 h-20 text-3xl',
 };
 
-export function PlayerAvatar({ email, size = 'md', className }: PlayerAvatarProps) {
+export function PlayerAvatar({ name, size = 'md', className }: PlayerAvatarProps) {
   return (
     <div
       className={cn(
-        'rounded-full bg-primary/10 flex items-center justify-center font-medium',
+        'rounded-full bg-primary/10 flex items-center justify-center font-medium shrink-0',
         sizeClasses[size],
         className
       )}
     >
-      {getPlayerInitial(email)}
+      {getPlayerInitials(name)}
     </div>
   );
 }

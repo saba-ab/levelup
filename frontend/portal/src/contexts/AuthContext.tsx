@@ -30,6 +30,8 @@ interface AuthContextType {
   canAccessRoute: (path: string) => boolean;
   setUserRole: (role: TeamRole) => void;
   getToken: () => string | null;
+  /** Applies a tenant returned by PATCH /tenant so the header and session stay current. */
+  applyTenant: (tenant: Tenant) => void;
 }
 
 interface RegisterFormData {
@@ -174,6 +176,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getToken = useCallback(() => authStorage.getAccessToken(), []);
 
+  const applyTenant = useCallback((next: Tenant) => {
+    setTenant(next);
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, tenantName: next.name };
+      authStorage.setUser(updated);
+      return updated;
+    });
+  }, []);
+
   const checkPermission = useCallback(
     (permission: Permission) => hasPermission(user?.role, permission),
     [user?.role],
@@ -207,6 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canAccessRoute: checkRouteAccess,
       setUserRole,
       getToken,
+      applyTenant,
     }}>
       {children}
     </AuthContext.Provider>

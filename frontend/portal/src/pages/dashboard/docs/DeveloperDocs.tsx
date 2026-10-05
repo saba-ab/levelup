@@ -84,7 +84,7 @@ export default function DeveloperDocs() {
             <Package className="w-5 h-5 text-primary" />
             Official SDKs
           </CardTitle>
-          <CardDescription>Install our SDK for your preferred language</CardDescription>
+          <CardDescription>Official SDKs are coming soon. Until then, call the REST API directly (examples below).</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -101,7 +101,7 @@ export default function DeveloperDocs() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">v{sdk.version}</Badge>
+                  <Badge variant="secondary">Coming soon</Badge>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -132,94 +132,72 @@ export default function DeveloperDocs() {
         <CardContent>
           <Tabs defaultValue="javascript">
             <TabsList>
-              <TabsTrigger value="javascript">JavaScript</TabsTrigger>
-              <TabsTrigger value="python">Python</TabsTrigger>
+              <TabsTrigger value="javascript">JavaScript (fetch)</TabsTrigger>
+              <TabsTrigger value="python">Python (requests)</TabsTrigger>
               <TabsTrigger value="curl">cURL</TabsTrigger>
             </TabsList>
             <TabsContent value="javascript" className="mt-4">
               <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                <code>{`import { LevelUpOs } from '@levelupos/js-sdk';
-
-// Initialize the client
-const client = new LevelUpOs({
-  apiKey: 'YOUR_API_KEY',
-  environment: 'production'
+                <code>{`// Report an activity; live rules award points, XP, badges… asynchronously.
+const res = await fetch('https://api.levelupos.ge/api/v1/activities', {
+  method: 'POST',
+  headers: {
+    'Authorization': \`Bearer \${accessToken}\`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    event_id: 'order-456',            // idempotency key: resending is safe
+    event_type: 'purchase_completed',
+    player_external_id: 'usr_123',
+    properties: { order_id: 'ord_456', amount: 99.99 },
+  }),
 });
 
-// Award points to a user
-const result = await client.points.award({
-  userId: 'usr_123',
-  points: 100,
-  reason: 'Completed onboarding'
-});
-
-// Track a custom event
-await client.events.track({
-  userId: 'usr_123',
-  event: 'purchase_completed',
-  properties: {
-    orderId: 'ord_456',
-    amount: 99.99
-  }
-});
-
-console.log('Points awarded:', result.data);`}</code>
+const { activity_id, status, duplicate } = await res.json(); // 202 { status: "pending" }`}</code>
               </pre>
             </TabsContent>
             <TabsContent value="python" className="mt-4">
               <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                <code>{`from levelupos import LevelUpOs
+                <code>{`import requests
 
-# Initialize the client
-client = LevelUpOs(
-    api_key="YOUR_API_KEY",
-    environment="production"
+# Report an activity; live rules react to it asynchronously.
+res = requests.post(
+    "https://api.levelupos.ge/api/v1/activities",
+    headers={"Authorization": f"Bearer {access_token}"},
+    json={
+        "event_id": "order-456",          # idempotency key: resending is safe
+        "event_type": "purchase_completed",
+        "player_external_id": "usr_123",
+        "properties": {"order_id": "ord_456", "amount": 99.99},
+    },
 )
-
-# Award points to a user
-result = client.points.award(
-    user_id="usr_123",
-    points=100,
-    reason="Completed onboarding"
-)
-
-# Track a custom event
-client.events.track(
-    user_id="usr_123",
-    event="purchase_completed",
-    properties={
-        "order_id": "ord_456",
-        "amount": 99.99
-    }
-)
-
-print(f"Points awarded: {result.data}")`}</code>
+print(res.status_code, res.json())  # 202 {"activity_id": ..., "status": "pending"}`}</code>
               </pre>
             </TabsContent>
             <TabsContent value="curl" className="mt-4">
               <pre className="bg-secondary/50 rounded-lg p-4 overflow-x-auto text-sm">
-                <code>{`# Award points to a user
-curl -X POST https://api.levelupos.ge/v1/points/award \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+                <code>{`# Sign in (returns access_token and refresh_token)
+curl -X POST https://api.levelupos.ge/api/v1/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{ "email": "you@company.com", "password": "..." }'
+
+# Report an activity
+curl -X POST https://api.levelupos.ge/api/v1/activities \\
+  -H "Authorization: Bearer ACCESS_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "user_id": "usr_123",
-    "points": 100,
-    "reason": "Completed onboarding"
+    "event_id": "order-456",
+    "event_type": "purchase_completed",
+    "player_external_id": "usr_123",
+    "properties": { "order_id": "ord_456", "amount": 99.99 }
   }'
 
-# Track a custom event
-curl -X POST https://api.levelupos.ge/v1/events \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+# Credit points directly (Idempotency-Key makes retries safe)
+curl -X POST https://api.levelupos.ge/api/v1/players/PLAYER_ID/wallet/credit \\
+  -H "Authorization: Bearer ACCESS_TOKEN" \\
+  -H "Idempotency-Key: 7d1c6f0e-onboarding" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "user_id": "usr_123",
-    "event": "purchase_completed",
-    "properties": {
-      "order_id": "ord_456",
-      "amount": 99.99
-    }
-  }'`}</code>
+  -d '{ "amount": 100, "kind": "bonus", "description": "Completed onboarding" }'`}</code>
               </pre>
             </TabsContent>
           </Tabs>

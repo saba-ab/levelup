@@ -1,36 +1,24 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useUsersService } from '../api/users';
 import { queryKeys } from './keys';
-import {
-  User,
-  CreateUserData,
-  UpdateUserData,
-  PaginationParams,
-} from '../api/types';
+import type { ID, CreateUserData, UpdateUserData, UserFilters } from '../api/types';
+import { unwrap } from './rules';
 
-export function useUsersQuery(filters?: PaginationParams) {
+/** One cursor page of team members: { data, next_cursor }. */
+export function useUsersQuery(filters?: UserFilters) {
   const { listUsers } = useUsersService();
-
   return useQuery({
     queryKey: queryKeys.users.list(filters),
-    queryFn: async () => {
-      const response = await listUsers(filters);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch users');
-      return response.data!;
-    },
+    queryFn: async () => unwrap(await listUsers(filters), 'Failed to fetch users'),
+    placeholderData: keepPreviousData,
   });
 }
 
-export function useUserQuery(userId: number) {
+export function useUserQuery(userId: ID | undefined) {
   const { getUser } = useUsersService();
-
   return useQuery({
-    queryKey: queryKeys.users.detail(userId),
-    queryFn: async () => {
-      const response = await getUser(userId);
-      if (!response.success) throw new Error(response.error || 'Failed to fetch user');
-      return response.data!;
-    },
+    queryKey: queryKeys.users.detail(userId ?? ''),
+    queryFn: async () => unwrap(await getUser(userId!), 'Failed to fetch user'),
     enabled: !!userId,
   });
 }
@@ -38,62 +26,42 @@ export function useUserQuery(userId: number) {
 export function useCreateUserMutation() {
   const queryClient = useQueryClient();
   const { createUser } = useUsersService();
-
   return useMutation({
-    mutationFn: async (data: CreateUserData) => {
-      const response = await createUser(data);
-      if (!response.success) throw new Error(response.error || 'Failed to create user');
-      return response.data!;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.lists() });
-    },
+    mutationFn: async (data: CreateUserData) => unwrap(await createUser(data), 'Failed to create user'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
   });
 }
 
+/** PATCH with only the changed fields. */
 export function useUpdateUserMutation() {
   const queryClient = useQueryClient();
   const { updateUser } = useUsersService();
-
   return useMutation({
-    mutationFn: async ({ userId, data }: { userId: number; data: UpdateUserData }) => {
-      const response = await updateUser(userId, data);
-      if (!response.success) throw new Error(response.error || 'Failed to update user');
-      return response.data!;
-    },
-    onMutate: async ({ userId, data }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.users.detail(userId) });
-      const previousUser = queryClient.getQueryData<User>(queryKeys.users.detail(userId));
+    mutationFn: async ({ userId, data }: { userId: ID; data: UpdateUserData }) =>
+      unwrap(await updateUser(userId, data), 'Failed to update user'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
+  });
+}
 
-      if (previousUser) {
-        queryClient.setQueryData<User>(queryKeys.users.detail(userId), { ...previousUser, ...data });
-      }
-
-      return { previousUser };
-    },
-    onError: (err, { userId }, context) => {
-      if (context?.previousUser) {
-        queryClient.setQueryData(queryKeys.users.detail(userId), context.previousUser);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-    },
+/** PUT /users/{id}/roles: replaces the user's role set. */
+export function useAssignUserRolesMutation() {
+  const queryClient = useQueryClient();
+  const { assignRoles } = useUsersService();
+  return useMutation({
+    mutationFn: async ({ userId, roleIds }: { userId: ID; roleIds: number[] }) =>
+      unwrap(await assignRoles(userId, roleIds), 'Failed to update roles'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
   });
 }
 
 export function useDeleteUserMutation() {
   const queryClient = useQueryClient();
   const { deleteUser } = useUsersService();
-
   return useMutation({
-    mutationFn: async (userId: number) => {
-      const response = await deleteUser(userId);
-      if (!response.success) throw new Error(response.error || 'Failed to delete user');
+    mutationFn: async (userId: ID) => {
+      unwrap(await deleteUser(userId), 'Failed to delete user');
       return userId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
   });
 }
