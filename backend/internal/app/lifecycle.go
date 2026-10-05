@@ -53,6 +53,9 @@ func (a *App) Close() {
 // /api/v1. The router each module receives is already scoped (PRD §6).
 func (a *App) Router() chi.Router {
 	r := chi.NewRouter()
+	// CORS first: a browser preflight must not be rate limited, logged as an
+	// auth failure, or claimed by the idempotency store.
+	r.Use(httpx.CORS(a.P.Cfg.HTTP.CORSAllowedOrigins))
 	r.Use(httpx.BaseMiddleware(a.P.Tel.Log, a.P.Tel.Tracer, a.P.Tel.Registry)...)
 	// Token PARSING is global (never rejects); rejection is per-route-group
 	// via httpx.RequireAuth inside modules.

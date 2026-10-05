@@ -50,7 +50,7 @@ const defaultEnvironments: Environment[] = [
   {
     id: 'localhost',
     name: 'Localhost',
-    url: getEnvVar('VITE_API_URL_LOCALHOST', 'http://127.0.0.1:8000/api/v1'),
+    url: getEnvVar('VITE_API_URL_LOCALHOST', 'http://localhost:8080'),
     type: 'localhost'
   },
 ];
