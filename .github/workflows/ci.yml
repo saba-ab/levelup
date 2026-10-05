@@ -1,12 +1,18 @@
 # CI invokes the SAME task targets developers run locally (PRD §15, ADR-0008):
 # divergence between local and CI commands is a recurring source of "works on
 # my machine", and the fix is having exactly one definition.
-name: ci
+name: backend
 
 on:
   push:
     branches: [master]
+    paths: ['backend/**', '.github/workflows/ci.yml']
   pull_request:
+    paths: ['backend/**', '.github/workflows/ci.yml']
+
+defaults:
+  run:
+    working-directory: backend
 
 jobs:
   check:
@@ -16,7 +22,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
           cache: true
       - uses: arduino/setup-task@v2
         with:
@@ -31,6 +38,7 @@ jobs:
           version: v2.13
           # lint runs inside `task check` too; the action only installs here
           args: --help
+          working-directory: backend
       - run: task check
 
   integration:
@@ -40,7 +48,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
           cache: true
       # testcontainers provisions postgres/redis/rabbitmq per package; the
       # compose stack is for humans, so test:all's docker:up dep is skipped

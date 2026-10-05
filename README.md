@@ -1,32 +1,25 @@
-# Go Modular Monolith Blueprint
+# LevelUp
 
-A reusable template for a single-deployable Go service with compiler-enforced module
-boundaries, designed so any module can be extracted to its own binary later by swapping
-one adapter and one config value — without paying the distributed-systems tax up front.
+Multi-tenant gamification engine: tenants define event types and rules, and ingested player activity drives
+points, XP and levels, badges, missions, streaks, rewards and leaderboards.
 
-The template ships with **no business modules**: [`docs/examples.md`](docs/examples.md) is the cookbook, with real excerpts of the three reference modules (user, wallet, notification) that demonstrated every pattern, and `task new-module` scaffolds a new one.
+## Repository layout (monorepo)
 
-Everything here follows the PRD in [`go-modular-monolith-blueprint-prd.md`](go-modular-monolith-blueprint-prd.md).
-The load-bearing decisions are its §4 principles: compiler-private module internals,
-producer-owned event contracts, consumer-owned ports, one-transaction-one-module via a
-Postgres outbox, schema-per-module, and a locked boring stack (chi · GORM/pgx · wire ·
-goose · casbin · RabbitMQ · dual Redis · zap · OTel).
+| Path | What |
+|---|---|
+| `backend/` | Go modular monolith (API, worker, dispatcher, scheduler, migrate), built on the Go modular-monolith blueprint. See `backend/README.md` and `backend/CLAUDE.md`. |
+| `frontend/` | Web app (moving in from its own repository). |
+| `docs/rewrite/` | Documentation of the Laravel predecessor and the Go target architecture. `00-target-architecture.md` is canonical, and `IMPLEMENTATION.md` holds the module rules. |
+| `.github/workflows/` | One workflow per app, path-filtered. |
 
-## Quick start
+## Quick start (backend)
 
 ```bash
-brew install go go-task golangci-lint k6 && brew install --cask orbstack
+cd backend
 cp .env.example .env
-task docker:up      # postgres + pgbouncer + redis-core + redis-cache + rabbitmq
-task migrate        # per-module schemas via goose
-task run            # API on :8080, admin (metrics/pprof) on :8081
-task new-module NAME=billing   # scaffold a module in <15 min end-to-end
+task docker:up && task migrate
+task run          # API :8080, admin :8081
+task worker       # in another terminal; also: task dispatcher, task scheduler
 ```
 
-`task check` runs exactly what CI runs: lint (depguard boundaries), arch tests
-(import-graph assertions), unit tests, and generated-code drift checks.
-
-Architecture decisions live in `docs/adr/`. Operational thresholds and failure
-playbooks live in `docs/runbook.md`.
-
-Taking this repository as the starting point for your own service? Follow [`docs/getting-started.md`](docs/getting-started.md): toolchain, first run, renaming the module, configuration, what to keep or delete, and the production checklist.
+From the repository root, `task be -- <task>` runs any backend task, for example `task be -- check`.
