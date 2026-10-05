@@ -1,7 +1,4 @@
-/bin/
-/tmp/
+.DS_Store
 .env
 .task/
-*.test
-*.out
-.DS_Store
+node_modules/

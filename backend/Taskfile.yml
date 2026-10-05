@@ -1,0 +1,159 @@
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  PKG: ./...
+
+tasks:
+  default:
+    cmds: [task: --list]
+
+  run:
+    desc: Hot-reload API server
+    deps: [tools:check]
+    cmd: air -c .air.toml
+
+  worker:
+    desc: Run event + job consumers
+    cmd: go run ./cmd/worker
+
+  dispatcher:
+    desc: Run the outbox → RabbitMQ publisher
+    cmd: go run ./cmd/dispatcher
+
+  scheduler:
+    desc: Run cron (singleton — do not scale this)
+    cmd: go run ./cmd/scheduler
+
+  docs:
+    desc: Regenerate OpenAPI from swag annotations
+    sources: ['internal/modules/*/internal/transport/*.go', 'cmd/api/main.go']
+    generates: ['api/docs/swagger.json', 'api/docs/docs.go']
+    cmd: swag init -g cmd/api/main.go -d ./ --parseDependency --parseInternal -o api/docs
+
+  test:
+    desc: Unit tests only — no Docker required
+    cmd: go test {{.PKG}} -short -race
+
+  test:all:
+    desc: Unit + integration + e2e (needs Docker)
+    deps: [docker:up]
+    cmd: go test {{.PKG}} -race -count=1
+
+  test:pg:
+    desc: 'Container tests without Docker: local Postgres (PGTEST_DSN) + a throwaway redis-server (REDISTEST_ADDR). Usage: task test:pg PGTEST_DSN=postgres://user@localhost:5432/postgres REDISTEST_ADDR=localhost:16399'
+    requires:
+      vars: [PGTEST_DSN]
+    env:
+      PGTEST_DSN: '{{.PGTEST_DSN}}'
+      REDISTEST_ADDR: '{{.REDISTEST_ADDR}}'
+    cmd: go test ./internal/modules/... ./internal/platform/idempotency/... -race -count=1
+
+  test:pg:clean:
+    desc: Drop the pgtest_* databases left by test:pg
+    requires:
+      vars: [PGTEST_DSN]
+    cmd: psql "{{.PGTEST_DSN}}" -Atc "SELECT 'DROP DATABASE ' || datname || ';' FROM pg_database WHERE datname LIKE 'pgtest\_%'" | psql "{{.PGTEST_DSN}}"
+
+  test:integration:
+    cmd: go test ./test/integration/... -race -count=1
+
+  lint:
+    desc: golangci-lint incl. depguard module-isolation rules
+    sources: ['**/*.go', .golangci.yml]
+    cmd: golangci-lint run
+
+  arch:
+    desc: Architecture tests — cross-module import graph
+    sources: ['internal/**/*.go', 'test/arch/*.go']
+    cmd: go test ./test/arch/... -v
+
+  check:
+    desc: Everything CI runs. Use this before pushing.
+    deps: [lint, arch, test, generate:verify]
+
+  generate:verify:
+    desc: Fails if committed generated code is stale (R16)
+    cmds:
+      - task: generate
+      - git diff --exit-code -- internal/app/wire_gen.go api/docs '**/mocks/**'
+
+  wire:
+    desc: Regenerate the platform DI graph
+    sources: ['internal/app/wire.go', 'internal/platform/**/*.go']
+    generates: ['internal/app/wire_gen.go']
+    cmd: wire ./internal/app
+
+  mocks:
+    desc: Regenerate port mocks (ports only — see PRD §7.7)
+    sources: ['.mockery.yaml', 'internal/modules/*/ports.go', 'internal/platform/authz/authz.go', 'internal/platform/bus/bus.go']
+    cmd: mockery
+
+  generate:
+    desc: All codegen
+    deps: [wire, mocks, docs]
+
+  outbox:replay:
+    desc: 'Republish outbox events. Usage: task outbox:replay FROM=2026-09-01T00:00Z TOPIC=user.registered.v1'
+    requires:
+      vars: [FROM]
+    cmd: go run ./cmd/dispatcher replay --from={{.FROM}} --topic={{.TOPIC}}
+
+  rabbit:replay:
+    desc: 'Move DLQ messages back to their source queue. Usage: task rabbit:replay QUEUE=wallet.user-registered'
+    requires:
+      vars: [QUEUE]
+    cmd: go run ./cmd/worker replay-dlq --queue={{.QUEUE}}
+
+  outbox:deadletter:list:
+    desc: 'List rows parked in outbox_svc.dead_letters (R23). Usage: task outbox:deadletter:list [LIMIT=50] [ALL=true]'
+    cmd: go run ./cmd/dispatcher dead-letters --limit={{.LIMIT | default "50"}} --all={{.ALL | default "false"}}
+
+  outbox:deadletter:replay:
+    desc: 'Put dispatcher dead letters back into the outbox (R23). Usage: task outbox:deadletter:replay ID=42 | task outbox:deadletter:replay ALL=true [TOPIC=t]'
+    cmd: go run ./cmd/dispatcher replay-dead {{if .ID}}--id={{.ID}}{{else}}--all --topic={{.TOPIC}}{{end}}
+
+  migrate:new:
+    desc: 'New goose migration. Usage: task migrate:new MODULE=wallet NAME=add_limits'
+    requires:
+      vars: [MODULE, NAME]
+    cmd: goose -dir internal/modules/{{.MODULE}}/migrations create {{.NAME}} sql
+
+  migrate:
+    desc: Apply all enabled modules' migrations
+    cmd: go run ./cmd/migrate up
+
+  migrate:down:
+    prompt: Roll back the last migration — are you sure?
+    cmd: go run ./cmd/migrate down 1
+
+  new-module:
+    desc: 'Scaffold a module. Usage: task new-module NAME=wallet'
+    requires:
+      vars: [NAME]
+    preconditions:
+      - sh: '[ ! -d internal/modules/{{.NAME}} ]'
+        msg: 'module {{.NAME}} already exists'
+    cmds:
+      - cd tools && go run levelup/tools/modgen -name={{.NAME}}
+      - task: lint
+      - task: arch
+      - echo '→ add {{.NAME}} to internal/app/registry.go'
+
+  tools:check:
+    internal: true
+    cmd: cd tools && go mod download
+
+  docker:up:
+    desc: postgres + pgbouncer + redis-core + redis-cache + rabbitmq
+    cmd: docker compose -f deploy/compose.yaml up -d --wait
+
+  docker:down:
+    desc: Stop the local stack (keeps volumes)
+    cmd: docker compose -f deploy/compose.yaml down
+
+  load:
+    desc: k6 load profile against a local stack
+    deps: [docker:up]
+    cmd: k6 run test/load/read_path.js
