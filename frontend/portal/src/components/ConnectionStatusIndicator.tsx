@@ -22,7 +22,9 @@ export default function ConnectionStatusIndicator({
   size = 'sm',
   className,
 }: ConnectionStatusIndicatorProps) {
-  const { isOnline, latency, lastChecked, error, isChecking, refresh, environment } = useConnectionStatus();
+  const { isOnline, latency, lastChecked, error, isChecking, refresh, environment, apiStatus, modules } = useConnectionStatus();
+  const degraded = isOnline && apiStatus !== null && apiStatus !== 'ok';
+  const moduleNames = Object.keys(modules);
 
   const getLatencyColor = (ms: number) => {
     if (ms < 100) return 'text-green-400';
@@ -56,11 +58,11 @@ export default function ConnectionStatusIndicator({
               className={cn(
                 statusDotSize,
                 "rounded-full",
-                isOnline ? "bg-green-500" : "bg-red-500",
+                !isOnline ? "bg-red-500" : degraded ? "bg-amber-500" : "bg-green-500",
                 isChecking && "animate-pulse"
               )}
             />
-            {isOnline && (
+            {isOnline && !degraded && (
               <span
                 className={cn(
                   statusDotSize,
@@ -77,7 +79,7 @@ export default function ConnectionStatusIndicator({
               "text-xs font-medium",
               isOnline ? "text-green-400" : "text-red-400"
             )}>
-              {isOnline ? 'Online' : 'Offline'}
+              {!isOnline ? 'Offline' : degraded ? 'Degraded' : 'Online'}
             </span>
           )}
 
@@ -133,6 +135,14 @@ export default function ConnectionStatusIndicator({
                 <span className={cn("font-mono", getLatencyColor(latency))}>{latency}ms</span>
               </div>
             )}
+            {moduleNames.length > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Modules</span>
+                <span>
+                  {moduleNames.filter(m => modules[m] === 'ok').length}/{moduleNames.length} healthy
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" />
@@ -152,11 +162,13 @@ export default function ConnectionStatusIndicator({
           {/* Status message */}
           <div className={cn(
             "text-[10px] text-center py-1.5 rounded",
-            isOnline ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+            !isOnline ? "bg-red-500/10 text-red-400" : degraded ? "bg-amber-500/10 text-amber-400" : "bg-green-500/10 text-green-400"
           )}>
-            {isOnline 
-              ? 'Backend is responding normally' 
-              : 'Cannot reach the backend server'}
+            {!isOnline
+              ? 'Cannot reach the backend server'
+              : degraded
+                ? 'Backend is up but some modules are unhealthy'
+                : 'Backend is responding normally'}
           </div>
         </div>
       </TooltipContent>

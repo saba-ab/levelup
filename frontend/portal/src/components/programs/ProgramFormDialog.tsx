@@ -28,9 +28,26 @@ interface ProgramFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   program?: Program | null;
+  /**
+   * Create: the full CreateProgramData. Edit: a partial PATCH body with only
+   * the changed fields (cleared description/dates are sent as null). Not
+   * called when nothing changed; the dialog just closes.
+   */
   onSubmit: (data: CreateProgramData | UpdateProgramData) => void;
   isLoading?: boolean;
 }
+
+const MECHANIC_TOGGLES: { key: keyof ProgramMechanics & string; label: string }[] = [
+  { key: 'points_enabled', label: 'Points' },
+  { key: 'badges_enabled', label: 'Badges' },
+  { key: 'levels_enabled', label: 'Levels' },
+  { key: 'missions_enabled', label: 'Missions' },
+  { key: 'streaks_enabled', label: 'Streaks' },
+  { key: 'leaderboards_enabled', label: 'Leaderboards' },
+  { key: 'rewards_enabled', label: 'Rewards' },
+];
+
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const defaultSettings: ProgramSettings = {
   allow_public_signup: false,
@@ -58,6 +75,7 @@ export function ProgramFormDialog({
   const isEditing = !!program;
 
   const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
@@ -69,13 +87,15 @@ export function ProgramFormDialog({
     if (open) {
       if (program) {
         setName(program.name);
+        setSlug(program.slug);
         setDescription(program.description || '');
-        setStartDate(program.start_date ? new Date(program.start_date) : undefined);
-        setEndDate(program.end_date ? new Date(program.end_date) : undefined);
+        setStartDate(program.starts_at ? new Date(program.starts_at) : undefined);
+        setEndDate(program.ends_at ? new Date(program.ends_at) : undefined);
         setSettings({ ...defaultSettings, ...program.settings });
         setMechanics({ ...defaultMechanics, ...program.mechanics });
       } else {
         setName('');
+        setSlug('');
         setDescription('');
         setStartDate(undefined);
         setEndDate(undefined);
@@ -87,18 +107,43 @@ export function ProgramFormDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const data: CreateProgramData | UpdateProgramData = {
-      name,
-      description: description || undefined,
-      start_date: startDate ? startDate.toISOString() : undefined,
-      end_date: endDate ? endDate.toISOString() : undefined,
-      settings,
-      mechanics,
-      metadata: {},
-    };
+    const trimmedName = name.trim();
+    const trimmedSlug = slug.trim();
+    const trimmedDescription = description.trim();
+    const startsAt = startDate ? startDate.toISOString() : null;
+    const endsAt = endDate ? endDate.toISOString() : null;
 
-    onSubmit(data);
+    if (!program) {
+      const data: CreateProgramData = {
+        name: trimmedName,
+        ...(trimmedSlug && { slug: trimmedSlug }),
+        ...(trimmedDescription && { description: trimmedDescription }),
+        ...(startsAt && { starts_at: startsAt }),
+        ...(endsAt && { ends_at: endsAt }),
+        settings,
+        mechanics,
+      };
+      onSubmit(data);
+      return;
+    }
+
+    const sameInstant = (a: string | null, b: string | null) =>
+      (a === null ? null : new Date(a).getTime()) === (b === null ? null : new Date(b).getTime());
+
+    const patch: UpdateProgramData = {};
+    if (trimmedName !== program.name) patch.name = trimmedName;
+    if (trimmedSlug && trimmedSlug !== program.slug) patch.slug = trimmedSlug;
+    if (trimmedDescription !== (program.description ?? '')) patch.description = trimmedDescription || null;
+    if (!sameInstant(startsAt, program.starts_at)) patch.starts_at = startsAt;
+    if (!sameInstant(endsAt, program.ends_at)) patch.ends_at = endsAt;
+    if (!sameJson(settings, { ...defaultSettings, ...program.settings })) patch.settings = settings;
+    if (!sameJson(mechanics, { ...defaultMechanics, ...program.mechanics })) patch.mechanics = mechanics;
+
+    if (Object.keys(patch).length === 0) {
+      onOpenChange(false);
+      return;
+    }
+    onSubmit(patch);
   };
 
   return (
@@ -128,6 +173,16 @@ export function ProgramFormDialog({
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="slug">Slug</Label>
+                <Input
+                  id="slug"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder={isEditing ? undefined : 'Generated from the name when left empty'}
+                  maxLength={120}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
@@ -135,6 +190,7 @@ export function ProgramFormDialog({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describe your program..."
                   rows={3}
+                  maxLength={1000}
                 />
               </div>
             </div>
@@ -142,7 +198,14 @@ export function ProgramFormDialog({
             {/* Date Range */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Start Date</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Start Date</Label>
+                  {startDate && (
+                    <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setStartDate(undefined)}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -168,7 +231,14 @@ export function ProgramFormDialog({
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label>End Date</Label>
+                <div className="flex items-center justify-between">
+                  <Label>End Date</Label>
+                  {endDate && (
+                    <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setEndDate(undefined)}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -209,7 +279,7 @@ export function ProgramFormDialog({
                     </p>
                   </div>
                   <Switch
-                    checked={settings.allow_public_signup}
+                    checked={settings.allow_public_signup ?? false}
                     onCheckedChange={(checked) =>
                       setSettings({ ...settings, allow_public_signup: checked })
                     }
@@ -223,7 +293,7 @@ export function ProgramFormDialog({
                     </p>
                   </div>
                   <Switch
-                    checked={settings.require_email_verification}
+                    checked={settings.require_email_verification ?? false}
                     onCheckedChange={(checked) =>
                       setSettings({ ...settings, require_email_verification: checked })
                     }
@@ -235,9 +305,9 @@ export function ProgramFormDialog({
                     id="welcome_points"
                     type="number"
                     min={0}
-                    value={settings.welcome_points || 0}
+                    value={settings.welcome_points ?? 0}
                     onChange={(e) =>
-                      setSettings({ ...settings, welcome_points: parseInt(e.target.value) || 0 })
+                      setSettings({ ...settings, welcome_points: Math.max(0, Math.floor(Number(e.target.value) || 0)) })
                     }
                     placeholder="0"
                   />
@@ -254,19 +324,11 @@ export function ProgramFormDialog({
             <div className="space-y-4">
               <h4 className="text-sm font-medium">Enabled Mechanics</h4>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { key: 'points_enabled', label: 'Points' },
-                  { key: 'badges_enabled', label: 'Badges' },
-                  { key: 'levels_enabled', label: 'Levels' },
-                  { key: 'missions_enabled', label: 'Missions' },
-                  { key: 'streaks_enabled', label: 'Streaks' },
-                  { key: 'leaderboards_enabled', label: 'Leaderboards' },
-                  { key: 'rewards_enabled', label: 'Rewards' },
-                ].map(({ key, label }) => (
+                {MECHANIC_TOGGLES.map(({ key, label }) => (
                   <div key={key} className="flex items-center justify-between">
                     <Label>{label}</Label>
                     <Switch
-                      checked={mechanics[key as keyof ProgramMechanics]}
+                      checked={Boolean(mechanics[key])}
                       onCheckedChange={(checked) =>
                         setMechanics({ ...mechanics, [key]: checked })
                       }

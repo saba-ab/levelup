@@ -50,7 +50,7 @@ const defaultEnvironments: Environment[] = [
   {
     id: 'localhost',
     name: 'Localhost',
-    url: getEnvVar('VITE_API_URL_LOCALHOST', 'http://127.0.0.1:8000/api/v1'),
+    url: getEnvVar('VITE_API_URL_LOCALHOST', 'http://localhost:8080'),
     type: 'localhost'
   },
 ];
@@ -100,9 +100,10 @@ export function EnvironmentProvider({ children }: { children: ReactNode }) {
       return envDefault;
     }
 
-    // Fallback to localStorage if no env var is set
+    // Fallback to localStorage if no env var is set. A dev server talks to
+    // the local Go API by default, never to production.
     const stored = localStorage.getItem('levelupos_active_env');
-    return stored || 'prod';
+    return stored || (import.meta.env.DEV ? 'localhost' : 'prod');
   });
 
   const activeEnvironment = environments.find(e => e.id === activeEnvId) || environments[0];

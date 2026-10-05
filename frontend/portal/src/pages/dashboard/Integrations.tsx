@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Key, Plus, Copy, Eye, EyeOff, Trash2, RefreshCw, Webhook, Send, CheckCircle2, XCircle, Clock, Code, Terminal, BookOpen } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import FeatureUnavailable from '@/components/FeatureUnavailable';
 
 const apiKeys = [
   { id: "1", name: "Production API Key", key: "pk_live_xxxxxxxxxxxxxxxxxxxx", created: "2024-01-15", lastUsed: "2024-01-20", status: "active" },
@@ -42,7 +43,8 @@ const webhookLogs = [
   { id: "4", event: "user.registered", url: "https://webhook.site/test", status: "failed", timestamp: "2024-01-20 10:00:00", responseTime: 5000 },
 ];
 
-export default function Integrations() {
+/** Planned layout only: this module has no Go API yet. Rendered inert below the banner. */
+function IntegrationsPreview() {
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
   const [isCreateKeyOpen, setIsCreateKeyOpen] = useState(false);
   const [isCreateWebhookOpen, setIsCreateWebhookOpen] = useState(false);
@@ -605,6 +607,16 @@ console.log(user.badges);    // ['early_adopter', 'power_user']`}</code>
             </div>
           </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+export default function Integrations() {
+  return (
+    <div className="animate-fade-in">
+      <FeatureUnavailable feature="Integrations" hint="Send activities to POST /api/v1/activities; see the API reference under Documentation.">
+        <IntegrationsPreview />
+      </FeatureUnavailable>
     </div>
   );
 }

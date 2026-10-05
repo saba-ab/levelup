@@ -41,6 +41,9 @@ type Config struct {
 		// decision, and load tests need to raise it (R24 makes it
 		// per-module later).
 		RateLimitPerMinute int `env:"RATE_LIMIT_PER_MINUTE" envDefault:"600"`
+		// CORSAllowedOrigins lists browser origins allowed to call the API
+		// (the portal). "*" allows any origin; use it only in development.
+		CORSAllowedOrigins []string `env:"CORS_ALLOWED_ORIGINS" envSeparator:"," envDefault:"http://localhost:5173,http://127.0.0.1:5173"`
 	} `envPrefix:"HTTP_"`
 
 	DB struct {

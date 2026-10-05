@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,20 +12,16 @@ import {
   Loader2,
   Calendar,
   Settings,
-  Zap,
   ChevronLeft,
   ChevronRight,
-  UsersRound,
-  Award,
-  Target,
-  Gift,
+  Hash,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,9 +39,10 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ProgramFormDialog } from '@/components/programs/ProgramFormDialog';
 import { BulkEnrollDialog } from '@/components/programs/BulkEnrollDialog';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
 import {
+  describeProgramError,
   useProgramQuery,
-  useProgramStatsQuery,
   useProgramPlayersQuery,
   useUpdateProgramMutation,
   useActivateProgramMutation,
@@ -54,7 +51,7 @@ import {
   useRemovePlayerFromProgramMutation,
   useBulkAddPlayersToProgramMutation,
 } from '@/services/queries/programs';
-import type { ProgramStatus, Player, UpdateProgramData } from '@/services/api/types';
+import type { ID, ProgramMember, ProgramStatus, UpdateProgramData } from '@/services/api/types';
 
 const statusColors: Record<ProgramStatus, string> = {
   draft: 'border-amber-500/50 text-amber-500 bg-amber-500/10',
@@ -67,17 +64,19 @@ export default function ProgramDetail() {
   const { programId } = useParams<{ programId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const id = Number(programId);
+  const id: ID = programId ?? '';
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isBulkEnrollOpen, setIsBulkEnrollOpen] = useState(false);
-  const [removingPlayer, setRemovingPlayer] = useState<Player | null>(null);
-  const [playersPage, setPlayersPage] = useState(1);
+  const [removingPlayer, setRemovingPlayer] = useState<ProgramMember | null>(null);
+  const playersPager = useCursorPagination(10);
 
   // Queries
-  const { data: program, isLoading: programLoading, error: programError } = useProgramQuery(id);
-  const { data: stats, isLoading: statsLoading } = useProgramStatsQuery(id);
-  const { data: playersData, isLoading: playersLoading } = useProgramPlayersQuery(id, playersPage, 10);
+  const { data: program, isLoading: programLoading, error: programError } = useProgramQuery(programId);
+  const { data: playersData, isLoading: playersLoading } = useProgramPlayersQuery(programId, {
+    limit: playersPager.limit,
+    cursor: playersPager.cursor,
+  });
 
   // Mutations
   const updateMutation = useUpdateProgramMutation();
@@ -87,8 +86,13 @@ export default function ProgramDetail() {
   const removePlayerMutation = useRemovePlayerFromProgramMutation();
   const bulkAddMutation = useBulkAddPlayersToProgramMutation();
 
-  const players = playersData?.data || [];
-  const enrolledPlayerIds = useMemo(() => new Set(players.map(p => p.id)), [players]);
+  const players = useMemo(() => playersData?.data ?? [], [playersData]);
+  const playersNextCursor = playersData?.next_cursor ?? '';
+  const enrolledPlayerIds = useMemo(() => new Set(players.map(m => m.player_id)), [players]);
+  const memberName = (m: ProgramMember | null) => m?.player?.display_name || m?.player?.external_id || m?.player_id || '';
+
+  const showError = (err: unknown, fallback: string) =>
+    toast({ title: 'Error', description: describeProgramError(err, fallback), variant: 'destructive' });
 
   const handleFormSubmit = async (data: UpdateProgramData) => {
     try {
@@ -96,11 +100,7 @@ export default function ProgramDetail() {
       toast({ title: 'Program updated', description: 'Changes saved successfully.' });
       setIsEditOpen(false);
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to update program',
-        variant: 'destructive',
-      });
+      showError(err, 'Failed to update program');
     }
   };
 
@@ -109,7 +109,7 @@ export default function ProgramDetail() {
       await activateMutation.mutateAsync(id);
       toast({ title: 'Program activated', description: `"${program?.name}" is now active.` });
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to activate', variant: 'destructive' });
+      showError(err, 'Failed to activate');
     }
   };
 
@@ -118,7 +118,7 @@ export default function ProgramDetail() {
       await pauseMutation.mutateAsync(id);
       toast({ title: 'Program paused', description: `"${program?.name}" has been paused.` });
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to pause', variant: 'destructive' });
+      showError(err, 'Failed to pause');
     }
   };
 
@@ -127,35 +127,37 @@ export default function ProgramDetail() {
       await endMutation.mutateAsync(id);
       toast({ title: 'Program ended', description: `"${program?.name}" has been ended.` });
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to end', variant: 'destructive' });
+      showError(err, 'Failed to end');
     }
   };
 
-  const handleBulkEnroll = async (playerIds: number[]) => {
+  const handleBulkEnroll = async (playerIds: ID[]) => {
     try {
       const result = await bulkAddMutation.mutateAsync({ programId: id, playerIds });
+      const parts = [`${result.enrolled} enrolled`];
+      if (result.alreadyEnrolled) parts.push(`${result.alreadyEnrolled} already enrolled`);
+      if (result.failures.length) parts.push(`${result.failures.length} failed`);
       toast({
-        title: 'Players enrolled',
-        description: `Successfully enrolled ${result?.successful || playerIds.length} players.`,
+        title: result.failures.length ? 'Enrollment finished with errors' : 'Players enrolled',
+        description: parts.join(', ') + '.',
+        variant: result.failures.length && !result.enrolled ? 'destructive' : undefined,
       });
-      setIsBulkEnrollOpen(false);
+      if (result.failures.length === 0) setIsBulkEnrollOpen(false);
+      return result;
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to enroll players',
-        variant: 'destructive',
-      });
+      showError(err, 'Failed to enroll players');
+      return undefined;
     }
   };
 
   const handleRemovePlayer = async () => {
     if (!removingPlayer) return;
     try {
-      await removePlayerMutation.mutateAsync({ programId: id, playerId: removingPlayer.id });
-      toast({ title: 'Player removed', description: `${removingPlayer.display_name} has been removed from the program.` });
+      await removePlayerMutation.mutateAsync({ programId: id, playerId: removingPlayer.player_id });
+      toast({ title: 'Player removed', description: `${memberName(removingPlayer)} has been removed from the program.` });
       setRemovingPlayer(null);
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to remove player', variant: 'destructive' });
+      showError(err, 'Failed to remove player');
     }
   };
 
@@ -177,8 +179,8 @@ export default function ProgramDetail() {
             <Skeleton className="h-4 w-48" />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
         </div>
@@ -227,10 +229,16 @@ export default function ProgramDetail() {
             </Button>
           )}
           {program.status === 'active' && (
-            <Button variant="outline" onClick={handlePause} disabled={isAnyMutating}>
-              {pauseMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
-              Pause
-            </Button>
+            <>
+              <Button variant="outline" onClick={handlePause} disabled={isAnyMutating}>
+                {pauseMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
+                Pause
+              </Button>
+              <Button variant="destructive" onClick={handleEnd} disabled={isAnyMutating}>
+                {endMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <StopCircle className="w-4 h-4 mr-2" />}
+                End
+              </Button>
+            </>
           )}
           {program.status === 'paused' && (
             <>
@@ -251,90 +259,21 @@ export default function ProgramDetail() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Program Info (the API has no program stats endpoint) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Users className="w-5 h-5 text-primary" />
+                <Hash className="w-5 h-5 text-primary" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_players?.toLocaleString() || 0}</p>
-                <p className="text-xs text-muted-foreground">Total Players</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <UsersRound className="w-5 h-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.active_players?.toLocaleString() || 0}</p>
-                <p className="text-xs text-muted-foreground">Active Players</p>
+              <div className="min-w-0">
+                <p className="text-sm font-medium font-mono truncate">{program.slug}</p>
+                <p className="text-sm text-muted-foreground">Slug</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_points_awarded?.toLocaleString() || 0}</p>
-                <p className="text-xs text-muted-foreground">Points Awarded</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Award className="w-5 h-5 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_badges_awarded?.toLocaleString() || 0}</p>
-                <p className="text-xs text-muted-foreground">Badges Awarded</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Target className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_missions_completed?.toLocaleString() || 0}</p>
-                <p className="text-xs text-muted-foreground">Missions Done</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center">
-                <Gift className="w-5 h-5 text-pink-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{statsLoading ? '—' : stats?.total_rewards_redeemed?.toLocaleString() || 0}</p>
-                <p className="text-xs text-muted-foreground">Rewards Redeemed</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Date Info */}
-      <div className="grid grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -343,7 +282,7 @@ export default function ProgramDetail() {
               </div>
               <div>
                 <p className="text-sm font-medium">
-                  {program.start_date ? format(new Date(program.start_date), 'MMM d, yyyy') : 'Not set'}
+                  {program.starts_at ? format(new Date(program.starts_at), 'MMM d, yyyy') : 'Not set'}
                 </p>
                 <p className="text-sm text-muted-foreground">Start Date</p>
               </div>
@@ -358,7 +297,7 @@ export default function ProgramDetail() {
               </div>
               <div>
                 <p className="text-sm font-medium">
-                  {program.end_date ? format(new Date(program.end_date), 'MMM d, yyyy') : 'Not set'}
+                  {program.ends_at ? format(new Date(program.ends_at), 'MMM d, yyyy') : 'Not set'}
                 </p>
                 <p className="text-sm text-muted-foreground">End Date</p>
               </div>
@@ -385,9 +324,13 @@ export default function ProgramDetail() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Enrolled Players</CardTitle>
-                <CardDescription>Manage players in this program</CardDescription>
+                <CardDescription>
+                  {program.status === 'active'
+                    ? 'Manage players in this program'
+                    : 'Players can only be enrolled while the program is active'}
+                </CardDescription>
               </div>
-              <Button onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status === 'ended'}>
+              <Button onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status !== 'active'}>
                 <UserPlus className="w-4 h-4 mr-2" />
                 Add Players
               </Button>
@@ -409,68 +352,66 @@ export default function ProgramDetail() {
                 <div className="text-center py-12">
                   <Users className="w-12 h-12 mx-auto text-muted-foreground/50" />
                   <p className="mt-4 text-muted-foreground">No players enrolled yet</p>
-                  <Button className="mt-4" onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status === 'ended'}>
+                  <Button className="mt-4" onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status !== 'active'}>
                     <UserPlus className="w-4 h-4 mr-2" />
                     Add First Player
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {players.map((player) => (
+                  {players.map((member) => (
                     <div
-                      key={player.id}
+                      key={member.player_id}
                       className="flex items-center justify-between p-3 border border-border/50 rounded-lg hover:bg-secondary/30 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <Avatar>
-                          <AvatarImage src={player.avatar_url} />
-                          <AvatarFallback>
-                            {player.display_name?.substring(0, 2).toUpperCase() || player.external_id.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
+                          <AvatarFallback>{memberName(member).substring(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="font-medium">{player.display_name || player.external_id}</p>
-                          <p className="text-sm text-muted-foreground">{player.email}</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{member.player ? memberName(member) : 'Unknown player'}</p>
+                            {member.player && !member.player.active && (
+                              <Badge variant="outline" className="text-xs">Inactive</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {member.player?.external_id ?? member.player_id}
+                            {' · enrolled '}
+                            {format(new Date(member.enrolled_at), 'MMM d, yyyy')}
+                          </p>
                         </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => setRemovingPlayer(player)}
-                        disabled={program.status === 'ended'}
+                        onClick={() => setRemovingPlayer(member)}
                       >
                         <UserMinus className="w-4 h-4" />
                       </Button>
                     </div>
                   ))}
                   {/* Pagination */}
-                  {playersData && playersData.meta.last_page > 1 && (
-                    <div className="flex items-center justify-between pt-4 border-t border-border/50">
-                      <p className="text-sm text-muted-foreground">
-                        Showing {playersData.meta.from}–{playersData.meta.to} of {playersData.meta.total}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          disabled={playersPage === 1}
-                          onClick={() => setPlayersPage((p) => p - 1)}
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm">
-                          {playersPage} / {playersData.meta.last_page}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          disabled={playersPage === playersData.meta.last_page}
-                          onClick={() => setPlayersPage((p) => p + 1)}
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
+                  {(playersPager.hasPrevious || !!playersNextCursor) && (
+                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-border/50">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        disabled={!playersPager.hasPrevious}
+                        onClick={playersPager.previous}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm">Page {playersPager.page}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        disabled={!playersNextCursor}
+                        onClick={() => playersPager.next(playersNextCursor)}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -493,21 +434,21 @@ export default function ProgramDetail() {
                     <Label>Allow Public Signup</Label>
                     <p className="text-sm text-muted-foreground">Players can join without invitation</p>
                   </div>
-                  <Switch checked={program.settings?.allow_public_signup ?? false} disabled />
+                  <Switch checked={Boolean(program.settings.allow_public_signup)} disabled />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label>Require Email Verification</Label>
                     <p className="text-sm text-muted-foreground">Players must verify email</p>
                   </div>
-                  <Switch checked={program.settings?.require_email_verification ?? false} disabled />
+                  <Switch checked={Boolean(program.settings.require_email_verification)} disabled />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label>Welcome Points</Label>
                     <p className="text-sm text-muted-foreground">Points given on enrollment</p>
                   </div>
-                  <Badge variant="secondary">{program.settings?.welcome_points ?? 0}</Badge>
+                  <Badge variant="secondary">{program.settings.welcome_points ?? 0}</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -530,7 +471,7 @@ export default function ProgramDetail() {
                 ].map(({ key, label }) => (
                   <div key={key} className="flex items-center justify-between">
                     <Label>{label}</Label>
-                    <Switch checked={Boolean((program.mechanics as unknown as Record<string, boolean>)?.[key])} disabled />
+                    <Switch checked={Boolean(program.mechanics[key])} disabled />
                   </div>
                 ))}
               </CardContent>
@@ -544,7 +485,7 @@ export default function ProgramDetail() {
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
         program={program}
-        onSubmit={handleFormSubmit}
+        onSubmit={(data) => handleFormSubmit(data as UpdateProgramData)}
         isLoading={updateMutation.isPending}
       />
 
@@ -564,7 +505,7 @@ export default function ProgramDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Player</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove "{removingPlayer?.display_name || removingPlayer?.external_id}" from this program?
+              Are you sure you want to remove "{memberName(removingPlayer)}" from this program?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

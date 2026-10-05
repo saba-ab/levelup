@@ -1,279 +1,125 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import { HEALTH_ENDPOINTS } from '@/lib/api-routes';
+
+/** GET /health: overall status plus one entry per backend module. */
+export interface HealthResponse {
+  status: string;
+  modules?: Record<string, string>;
+}
 
 interface ConnectionStatus {
   isOnline: boolean;
   latency: number | null;
   lastChecked: Date | null;
   error: string | null;
+  /** "ok" when every module is healthy; null until the first answer. */
+  apiStatus: string | null;
+  modules: Record<string, string>;
 }
 
 interface UseConnectionStatusOptions {
-  pingInterval?: number; // ms between pings
-  pingTimeout?: number; // ms before considering request failed
-  pingEndpoint?: string; // endpoint to ping
+  /** ms between pings */
+  pingInterval?: number;
+  /** ms before a ping counts as failed */
+  pingTimeout?: number;
+  pingEndpoint?: string;
 }
 
-const DEFAULT_OPTIONS: UseConnectionStatusOptions = {
-  pingInterval: 30000, // 30 seconds
-  pingTimeout: 5000, // 5 seconds
-  pingEndpoint: '/ping', // Laravel ping endpoint
+const DEFAULT_OPTIONS: Required<UseConnectionStatusOptions> = {
+  pingInterval: 30000,
+  pingTimeout: 5000,
+  pingEndpoint: HEALTH_ENDPOINTS.CHECK,
 };
 
+/** Pings the active environment's /health and reports reachability, latency and module health. */
 export function useConnectionStatus(options: UseConnectionStatusOptions = {}) {
   const { pingInterval, pingTimeout, pingEndpoint } = { ...DEFAULT_OPTIONS, ...options };
   const { baseUrl, activeEnvironment } = useEnvironment();
 
   const [status, setStatus] = useState<ConnectionStatus>({
-    isOnline: true, // Assume online initially
+    isOnline: true,
     latency: null,
     lastChecked: null,
     error: null,
+    apiStatus: null,
+    modules: {},
   });
-
   const [isChecking, setIsChecking] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const isCheckingRef = useRef(false); // Use ref to prevent concurrent checks without causing re-renders
+  const inFlight = useRef<AbortController | null>(null);
 
-  // Store latest values in refs to avoid dependency issues
-  const baseUrlRef = useRef(baseUrl);
-  const pingEndpointRef = useRef(pingEndpoint);
+  const check = useCallback(async () => {
+    if (inFlight.current) return;
+    const controller = new AbortController();
+    inFlight.current = controller;
+    setIsChecking(true);
+    const timeout = setTimeout(() => controller.abort(), pingTimeout);
+    const startTime = performance.now();
 
-  // Update refs when values change
-  useEffect(() => {
-    baseUrlRef.current = baseUrl;
-    pingEndpointRef.current = pingEndpoint;
-  }, [baseUrl, pingEndpoint]);
-
-  // Set up periodic ping
-  useEffect(() => {
-    // Clear any existing interval first
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-
-    // Define checkConnection inside effect to avoid dependency issues
-    const checkConnection = async () => {
-      // Prevent concurrent checks using ref
-      if (isCheckingRef.current) return;
-      isCheckingRef.current = true;
-      setIsChecking(true);
-
-      // Abort any pending request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      abortControllerRef.current = new AbortController();
-      const startTime = performance.now();
-
+    try {
+      const response = await fetch(`${baseUrl}${pingEndpoint}`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      const latency = Math.round(performance.now() - startTime);
+      let body: HealthResponse | null = null;
       try {
-        const response = await fetch(`${baseUrlRef.current}${pingEndpointRef.current}`, {
-          method: 'GET',
-          signal: abortControllerRef.current.signal,
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          // Don't follow redirects for health checks
-          redirect: 'error',
-        });
-
-        const endTime = performance.now();
-        const latency = Math.round(endTime - startTime);
-
-        // Consider any 2xx or even 401/403 as "online" (server is responding)
-        const isOnline = response.status < 500;
-
-        setStatus({
-          isOnline,
-          latency,
-          lastChecked: new Date(),
-          error: isOnline ? null : `Server error: ${response.status}`,
-        });
-      } catch (error) {
-        // Don't update status for aborted requests
-        if (error instanceof Error && error.name === 'AbortError') {
-          isCheckingRef.current = false;
-          setIsChecking(false);
-          return;
-        }
-
-        setStatus({
-          isOnline: false,
-          latency: null,
-          lastChecked: new Date(),
-          error: error instanceof Error ? error.message : 'Connection failed',
-        });
-      } finally {
-        isCheckingRef.current = false;
-        setIsChecking(false);
+        body = (await response.json()) as HealthResponse;
+      } catch {
+        // non-JSON body: reachability is still known from the status code
       }
-    };
+      // /health answers 503 with a body when a module is down: reachable but degraded.
+      const isOnline = response.status < 500 || !!body?.status;
+      const apiStatus = body?.status ?? (response.ok ? 'ok' : null);
+      const degraded = Object.entries(body?.modules ?? {}).filter(([, s]) => s !== 'ok').map(([m]) => m);
+      setStatus({
+        isOnline,
+        latency,
+        lastChecked: new Date(),
+        error: !isOnline
+          ? `Server error: ${response.status}`
+          : degraded.length
+            ? `Degraded: ${degraded.join(', ')}`
+            : apiStatus && apiStatus !== 'ok'
+              ? `API status: ${apiStatus}`
+              : null,
+        apiStatus,
+        modules: body?.modules ?? {},
+      });
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === 'AbortError';
+      setStatus(prev => ({
+        ...prev,
+        isOnline: false,
+        latency: null,
+        lastChecked: new Date(),
+        error: timedOut ? 'Health check timed out' : error instanceof Error ? error.message : 'Connection failed',
+        apiStatus: null,
+      }));
+    } finally {
+      clearTimeout(timeout);
+      inFlight.current = null;
+      setIsChecking(false);
+    }
+  }, [baseUrl, pingEndpoint, pingTimeout]);
 
-    // Initial check
-    checkConnection();
-
-    // Set up interval
-    intervalRef.current = setInterval(() => {
-      checkConnection();
-    }, pingInterval);
-
+  // Ping on mount, on environment change and every pingInterval.
+  useEffect(() => {
+    const first = setTimeout(check, 100);
+    const interval = setInterval(check, pingInterval);
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
+      clearTimeout(first);
+      clearInterval(interval);
+      inFlight.current?.abort();
+      inFlight.current = null;
     };
-  }, [pingInterval, baseUrl, pingEndpoint]); // Re-setup when these change
-
-  // Check connection when environment changes (separate effect to avoid conflicts)
-  useEffect(() => {
-    // Small delay to ensure previous cleanup is complete
-    const timeoutId = setTimeout(() => {
-      // Trigger a check by clearing and resetting the interval
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      // The main effect will handle the re-setup
-      const checkConnection = async () => {
-        if (isCheckingRef.current) return;
-        isCheckingRef.current = true;
-        setIsChecking(true);
-
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-
-        abortControllerRef.current = new AbortController();
-        const startTime = performance.now();
-
-        try {
-          const response = await fetch(`${baseUrlRef.current}${pingEndpointRef.current}`, {
-            method: 'GET',
-            signal: abortControllerRef.current.signal,
-            headers: {
-              'Accept': 'application/json',
-              'X-Requested-With': 'XMLHttpRequest',
-            },
-            redirect: 'error',
-          });
-
-          const endTime = performance.now();
-          const latency = Math.round(endTime - startTime);
-          const isOnline = response.status < 500;
-
-          setStatus({
-            isOnline,
-            latency,
-            lastChecked: new Date(),
-            error: isOnline ? null : `Server error: ${response.status}`,
-          });
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') {
-            isCheckingRef.current = false;
-            setIsChecking(false);
-            return;
-          }
-
-          setStatus({
-            isOnline: false,
-            latency: null,
-            lastChecked: new Date(),
-            error: error instanceof Error ? error.message : 'Connection failed',
-          });
-        } finally {
-          isCheckingRef.current = false;
-          setIsChecking(false);
-        }
-      };
-      checkConnection();
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [activeEnvironment.id, baseUrl]);
-
-  // Manual refresh function
-  const refresh = useCallback(() => {
-    // Trigger check by temporarily clearing interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
-    const checkConnection = async () => {
-      if (isCheckingRef.current) return;
-      isCheckingRef.current = true;
-      setIsChecking(true);
-
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      abortControllerRef.current = new AbortController();
-      const startTime = performance.now();
-
-      try {
-        const response = await fetch(`${baseUrlRef.current}${pingEndpointRef.current}`, {
-          method: 'GET',
-          signal: abortControllerRef.current.signal,
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          redirect: 'error',
-        });
-
-        const endTime = performance.now();
-        const latency = Math.round(endTime - startTime);
-        const isOnline = response.status < 500;
-
-        setStatus({
-          isOnline,
-          latency,
-          lastChecked: new Date(),
-          error: isOnline ? null : `Server error: ${response.status}`,
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          isCheckingRef.current = false;
-          setIsChecking(false);
-          return;
-        }
-
-        setStatus({
-          isOnline: false,
-          latency: null,
-          lastChecked: new Date(),
-          error: error instanceof Error ? error.message : 'Connection failed',
-        });
-      } finally {
-        isCheckingRef.current = false;
-        setIsChecking(false);
-      }
-    };
-
-    checkConnection();
-
-    // Restart interval
-    intervalRef.current = setInterval(() => {
-      checkConnection();
-    }, pingInterval);
-  }, [pingInterval]);
+  }, [check, pingInterval]);
 
   return {
     ...status,
     isChecking,
-    refresh,
+    refresh: check,
     environment: activeEnvironment,
   };
 }

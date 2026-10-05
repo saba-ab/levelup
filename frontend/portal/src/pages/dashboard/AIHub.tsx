@@ -20,6 +20,7 @@ import {
   Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import FeatureUnavailable from '@/components/FeatureUnavailable';
 
 interface Template {
   id: string;
@@ -132,7 +133,8 @@ const categories = [
   { id: 'segments', label: 'Segments', icon: Users },
 ];
 
-export default function AIHub() {
+/** Planned layout only: this module has no Go API yet. Rendered inert below the banner. */
+function AIHubPreview() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
@@ -158,7 +160,6 @@ export default function AIHub() {
     
     try {
       // Connect to your MySQL backend
-      // Example: const response = await fetch('/api/ai/generate', { method: 'POST', body: JSON.stringify({ prompt: customPrompt }) });
       
       await new Promise(resolve => setTimeout(resolve, 2000));
       setResult(`AI Generated Content\n${'─'.repeat(40)}\n\nBased on your prompt:\n"${customPrompt.slice(0, 100)}..."\n\n${'─'.repeat(40)}\n\n✨ Generated Result:\n\nThis is a placeholder response. Connect your MySQL backend to get real AI-generated content.\n\nYour backend should:\n1. Receive the prompt from the frontend\n2. Process it through your AI model\n3. Return the generated content\n\nThe response will appear here with proper formatting.`);
@@ -384,6 +385,16 @@ export default function AIHub() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function AIHub() {
+  return (
+    <div className="animate-fade-in">
+      <FeatureUnavailable feature="AI Hub">
+        <AIHubPreview />
+      </FeatureUnavailable>
     </div>
   );
 }
