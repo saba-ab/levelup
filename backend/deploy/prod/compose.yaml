@@ -96,6 +96,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS}
       RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit vm_memory_high_watermark {absolute,\"400MiB\"}"
     networks: [levelup]
+    ports:
+      - "127.0.0.1:15672:15672"  # management UI: Caddy → rabbit.levelupos.ge (basic auth)
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
