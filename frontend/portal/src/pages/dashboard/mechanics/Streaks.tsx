@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Flame, Clock, Gift, Zap, Sparkles, X, Loader2, CalendarCheck, RotateCcw } from 'lucide-react';
+import { Plus, Flame, Clock, Gift, Zap, X, Loader2, CalendarCheck, RotateCcw, Info, Hand } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,10 +24,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { cn } from '@/lib/utils';
 import CursorPager from '@/components/CursorPager';
-import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 import { PlayerActionDialog } from '@/components/mechanics/PlayerActionDialog';
 import { changedFields } from '@/components/mechanics/patch';
@@ -76,6 +76,7 @@ interface StreakFormData {
   grace_periods: number;
   points_per_period: number;
   milestones: StreakMilestone[];
+  auto_record: boolean;
   is_active: boolean;
 }
 
@@ -87,6 +88,7 @@ const initialFormData: StreakFormData = {
   grace_periods: 0,
   points_per_period: 0,
   milestones: [],
+  auto_record: true,
   is_active: true,
 };
 
@@ -103,6 +105,8 @@ export default function Streaks() {
   const [playerAction, setPlayerAction] = useState<PlayerAction | null>(null);
   const [occurredAt, setOccurredAt] = useState('');
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
   const pager = useCursorPagination(20);
 
   const filters: StreakFilters = {
@@ -145,6 +149,7 @@ export default function Streaks() {
       grace_periods: streak.grace_periods,
       points_per_period: streak.points_per_period,
       milestones: streak.milestones ?? [],
+      auto_record: streak.auto_record ?? true,
       is_active: streak.is_active,
     });
     setMilestoneCount('');
@@ -184,6 +189,7 @@ export default function Streaks() {
           grace_periods: formData.grace_periods,
           points_per_period: formData.points_per_period,
           milestones: formData.milestones,
+          auto_record: formData.auto_record,
           is_active: formData.is_active,
         };
         const patch = changedFields(editingStreak, next);
@@ -200,6 +206,7 @@ export default function Streaks() {
           grace_periods: formData.grace_periods,
           points_per_period: formData.points_per_period,
           milestones: formData.milestones,
+          auto_record: formData.auto_record,
           is_active: formData.is_active,
         };
         await createMutation.mutateAsync(data);
@@ -266,10 +273,6 @@ export default function Streaks() {
     }
   };
 
-  const handleAIGenerate = async (prompt: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Streak Idea:\n\n"${prompt}"\n\nName: Consistency Champion\nDescription: Reward users for maintaining consistent engagement.\n\nMilestones:\n- 7 days: 100 bonus points\n- 30 days: 500 bonus points\n- 90 days: 2000 bonus points\n\nGrace periods: 1\nPeriod: Daily`;
-  };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const hasFilters = periodFilter !== ALL || activeFilter !== ALL;
@@ -282,25 +285,25 @@ export default function Streaks() {
           <h1 className="text-3xl font-bold">Streaks</h1>
           <p className="text-muted-foreground mt-1">Configure streak mechanics and milestone rewards.</p>
         </div>
-        <div className="flex gap-2">
-          <AIGenerateDialog
-            trigger={
-              <Button variant="outline" className="gap-2">
-                <Sparkles className="w-4 h-4" />
-                Generate with AI
-              </Button>
-            }
-            title="Generate Streak Ideas"
-            placeholder="E.g., Create a streak mechanic that encourages daily app usage with escalating rewards..."
-            context="Generate streak names, milestones, periods, and reward structures"
-            onGenerate={handleAIGenerate}
-          />
+        {canManage && <div className="flex gap-2">
           <Button variant="glow" onClick={openCreate}>
             <Plus className="w-4 h-4" />
             Create Streak
           </Button>
-        </div>
+        </div>}
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-4 flex gap-3 text-sm">
+          <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <p className="text-muted-foreground">
+            Streaks are recorded automatically from activities: when an activity arrives whose event type equals a
+            streak's activity key, that player's current period is recorded (once per period), with points and
+            milestones applied. Turn off <span className="font-medium text-foreground">Record automatically</span> on a
+            streak to record it only through the API or rules.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Create / Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -361,6 +364,7 @@ export default function Streaks() {
                     value={formData.activity_key}
                     onChange={(e) => setFormData({ ...formData, activity_key: e.target.value })}
                   />
+                  <p className="text-xs text-muted-foreground">The event type that counts as activity for this streak.</p>
                   <datalist id="streak-activity-keys">
                     {eventKeys.map((key) => (
                       <option key={key} value={key} />
@@ -435,6 +439,22 @@ export default function Streaks() {
                 )}
               </div>
 
+              <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+                <Switch
+                  id="streak-auto-record"
+                  checked={formData.auto_record}
+                  onCheckedChange={(checked) => setFormData({ ...formData, auto_record: checked })}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="streak-auto-record">Record automatically</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {formData.auto_record
+                      ? `Every activity with event type "${formData.activity_key.trim() || 'activity key'}" records the player's current ${unit}.`
+                      : 'Activities are ignored: record this streak through the API or rules ("Record activity for player").'}
+                  </p>
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 <Switch
                   id="streak-active"
@@ -503,7 +523,7 @@ export default function Streaks() {
             <p className="text-muted-foreground mb-4">
               {hasFilters ? 'Try different filters.' : 'Create your first streak to get started.'}
             </p>
-            {!hasFilters && (
+            {!hasFilters && canManage && (
               <Button onClick={openCreate}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Streak
@@ -539,7 +559,7 @@ export default function Streaks() {
                       )}>
                         {streak.is_active ? 'Active' : 'Inactive'}
                       </Badge>
-                      <ItemActionsMenu
+                      {canManage && <ItemActionsMenu
                         itemName={streak.name}
                         onEdit={() => openEdit(streak)}
                         onDelete={() => handleDelete(streak)}
@@ -548,13 +568,22 @@ export default function Streaks() {
                           { label: 'Reset for player', icon: RotateCcw, onClick: () => openPlayerAction('reset', streak) },
                         ]}
                         showInGroup
-                      />
+                      />}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex flex-wrap items-center gap-3 text-sm">
                     <Badge variant="secondary">{periodLabels[streak.period].label}</Badge>
+                    {streak.auto_record ? (
+                      <Badge variant="outline" className="gap-1 border-primary/50 text-primary">
+                        <Zap className="w-3 h-3" /> Auto-recorded
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1 text-muted-foreground">
+                        <Hand className="w-3 h-3" /> Manual
+                      </Badge>
+                    )}
                     <span className="text-muted-foreground">Activity: <code>{streak.activity_key}</code></span>
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">

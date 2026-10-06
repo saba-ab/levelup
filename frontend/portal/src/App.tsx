@@ -11,6 +11,12 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "./pages/VerifyEmail";
+import AcceptInvite from "./pages/AcceptInvite";
+import PlatformTenants from "./pages/platform/PlatformTenants";
+import PlatformEventTypes from "./pages/platform/PlatformEventTypes";
+import PlatformEventCategories from "./pages/platform/PlatformEventCategories";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import Overview from "./pages/dashboard/Overview";
 import Programs from "./pages/dashboard/Programs";
@@ -57,6 +63,9 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/accept-invite" element={<AcceptInvite />} />
                 
                 {/* Dashboard Routes - Protected */}
                 <Route path="/" element={<DashboardLayout />}>
@@ -87,6 +96,10 @@ const App = () => (
                   <Route path="docs/api" element={<ProtectedRoute permission="view:docs"><ApiReference /></ProtectedRoute>} />
                   <Route path="docs/guides" element={<ProtectedRoute permission="view:docs"><UserGuides /></ProtectedRoute>} />
                   <Route path="docs/developer" element={<ProtectedRoute permission="view:docs"><DeveloperDocs /></ProtectedRoute>} />
+                  {/* Platform admin: pages render PlatformGuard themselves; the API enforces platform_only. */}
+                  <Route path="platform/tenants" element={<PlatformTenants />} />
+                  <Route path="platform/event-types" element={<PlatformEventTypes />} />
+                  <Route path="platform/event-categories" element={<PlatformEventCategories />} />
                   <Route path="settings" element={<ProtectedRoute permission="view:settings"><Settings /></ProtectedRoute>} />
                 </Route>
                 

@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Play, Pause, Pencil, Trash2, FolderOpen, StopCircle, Loader2, ExternalLink, Copy, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,8 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ProgramFormDialog } from '@/components/programs/ProgramFormDialog';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDebouncedValue } from '@/components/players';
 import {
   describeProgramError,
   useDuplicateProgramMutation,
@@ -64,14 +66,22 @@ export default function Programs() {
   const [deletingProgram, setDeletingProgram] = useState<Program | null>(null);
 
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:programs');
   const pager = useCursorPagination(25);
+  const { reset } = pager;
 
-  // Status is filtered server-side; the API has no text search, so the search
-  // box narrows the current page only.
+  // Search (name or slug substring, max 100 chars) and status are server-side.
+  const search = useDebouncedValue(searchQuery.trim().slice(0, 100));
+  useEffect(() => {
+    reset();
+  }, [search, reset]);
+
   const { data: programsData, isLoading, error, refetch } = useProgramsQuery({
     limit: pager.limit,
     cursor: pager.cursor,
     ...(statusFilter !== 'all' && { status: statusFilter }),
+    ...(search && { search }),
   });
   // Mutations
   const createMutation = useCreateProgramMutation();
@@ -82,17 +92,7 @@ export default function Programs() {
   const endMutation = useEndProgramMutation();
   const duplicateMutation = useDuplicateProgramMutation();
 
-  const programs = useMemo(() => {
-    const page = programsData?.data || [];
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return page;
-    return page.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.slug.toLowerCase().includes(q) ||
-        (p.description ?? '').toLowerCase().includes(q),
-    );
-  }, [programsData, searchQuery]);
+  const programs = programsData?.data ?? [];
   const nextCursor = programsData?.next_cursor ?? '';
 
   const showError = (err: unknown, fallback: string) =>
@@ -207,10 +207,12 @@ export default function Programs() {
             Manage your gamification programs and their settings.
           </p>
         </div>
-        <Button variant="glow" onClick={handleCreate}>
-          <Plus className="w-4 h-4" />
-          Create Program
-        </Button>
+        {canManage && (
+          <Button variant="glow" onClick={handleCreate}>
+            <Plus className="w-4 h-4" />
+            Create Program
+          </Button>
+        )}
       </div>
 
       {/* Search and Filter */}
@@ -220,7 +222,8 @@ export default function Programs() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Filter this page by name..."
+                placeholder="Search by name or slug..."
+                maxLength={100}
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -254,6 +257,7 @@ export default function Programs() {
                 <tr className="border-b border-border">
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Name</th>
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="text-right p-4 text-sm font-medium text-muted-foreground">Members</th>
                   <th className="text-left p-4 text-sm font-medium text-muted-foreground">Dates</th>
                   <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
@@ -269,13 +273,14 @@ export default function Programs() {
                         </div>
                       </td>
                       <td className="p-4"><Skeleton className="h-5 w-16" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-10 ml-auto" /></td>
                       <td className="p-4"><Skeleton className="h-4 w-24" /></td>
                       <td className="p-4"><Skeleton className="h-8 w-8 ml-auto" /></td>
                     </tr>
                   ))
                 ) : error ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center">
+                    <td colSpan={5} className="p-8 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <p className="text-destructive font-medium">Failed to load programs</p>
                         <p className="text-sm text-muted-foreground">
@@ -289,7 +294,7 @@ export default function Programs() {
                   </tr>
                 ) : programs.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center">
+                    <td colSpan={5} className="p-8 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
                           <FolderOpen className="w-8 h-8 text-muted-foreground" />
@@ -335,6 +340,12 @@ export default function Programs() {
                           {program.status}
                         </Badge>
                       </td>
+                      <td className="p-4 text-right">
+                        <span className="inline-flex items-center gap-1.5 tabular-nums">
+                          <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                          {(program.member_count ?? 0).toLocaleString()}
+                        </span>
+                      </td>
                       <td className="p-4 text-muted-foreground text-sm">
                         {program.starts_at || program.ends_at ? (
                           <span>
@@ -362,54 +373,58 @@ export default function Programs() {
                               <ExternalLink className="w-4 h-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {program.status === 'draft' && (
-                              <DropdownMenuItem onClick={() => handleActivate(program)}>
-                                <Play className="w-4 h-4 mr-2" />
-                                Activate
-                              </DropdownMenuItem>
-                            )}
-                            {program.status === 'active' && (
+                            {canManage && (
                               <>
-                                <DropdownMenuItem onClick={() => handlePause(program)}>
-                                  <Pause className="w-4 h-4 mr-2" />
-                                  Pause
+                                <DropdownMenuSeparator />
+                                {program.status === 'draft' && (
+                                  <DropdownMenuItem onClick={() => handleActivate(program)}>
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Activate
+                                  </DropdownMenuItem>
+                                )}
+                                {program.status === 'active' && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => handlePause(program)}>
+                                      <Pause className="w-4 h-4 mr-2" />
+                                      Pause
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleEnd(program)}>
+                                      <StopCircle className="w-4 h-4 mr-2" />
+                                      End Program
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                {program.status === 'paused' && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => handleActivate(program)}>
+                                      <Play className="w-4 h-4 mr-2" />
+                                      Resume
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleEnd(program)}>
+                                      <StopCircle className="w-4 h-4 mr-2" />
+                                      End Program
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleEdit(program)}>
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Edit
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEnd(program)}>
-                                  <StopCircle className="w-4 h-4 mr-2" />
-                                  End Program
+                                <DropdownMenuItem onClick={() => handleDuplicate(program)}>
+                                  <Copy className="w-4 h-4 mr-2" />
+                                  Duplicate
                                 </DropdownMenuItem>
+                                {program.status !== 'ended' && (
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => setDeletingProgram(program)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
                               </>
-                            )}
-                            {program.status === 'paused' && (
-                              <>
-                                <DropdownMenuItem onClick={() => handleActivate(program)}>
-                                  <Play className="w-4 h-4 mr-2" />
-                                  Resume
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEnd(program)}>
-                                  <StopCircle className="w-4 h-4 mr-2" />
-                                  End Program
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleEdit(program)}>
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDuplicate(program)}>
-                              <Copy className="w-4 h-4 mr-2" />
-                              Duplicate
-                            </DropdownMenuItem>
-                            {program.status !== 'ended' && (
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => setDeletingProgram(program)}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>

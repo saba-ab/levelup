@@ -42,6 +42,8 @@ export interface Program extends Timestamps {
   settings: ProgramSettings;
   mechanics: ProgramMechanics;
   version: number;
+  /** Enrolled players (list, show and write responses). */
+  member_count: number;
 }
 
 /** CreateReq. Programs are always created as draft; slug is derived from name when omitted. */
@@ -69,9 +71,11 @@ export interface UpdateProgramData {
   mechanics?: ProgramMechanics;
 }
 
-/** GET /programs query params. The API has no text search. */
+/** GET /programs query params. */
 export interface ProgramFilters extends CursorParams {
   status?: ProgramStatus;
+  /** Case-insensitive substring of name or slug (max 100 chars). */
+  search?: string;
 }
 
 // ==================== ENROLLMENTS ====================

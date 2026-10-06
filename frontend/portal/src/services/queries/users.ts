@@ -2,7 +2,21 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { useUsersService } from '../api/users';
 import { queryKeys } from './keys';
 import type { ID, CreateUserData, UpdateUserData, UserFilters } from '../api/types';
+import type { CreateInvitationData, InvitationFilters } from '../api/models/identity';
 import { unwrap } from './rules';
+import { useAuthService } from '../api/auth';
+
+export const invitationKeys = {
+  all: ['invitations'] as const,
+  lists: () => [...invitationKeys.all, 'list'] as const,
+  list: (filters?: InvitationFilters) => [...invitationKeys.lists(), filters] as const,
+  preview: (token: string) => [...invitationKeys.all, 'preview', token] as const,
+};
+
+/** The signed-in user's profile from GET /auth/me (email_verified_at lives here). */
+export const meKeys = {
+  all: ['auth', 'me'] as const,
+};
 
 /** One cursor page of team members: { data, next_cursor }. */
 export function useUsersQuery(filters?: UserFilters) {
@@ -63,5 +77,72 @@ export function useDeleteUserMutation() {
       return userId;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all }),
+  });
+}
+
+// ==================== INVITATIONS ====================
+
+/** One cursor page of open invitations: { data, next_cursor }. */
+export function useInvitationsQuery(filters?: InvitationFilters, enabled = true) {
+  const { listInvitations } = useUsersService();
+  return useQuery({
+    queryKey: invitationKeys.list(filters),
+    queryFn: async () => unwrap(await listInvitations(filters), 'Failed to fetch invitations'),
+    placeholderData: keepPreviousData,
+    enabled,
+  });
+}
+
+export function useCreateInvitationMutation() {
+  const queryClient = useQueryClient();
+  const { createInvitation } = useUsersService();
+  return useMutation({
+    mutationFn: async (data: CreateInvitationData) => unwrap(await createInvitation(data), 'Failed to send invitation'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: invitationKeys.all }),
+  });
+}
+
+export function useRevokeInvitationMutation() {
+  const queryClient = useQueryClient();
+  const { revokeInvitation } = useUsersService();
+  return useMutation({
+    mutationFn: async (invitationId: ID) => {
+      unwrap(await revokeInvitation(invitationId), 'Failed to revoke invitation');
+      return invitationId;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: invitationKeys.all }),
+  });
+}
+
+/** Anonymous preview for the accept-invite page; 404 means invalid, used or expired. */
+export function useInvitationPreviewQuery(token: string | null) {
+  const { previewInvitation } = useAuthService();
+  return useQuery({
+    queryKey: invitationKeys.preview(token ?? ''),
+    queryFn: async () => unwrap(await previewInvitation(token!), 'Invitation not found'),
+    enabled: !!token,
+    retry: false,
+  });
+}
+
+// ==================== EMAIL VERIFICATION ====================
+
+/** GET /auth/me, for fields AuthContext does not keep (email_verified_at). */
+export function useMeQuery(enabled = true) {
+  const { me } = useAuthService();
+  return useQuery({
+    queryKey: meKeys.all,
+    queryFn: async () => unwrap(await me(), 'Failed to fetch your profile'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useResendVerificationMutation() {
+  const { resendVerification } = useAuthService();
+  return useMutation({
+    mutationFn: async () => {
+      unwrap(await resendVerification(), 'Failed to resend the verification email');
+    },
   });
 }

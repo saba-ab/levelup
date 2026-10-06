@@ -30,6 +30,9 @@ import {
   Terminal,
   Sparkles,
   Zap,
+  Shield,
+  Building2,
+  Tags,
 } from 'lucide-react';
 
 interface NavItem {
@@ -39,13 +42,11 @@ interface NavItem {
   permission: Permission;
   children?: { label: string; path: string; icon: React.ReactNode; permission: Permission }[];
   highlight?: boolean;
-  /** No Go API yet: the page shows a "coming soon" state. */
-  soon?: boolean;
 }
 
 const navItems: NavItem[] = [
   { label: 'Overview', path: '/', icon: <LayoutDashboard className="w-5 h-5" />, permission: 'view:overview' },
-  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true, permission: 'view:ai-hub', soon: true },
+  { label: 'AI Hub', path: '/ai-hub', icon: <Sparkles className="w-5 h-5" />, highlight: true, permission: 'view:ai-hub' },
   { label: 'Programs', path: '/programs', icon: <FolderOpen className="w-5 h-5" />, permission: 'view:programs' },
   { label: 'Rules', path: '/rules', icon: <GitBranch className="w-5 h-5" />, permission: 'view:rules' },
   { label: 'Events', path: '/events', icon: <Zap className="w-5 h-5" />, permission: 'view:rules' },
@@ -65,10 +66,10 @@ const navItems: NavItem[] = [
     ],
   },
   { label: 'Players', path: '/players', icon: <Users className="w-5 h-5" />, permission: 'view:players' },
-  { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" />, permission: 'view:segments', soon: true },
-  { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" />, permission: 'view:analytics', soon: true },
-  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" />, permission: 'view:notifications', soon: true },
-  { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" />, permission: 'view:integrations', soon: true },
+  { label: 'Segments', path: '/segments', icon: <Filter className="w-5 h-5" />, permission: 'view:segments' },
+  { label: 'Analytics', path: '/analytics', icon: <BarChart3 className="w-5 h-5" />, permission: 'view:analytics' },
+  { label: 'Notifications', path: '/notifications', icon: <Bell className="w-5 h-5" />, permission: 'view:notifications' },
+  { label: 'Integrations', path: '/integrations', icon: <Plug className="w-5 h-5" />, permission: 'view:integrations' },
   {
     label: 'Documentation',
     path: '/docs',
@@ -81,9 +82,22 @@ const navItems: NavItem[] = [
       { label: 'Developer Docs', path: '/docs/developer', icon: <Terminal className="w-4 h-4" />, permission: 'view:docs' },
     ],
   },
-  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" />, permission: 'view:audit-logs', soon: true },
+  { label: 'Audit & Logs', path: '/audit-logs', icon: <FileText className="w-5 h-5" />, permission: 'view:audit-logs' },
   { label: 'Settings', path: '/settings', icon: <Settings className="w-5 h-5" />, permission: 'view:settings' },
 ];
+
+/** Shown only to platform admins (no tenant); the API enforces it too. */
+const platformItem: NavItem = {
+  label: 'Platform',
+  path: '/platform',
+  icon: <Shield className="w-5 h-5" />,
+  permission: 'view:overview',
+  children: [
+    { label: 'Tenants', path: '/platform/tenants', icon: <Building2 className="w-4 h-4" />, permission: 'view:overview' },
+    { label: 'Event Types', path: '/platform/event-types', icon: <Zap className="w-4 h-4" />, permission: 'view:overview' },
+    { label: 'Event Categories', path: '/platform/event-categories', icon: <Tags className="w-4 h-4" />, permission: 'view:overview' },
+  ],
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -92,7 +106,8 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isPlatformAdmin = !!user?.roleKeys.includes('platform_admin');
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Mechanics']);
 
   const toggleMenu = (label: string) => {
@@ -109,7 +124,10 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   };
 
   // Filter nav items based on permissions
-  const filteredNavItems = navItems.filter(item => hasPermission(item.permission));
+  const filteredNavItems = [
+    ...navItems.filter(item => hasPermission(item.permission)),
+    ...(isPlatformAdmin ? [platformItem] : []),
+  ];
 
   return (
     <aside
@@ -136,7 +154,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ul className="space-y-1">
           {filteredNavItems.map((item) => {
             // Filter children based on permissions
-            const filteredChildren = item.children?.filter(child => hasPermission(child.permission));
+            const filteredChildren = item === platformItem
+              ? item.children
+              : item.children?.filter(child => hasPermission(child.permission));
             
             return (
               <li key={item.label}>
@@ -191,21 +211,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       isActive(item.path) && "active",
                       item.highlight && !isActive(item.path) && "text-primary"
                     )}
-                    title={collapsed ? `${item.label}${item.soon ? ' (coming soon)' : ''}` : undefined}
+                    title={collapsed ? item.label : undefined}
                   >
                     {item.icon}
                     {!collapsed && <span>{item.label}</span>}
-                    {!collapsed && item.soon ? (
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
-                        SOON
+                    {!collapsed && item.highlight && (
+                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                        NEW
                       </span>
-                    ) : (
-                      !collapsed &&
-                      item.highlight && (
-                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                          NEW
-                        </span>
-                      )
                     )}
                   </Link>
                 ) : null}

@@ -37,6 +37,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { ProgramFormDialog } from '@/components/programs/ProgramFormDialog';
 import { BulkEnrollDialog } from '@/components/programs/BulkEnrollDialog';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
@@ -64,6 +65,8 @@ export default function ProgramDetail() {
   const { programId } = useParams<{ programId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:programs');
   const id: ID = programId ?? '';
 
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -221,7 +224,7 @@ export default function ProgramDetail() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 ml-12 lg:ml-0">
+        <div className={cn('flex items-center gap-2 ml-12 lg:ml-0', !canManage && 'hidden')}>
           {program.status === 'draft' && (
             <Button onClick={handleActivate} disabled={isAnyMutating}>
               {activateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
@@ -259,8 +262,21 @@ export default function ProgramDetail() {
         </div>
       </div>
 
-      {/* Program Info (the API has no program stats endpoint) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Program Info */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <Users className="w-5 h-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium tabular-nums">{(program.member_count ?? 0).toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Enrolled players</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -323,14 +339,14 @@ export default function ProgramDetail() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Enrolled Players</CardTitle>
+                <CardTitle>Enrolled Players ({(program.member_count ?? 0).toLocaleString()})</CardTitle>
                 <CardDescription>
                   {program.status === 'active'
                     ? 'Manage players in this program'
                     : 'Players can only be enrolled while the program is active'}
                 </CardDescription>
               </div>
-              <Button onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status !== 'active'}>
+              <Button onClick={() => setIsBulkEnrollOpen(true)} disabled={!canManage || program.status !== 'active'}>
                 <UserPlus className="w-4 h-4 mr-2" />
                 Add Players
               </Button>
@@ -352,7 +368,11 @@ export default function ProgramDetail() {
                 <div className="text-center py-12">
                   <Users className="w-12 h-12 mx-auto text-muted-foreground/50" />
                   <p className="mt-4 text-muted-foreground">No players enrolled yet</p>
-                  <Button className="mt-4" onClick={() => setIsBulkEnrollOpen(true)} disabled={program.status !== 'active'}>
+                  <Button
+                    className="mt-4"
+                    onClick={() => setIsBulkEnrollOpen(true)}
+                    disabled={!canManage || program.status !== 'active'}
+                  >
                     <UserPlus className="w-4 h-4 mr-2" />
                     Add First Player
                   </Button>
@@ -385,7 +405,7 @@ export default function ProgramDetail() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-destructive hover:text-destructive"
+                        className={cn('text-destructive hover:text-destructive', !canManage && 'hidden')}
                         onClick={() => setRemovingPlayer(member)}
                       >
                         <UserMinus className="w-4 h-4" />

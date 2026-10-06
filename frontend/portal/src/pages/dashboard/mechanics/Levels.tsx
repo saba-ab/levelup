@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Progress } from '@/components/ui/progress';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { usePlayersQuery } from '@/services/queries/players';
+import { getPlayerName } from '@/lib/player-utils';
+import { PaginationControls, PlayerAvatar, useDebouncedValue } from '@/components/players';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { TrendingUp, Sparkles, Plus, Award, Loader2 } from 'lucide-react';
+import { TrendingUp, Sparkles, Plus, Award, Loader2, Search, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
@@ -31,10 +38,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   useLevelsQuery,
+  usePlayersProgressQuery,
   useAllBadgesQuery,
   useCreateLevelMutation,
   useUpdateLevelMutation,
   useDeleteLevelMutation,
+  useInvalidateCreatedDraft,
   describeMechanicsError,
 } from '@/services/queries/mechanics';
 import type { Level, CreateLevelData, UpdateLevelData } from '@/services/api/types';
@@ -57,6 +66,111 @@ const getTierName = (levelNumber: number) => {
 };
 
 const NO_BADGE = 'none';
+
+/** Players with their level and XP, read in one batch (GET /progress?player_ids=). */
+function PlayerLevelsCard() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const search = useDebouncedValue(searchQuery.trim());
+  const pager = useCursorPagination(20);
+  const { reset } = pager;
+  useEffect(() => {
+    reset();
+  }, [search, reset]);
+
+  const playersQuery = usePlayersQuery({ limit: pager.limit, cursor: pager.cursor, search: search || undefined });
+  const players = useMemo(() => playersQuery.data?.data ?? [], [playersQuery.data]);
+  const ids = useMemo(() => players.map((p) => p.id), [players]);
+  const progressQuery = usePlayersProgressQuery(ids);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5" /> Player levels</CardTitle>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Search players..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {playersQuery.isLoading ? (
+          <div className="p-6 space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : playersQuery.error ? (
+          <p className="p-6 text-sm text-destructive">Failed to load players: {playersQuery.error.message}</p>
+        ) : players.length === 0 ? (
+          <p className="p-6 text-sm text-muted-foreground text-center">{search ? 'No players match your search.' : 'No players yet.'}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            {progressQuery.error && (
+              <p className="px-4 pt-4 text-sm text-destructive">Failed to load progress: {progressQuery.error.message}</p>
+            )}
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Player</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Level</th>
+                  <th className="text-right p-4 text-sm font-medium text-muted-foreground">Total XP</th>
+                  <th className="text-left p-4 text-sm font-medium text-muted-foreground w-64">Next level</th>
+                </tr>
+              </thead>
+              <tbody>
+                {players.map((player) => {
+                  const name = getPlayerName(player);
+                  const progress = progressQuery.data?.[player.id];
+                  const loading = progressQuery.isLoading;
+                  return (
+                    <tr key={player.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                      <td className="p-4">
+                        <Link to={`/players/${player.id}`} className="flex items-center gap-3 hover:underline">
+                          <PlayerAvatar name={name} size="sm" />
+                          <span className="font-medium truncate">{name}</span>
+                        </Link>
+                      </td>
+                      <td className="p-4">
+                        {loading ? '...' : progress?.current_level ? (
+                          <Badge variant="outline" className={cn(getLevelColor(progress.current_level.level_number).text, getLevelColor(progress.current_level.level_number).border)}>
+                            {progress.current_level.name || `Level ${progress.current_level.level_number}`}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No level yet</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right font-mono">{loading ? '...' : (progress?.total_xp ?? 0).toLocaleString()}</td>
+                      <td className="p-4">
+                        {loading ? '...' : progress?.next_level ? (
+                          <div className="space-y-1">
+                            <Progress value={progress.progress_percent} className="h-2" />
+                            <p className="text-xs text-muted-foreground">
+                              {(progress.xp_to_next ?? 0).toLocaleString()} XP to {progress.next_level.name || `Level ${progress.next_level.level_number}`}
+                            </p>
+                          </div>
+                        ) : progress?.current_level ? (
+                          <span className="text-xs text-muted-foreground">Top level reached</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <PaginationControls
+          page={pager.page}
+          hasPrevious={pager.hasPrevious}
+          hasNext={!!playersQuery.data?.next_cursor}
+          onPrevious={pager.previous}
+          onNext={() => playersQuery.data && pager.next(playersQuery.data.next_cursor)}
+          itemCount={players.length}
+          itemLabel="players"
+        />
+      </CardContent>
+    </Card>
+  );
+}
 
 /** Error codes of the level endpoints. */
 const levelErrors: Record<string, string> = {
@@ -95,6 +209,9 @@ export default function Levels() {
   const [editingLevel, setEditingLevel] = useState<Level | null>(null);
   const [formState, setFormState] = useState<LevelFormState>(initialFormState);
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
+  const invalidateCreatedDraft = useInvalidateCreatedDraft();
 
   const { data: levelsData, isLoading, error } = useLevelsQuery();
   const { data: badges = [] } = useAllBadgesQuery();
@@ -192,10 +309,6 @@ export default function Levels() {
     }
   };
 
-  const handleAIGenerate = async (prompt: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Level Description:\n\n"${prompt}"\n\nThis tier rewards dedicated players who have shown consistent engagement. Members enjoy exclusive perks including early access to new features, special badges, and priority support.`;
-  };
 
   const isMutating = createMutation.isPending || updateMutation.isPending;
 
@@ -224,7 +337,7 @@ export default function Levels() {
           <h1 className="text-3xl font-bold">Levels & Tiers</h1>
           <p className="text-muted-foreground mt-1">Define progression levels for your players.</p>
         </div>
-        <div className="flex gap-2">
+        {canManage && <div className="flex gap-2">
           <AIGenerateDialog
             trigger={
               <Button variant="outline" className="gap-2">
@@ -235,7 +348,8 @@ export default function Levels() {
             title="Generate Level Content"
             placeholder="E.g., Create a description for a Diamond tier level that makes players feel elite..."
             context="Generate level descriptions, tier benefits, or progression milestones"
-            onGenerate={handleAIGenerate}
+            kind="level"
+            onCreated={invalidateCreatedDraft}
           />
           <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog(); else setIsDialogOpen(true); }}>
             <DialogTrigger asChild>
@@ -416,7 +530,7 @@ export default function Levels() {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
+        </div>}
       </div>
 
       {/* Level Progression Visualization */}
@@ -496,11 +610,15 @@ export default function Levels() {
             <div className="p-12 text-center">
               <TrendingUp className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No levels yet</h3>
-              <p className="text-muted-foreground mb-4">Create your first progression level to get started.</p>
-              <Button variant="glow" onClick={() => handleOpenDialog()}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Level
-              </Button>
+              <p className="text-muted-foreground mb-4">
+                {canManage ? 'Create your first progression level to get started.' : 'No progression levels are defined yet.'}
+              </p>
+              {canManage && (
+                <Button variant="glow" onClick={() => handleOpenDialog()}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Level
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -553,12 +671,14 @@ export default function Levels() {
                           {level.badge_reward_id ? (badgeReward?.name ?? 'Badge') : '-'}
                         </td>
                         <td className="p-4 text-right">
-                          <ItemActionsMenu
-                            itemName={levelLabel(level)}
-                            onEdit={() => handleOpenDialog(level)}
-                            onDelete={() => handleDelete(level)}
-                            showInGroup
-                          />
+                          {canManage && (
+                            <ItemActionsMenu
+                              itemName={levelLabel(level)}
+                              onEdit={() => handleOpenDialog(level)}
+                              onDelete={() => handleDelete(level)}
+                              showInGroup
+                            />
+                          )}
                         </td>
                       </tr>
                     );
@@ -569,6 +689,8 @@ export default function Levels() {
           )}
         </CardContent>
       </Card>
+
+      {levels.length > 0 && <PlayerLevelsCard />}
     </div>
   );
 }

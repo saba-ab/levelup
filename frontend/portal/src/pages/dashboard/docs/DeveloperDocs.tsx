@@ -5,34 +5,21 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+/** The SDKs live in this monorepo (sdks/); they are not published to a registry yet. */
 const sdks = [
   {
     name: 'JavaScript / TypeScript',
-    package: '@levelupos/js-sdk',
-    version: '2.4.1',
-    install: 'npm install @levelupos/js-sdk',
+    package: '@levelup/sdk',
+    version: '0.1.0',
+    install: 'npm install ./sdks/typescript',
     icon: '🟨',
   },
   {
     name: 'Python',
-    package: 'levelupos-python',
-    version: '1.8.0',
-    install: 'pip install levelupos-python',
+    package: 'levelup',
+    version: '0.1.0',
+    install: 'pip install ./sdks/python',
     icon: '🐍',
-  },
-  {
-    name: 'Ruby',
-    package: 'levelupos-ruby',
-    version: '1.3.2',
-    install: 'gem install levelupos-ruby',
-    icon: '💎',
-  },
-  {
-    name: 'Go',
-    package: 'github.com/levelupos/go-sdk',
-    version: '0.9.1',
-    install: 'go get github.com/levelupos/go-sdk',
-    icon: '🔷',
   },
 ];
 
@@ -84,7 +71,7 @@ export default function DeveloperDocs() {
             <Package className="w-5 h-5 text-primary" />
             Official SDKs
           </CardTitle>
-          <CardDescription>Official SDKs are coming soon. Until then, call the REST API directly (examples below).</CardDescription>
+          <CardDescription>Typed clients with retries, cursor pagination, idempotency keys and webhook signature verification. They are not on npm/PyPI yet: install them from the repository's sdks/ folder, or call the REST API directly (examples below).</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -101,7 +88,7 @@ export default function DeveloperDocs() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Coming soon</Badge>
+                  <Badge variant="secondary">v{sdk.version}</Badge>
                   <Button
                     variant="ghost"
                     size="sm"

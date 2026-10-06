@@ -18,6 +18,10 @@ import {
 import { Trophy, Medal, Award, TrendingUp, Target, Plus, RefreshCw, Loader2, Calendar, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { EventTypeSelect } from '@/components/mechanics/EventTypeSelect';
+import { eventPropertyPaths } from '@/components/mechanics/event-utils';
+import { useEventsQuery } from '@/services/queries/events';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import CursorPager from '@/components/CursorPager';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
@@ -40,6 +44,7 @@ import type {
   LeaderboardMetric,
   LeaderboardType,
   ResetFrequency,
+  LeaderboardActivityValue,
   CreateLeaderboardData,
   UpdateLeaderboardData,
 } from '@/services/api/types';
@@ -50,6 +55,8 @@ const metricsByType: Record<LeaderboardType, LeaderboardMetric[]> = {
   xp: ['earned', 'balance'],
   badges: ['count'],
   missions: ['count'],
+  /** Derived from config.value: count -> count, property -> earned. */
+  activity: ['count', 'earned'],
 };
 
 const typeLabels: Record<LeaderboardType, string> = {
@@ -57,6 +64,7 @@ const typeLabels: Record<LeaderboardType, string> = {
   xp: 'XP',
   badges: 'Badges',
   missions: 'Missions',
+  activity: 'Activity',
 };
 
 const leaderboardErrors: Record<string, string> = {
@@ -65,14 +73,29 @@ const leaderboardErrors: Record<string, string> = {
   leaderboard_balance_requires_never: 'The balance metric requires reset frequency "never".',
   leaderboard_invalid_period: 'That period is not valid for this leaderboard.',
   leaderboard_version_conflict: 'The leaderboard was changed by someone else. Reload and try again.',
+  leaderboard_invalid_type: 'That leaderboard type is not supported.',
 };
+
+/** Property paths accepted by the backend for value "property". */
+const PROPERTY_RE = /^[A-Za-z0-9_.-]{1,100}$/;
 
 const scoreUnit = (lb?: Leaderboard) => {
   if (!lb) return '';
   if (lb.type === 'xp') return 'XP';
   if (lb.type === 'points') return 'pts';
+  if (lb.type === 'activity') {
+    return lb.config?.value === 'property' && lb.config.property ? `Σ ${lb.config.property}` : 'activities';
+  }
   return lb.type;
 };
+
+/** "purchase_completed · count" style description of an activity board's config. */
+const describeActivityConfig = (lb: Leaderboard) =>
+  lb.config
+    ? lb.config.value === 'property'
+      ? `Sum of "${lb.config.property}" on ${lb.config.event_type}`
+      : `Count of ${lb.config.event_type}`
+    : 'Activity';
 
 interface LeaderboardFormState {
   name: string;
@@ -82,6 +105,9 @@ interface LeaderboardFormState {
   reset_frequency: ResetFrequency;
   max_entries: number;
   is_active: boolean;
+  activity_event_type: string;
+  activity_value: LeaderboardActivityValue;
+  activity_property: string;
 }
 
 const initialForm: LeaderboardFormState = {
@@ -92,6 +118,9 @@ const initialForm: LeaderboardFormState = {
   reset_frequency: 'weekly',
   max_entries: 100,
   is_active: true,
+  activity_event_type: '',
+  activity_value: 'count',
+  activity_property: '',
 };
 
 export default function Leaderboards() {
@@ -102,6 +131,10 @@ export default function Leaderboards() {
   const [editing, setEditing] = useState<Leaderboard | null>(null);
   const [form, setForm] = useState<LeaderboardFormState>(initialForm);
   const [rankPlayerId, setRankPlayerId] = useState('');
+  const [configError, setConfigError] = useState<string | null>(null);
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
+  const { data: events = [] } = useEventsQuery();
   const pager = useCursorPagination(50);
 
   const { data: leaderboardsData, isLoading: isLoadingLeaderboards, error: leaderboardsError } = useLeaderboardsQuery({ limit: 100 });
@@ -144,6 +177,7 @@ export default function Leaderboards() {
   const openCreate = () => {
     setEditing(null);
     setForm(initialForm);
+    setConfigError(null);
     setIsDialogOpen(true);
   };
 
@@ -157,7 +191,11 @@ export default function Leaderboards() {
       reset_frequency: lb.reset_frequency,
       max_entries: lb.max_entries,
       is_active: lb.is_active,
+      activity_event_type: lb.config?.event_type ?? '',
+      activity_value: lb.config?.value ?? 'count',
+      activity_property: lb.config?.property ?? '',
     });
+    setConfigError(null);
     setIsDialogOpen(true);
   };
 
@@ -171,6 +209,17 @@ export default function Leaderboards() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!editing && form.type === 'activity') {
+      if (!form.activity_event_type) {
+        setConfigError('Pick the event type to rank.');
+        return;
+      }
+      if (form.activity_value === 'property' && !PROPERTY_RE.test(form.activity_property)) {
+        setConfigError('Name the numeric property to sum: letters, digits, _ . - (at most 100 characters).');
+        return;
+      }
+    }
+    setConfigError(null);
     try {
       if (editing) {
         const next: UpdateLeaderboardData = {
@@ -185,14 +234,22 @@ export default function Leaderboards() {
         }
         toast({ title: 'Leaderboard updated', description: `${form.name} has been updated.` });
       } else {
+        const isActivity = form.type === 'activity';
         const data: CreateLeaderboardData = {
           name: form.name,
           description: form.description || undefined,
           type: form.type,
-          metric: form.metric,
+          metric: isActivity ? (form.activity_value === 'property' ? 'earned' : 'count') : form.metric,
           reset_frequency: form.reset_frequency,
           max_entries: form.max_entries,
           is_active: form.is_active,
+          config: isActivity
+            ? {
+                event_type: form.activity_event_type,
+                value: form.activity_value,
+                property: form.activity_value === 'property' ? form.activity_property : undefined,
+              }
+            : undefined,
         };
         const created = await createMutation.mutateAsync(data);
         setSelectedLeaderboardId(created.id);
@@ -201,6 +258,10 @@ export default function Leaderboards() {
       }
       setIsDialogOpen(false);
     } catch (err) {
+      if (err instanceof MechanicsApiError && err.code === 'leaderboard_invalid_config') {
+        const fields = Object.entries(err.validationErrors ?? {}).map(([f, m]) => `${f.replace(/^config\./, '')}: ${m.join(', ')}`);
+        setConfigError(fields.length > 0 ? fields.join('; ') : err.message);
+      }
       toast({
         title: 'Error',
         description: describeMechanicsError(err, 'Failed to save leaderboard', leaderboardErrors),
@@ -259,7 +320,7 @@ export default function Leaderboards() {
             <DialogDescription>
               {editing
                 ? 'Type, metric and reset frequency cannot change after creation.'
-                : 'Rank players by points, XP, badges or missions.'}
+                : 'Rank players by points, XP, badges, missions or their activities.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -285,6 +346,11 @@ export default function Leaderboards() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lb-metric">Metric</Label>
+                {form.type === 'activity' ? (
+                  <p id="lb-metric" className="h-10 flex items-center text-sm text-muted-foreground capitalize">
+                    {form.activity_value === 'property' ? 'earned (sum)' : 'count'}
+                  </p>
+                ) : (
                 <Select value={form.metric} onValueChange={(v) => setMetric(v as LeaderboardMetric)} disabled={!!editing}>
                   <SelectTrigger id="lb-metric"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -293,6 +359,7 @@ export default function Leaderboards() {
                     ))}
                   </SelectContent>
                 </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="lb-reset">Resets</Label>
@@ -311,6 +378,59 @@ export default function Leaderboards() {
                 </Select>
               </div>
             </div>
+            {form.type === 'activity' && (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div>
+                  <p className="text-sm font-medium">Activity ranking</p>
+                  <p className="text-xs text-muted-foreground">
+                    Players are ranked by the activities of one event type{editing ? ' (cannot change after creation)' : ''}.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lb-event-type">Event type *</Label>
+                  <EventTypeSelect
+                    id="lb-event-type"
+                    value={form.activity_event_type}
+                    onChange={(slug) => { setForm({ ...form, activity_event_type: slug }); setConfigError(null); }}
+                    disabled={!!editing}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="lb-value">Score</Label>
+                    <Select
+                      value={form.activity_value}
+                      onValueChange={(v) => { setForm({ ...form, activity_value: v as LeaderboardActivityValue }); setConfigError(null); }}
+                      disabled={!!editing}
+                    >
+                      <SelectTrigger id="lb-value"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="count">Number of activities</SelectItem>
+                        <SelectItem value="property">Sum of a property</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.activity_value === 'property' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="lb-property">Property *</Label>
+                      <Input
+                        id="lb-property"
+                        list="lb-property-paths"
+                        maxLength={100}
+                        placeholder="e.g. amount"
+                        value={form.activity_property}
+                        disabled={!!editing}
+                        onChange={(e) => { setForm({ ...form, activity_property: e.target.value.trim() }); setConfigError(null); }}
+                      />
+                      <datalist id="lb-property-paths">
+                        {eventPropertyPaths(events, form.activity_event_type).map((p) => <option key={p} value={p} />)}
+                      </datalist>
+                    </div>
+                  )}
+                </div>
+                {configError && <p className="text-sm text-destructive">{configError}</p>}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4 items-end">
               <div className="space-y-2">
                 <Label htmlFor="lb-max">Max entries</Label>
@@ -363,11 +483,15 @@ export default function Leaderboards() {
         <div className="text-center py-12">
           <Trophy className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
           <h3 className="text-lg font-semibold mb-2">No Leaderboards Yet</h3>
-          <p className="text-muted-foreground mb-4">Create a leaderboard to rank your players.</p>
-          <Button variant="glow" onClick={openCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Leaderboard
-          </Button>
+          <p className="text-muted-foreground mb-4">
+            {canManage ? 'Create a leaderboard to rank your players.' : 'No leaderboard has been set up yet.'}
+          </p>
+          {canManage && (
+            <Button variant="glow" onClick={openCreate}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Leaderboard
+            </Button>
+          )}
         </div>
         {formDialog}
       </div>
@@ -398,7 +522,7 @@ export default function Leaderboards() {
               </SelectContent>
             </Select>
           </div>
-          {selectedLeaderboard && (
+          {selectedLeaderboard && canManage && (
             <ItemActionsMenu
               itemName={selectedLeaderboard.name}
               onEdit={() => openEdit(selectedLeaderboard)}
@@ -413,10 +537,12 @@ export default function Leaderboards() {
               ]}
             />
           )}
-          <Button variant="glow" onClick={openCreate}>
-            <Plus className="w-4 h-4" />
-            Create
-          </Button>
+          {canManage && (
+            <Button variant="glow" onClick={openCreate}>
+              <Plus className="w-4 h-4" />
+              Create
+            </Button>
+          )}
         </div>
       </div>
 
@@ -432,9 +558,12 @@ export default function Leaderboards() {
               </div>
               <h3 className="font-semibold text-lg mb-1">Type</h3>
               <p className="text-2xl font-bold">
-                {typeLabels[selectedLeaderboard.type]}
+                {typeLabels[selectedLeaderboard.type] ?? selectedLeaderboard.type}
                 <span className="text-base font-normal text-muted-foreground capitalize"> · {selectedLeaderboard.metric}</span>
               </p>
+              {selectedLeaderboard.type === 'activity' && (
+                <p className="text-sm text-muted-foreground mt-1">{describeActivityConfig(selectedLeaderboard)}</p>
+              )}
             </CardContent>
           </Card>
 

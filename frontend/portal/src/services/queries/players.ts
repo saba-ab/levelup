@@ -18,6 +18,7 @@ import type {
   DebitWalletData,
   TransferPointsData,
 } from '../api/types';
+import { PLAYER_BATCH_MAX, type PlayerProgressSummary } from '../api/models/players';
 
 /** Error thrown by these hooks: keeps the problem+json code and field errors. */
 export class PlayerApiError extends Error {
@@ -44,6 +45,22 @@ const localKeys = {
   xpGrants: (id: ID, params?: CursorParams) => [...queryKeys.players.detail(id), 'xp-grants', params] as const,
   rewardClaims: (id: ID) => [...queryKeys.players.detail(id), 'reward-claims'] as const,
 };
+
+/** Keys of the batch / tenant-wide reads (one request per page of players). */
+export const playerBatchKeys = {
+  progressAll: ['progress', 'batch'] as const,
+  progress: (ids: ID[]) => [...playerBatchKeys.progressAll, ids] as const,
+  walletsAll: [...queryKeys.wallets.all, 'batch'] as const,
+  wallets: (ids: ID[]) => [...playerBatchKeys.walletsAll, ids] as const,
+  walletSummary: [...queryKeys.wallets.all, 'summary'] as const,
+};
+
+/** Splits ids into batch-sized chunks (the batch endpoints take at most 100). */
+export function chunkIds(ids: ID[], size = PLAYER_BATCH_MAX): ID[][] {
+  const out: ID[][] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
+}
 
 /** Per-player lists are small; load them whole (capped) so counts are real. */
 const PER_PLAYER_MAX = 500;
@@ -317,12 +334,15 @@ export function useGrantXpMutation() {
     onSuccess: (_result, { playerId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.players.detail(playerId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.leaderboards.all });
+      queryClient.invalidateQueries({ queryKey: playerBatchKeys.progressAll });
     },
   });
 }
 
 function invalidateWallet(queryClient: ReturnType<typeof useQueryClient>, playerId: ID) {
   queryClient.invalidateQueries({ queryKey: queryKeys.wallets.player(playerId) });
+  queryClient.invalidateQueries({ queryKey: playerBatchKeys.walletsAll });
+  queryClient.invalidateQueries({ queryKey: playerBatchKeys.walletSummary });
 }
 
 /** Credit a wallet. Sends an Idempotency-Key; errors carry `code` (PlayerApiError). */
@@ -358,5 +378,68 @@ export function useTransferPointsMutation() {
       invalidateWallet(queryClient, from_player_id);
       invalidateWallet(queryClient, to_player_id);
     },
+  });
+}
+
+// ==================== BATCH READS ====================
+
+/**
+ * XP and level of a page of players in one request (GET /progress?player_ids=),
+ * keyed by player id. Players the API omits (unknown, foreign) are absent.
+ */
+export function usePlayersProgressQuery(playerIds: ID[], options?: { enabled?: boolean }) {
+  const { getPlayersProgress } = usePlayersService();
+
+  return useQuery({
+    queryKey: playerBatchKeys.progress(playerIds),
+    queryFn: async () => {
+      const byPlayer: Record<ID, PlayerProgressSummary> = {};
+      for (const chunk of chunkIds(playerIds)) {
+        unwrap(await getPlayersProgress(chunk), 'Failed to fetch progress').data.forEach((p) => {
+          byPlayer[p.player_id] = p;
+        });
+      }
+      return byPlayer;
+    },
+    enabled: (options?.enabled ?? true) && playerIds.length > 0,
+    placeholderData: keepPreviousData,
+    retry: (count, err) => !(err instanceof PlayerApiError && err.status === 403) && count < 2,
+  });
+}
+
+/**
+ * Wallets of a page of players in one request (GET /wallets?player_ids=),
+ * keyed by player id; never-opened wallets are zero views.
+ */
+export function usePlayersWalletsQuery(playerIds: ID[], options?: { enabled?: boolean }) {
+  const { getPlayersWallets } = usePlayersService();
+
+  return useQuery({
+    queryKey: playerBatchKeys.wallets(playerIds),
+    queryFn: async () => {
+      const byPlayer: Record<ID, Wallet> = {};
+      for (const chunk of chunkIds(playerIds)) {
+        unwrap(await getPlayersWallets(chunk), 'Failed to fetch wallets').data.forEach((w) => {
+          byPlayer[w.player_id] = w;
+        });
+      }
+      return byPlayer;
+    },
+    enabled: (options?.enabled ?? true) && playerIds.length > 0,
+    placeholderData: keepPreviousData,
+    retry: (count, err) => !(err instanceof PlayerApiError && err.status === 403) && count < 2,
+  });
+}
+
+/** Tenant-wide points figures (GET /wallets/summary). */
+export function useWalletSummaryQuery(options?: { enabled?: boolean }) {
+  const { getWalletSummary } = usePlayersService();
+
+  return useQuery({
+    queryKey: playerBatchKeys.walletSummary,
+    queryFn: async () => unwrap(await getWalletSummary(), 'Failed to fetch the wallet summary'),
+    enabled: options?.enabled ?? true,
+    staleTime: 30_000,
+    retry: (count, err) => !(err instanceof PlayerApiError && err.status === 403) && count < 2,
   });
 }

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Zap, Users, GitBranch, Trophy, ArrowRight, FileText, Send, Plus, Activity as ActivityIcon } from 'lucide-react';
+import { Zap, Users, GitBranch, Coins, ArrowRight, FileText, Send, Plus, Activity as ActivityIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +22,8 @@ import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { ACTIVITY_ENDPOINTS, LEADERBOARD_ENDPOINTS, PLAYER_ENDPOINTS, RULE_ENDPOINTS, toQuery } from '@/lib/api-routes';
 import { fetchAllPages } from '@/services/api/pagination';
-import { unwrap } from '@/services/queries/rules';
+import { ApiRequestError, unwrap, useRuleStatsQuery } from '@/services/queries/rules';
+import { useWalletSummaryQuery } from '@/services/queries/players';
 import type { Activity, CursorPage, Rule } from '@/services/api/types';
 import { cn } from '@/lib/utils';
 
@@ -95,6 +96,44 @@ function StatCard({
   );
 }
 
+/** A single figure (e.g. points in circulation) with an optional secondary line. */
+function ValueCard({
+  label,
+  icon: Icon,
+  value,
+  isLoading,
+  unavailable,
+  hint,
+}: {
+  label: string;
+  icon: typeof Zap;
+  value: number | undefined;
+  isLoading: boolean;
+  unavailable: boolean;
+  hint?: string;
+}) {
+  return (
+    <Card className="stat-card">
+      <CardContent className="p-4">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10 mb-3">
+          <Icon className="w-5 h-5 text-primary" />
+        </div>
+        {isLoading ? (
+          <Skeleton className="h-8 w-16 mb-1" />
+        ) : unavailable || value === undefined ? (
+          <p className="text-sm text-muted-foreground">Unavailable</p>
+        ) : (
+          <p className="text-2xl font-bold tabular-nums">{value.toLocaleString()}</p>
+        )}
+        <p className="text-sm text-muted-foreground">{label}</p>
+        {hint && !isLoading && !unavailable && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+const TOP_RULES = 5;
+
 function relativeTime(iso: string): string {
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return `${s}s ago`;
@@ -110,7 +149,11 @@ export default function Overview() {
 
   const players = usePageCount('players', PLAYER_ENDPOINTS.LIST);
   const activeRules = usePageCount('rules', RULE_ENDPOINTS.LIST, { status: 'active' });
-  const leaderboardCount = usePageCount('leaderboards', LEADERBOARD_ENDPOINTS.LIST);
+  const walletSummary = useWalletSummaryQuery();
+  /** Last 30 days (the API default window). Needs rules.view_decisions. */
+  const ruleStats = useRuleStatsQuery();
+  const statsForbidden = ruleStats.error instanceof ApiRequestError && ruleStats.error.status === 403;
+  const topRules = (ruleStats.data?.data ?? []).filter(r => r.fired > 0).slice(0, TOP_RULES);
 
   const activitiesQuery = useQuery({
     queryKey: ['overview', 'activities'],
@@ -154,6 +197,7 @@ export default function Overview() {
 
   const recentRules = useQuery({
     queryKey: ['overview', 'recent-rules'],
+    enabled: statsForbidden,
     queryFn: async () =>
       unwrap(
         await api.get<CursorPage<Rule>>(`${RULE_ENDPOINTS.LIST}${toQuery({ limit: 5 })}`, { showErrorToast: false }),
@@ -213,7 +257,18 @@ export default function Overview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Players" icon={Users} query={players} />
         <StatCard label="Active rules" icon={GitBranch} query={activeRules} />
-        <StatCard label="Leaderboards" icon={Trophy} query={leaderboardCount} />
+        <ValueCard
+          label="Points in circulation"
+          icon={Coins}
+          value={walletSummary.data?.total_balance}
+          isLoading={walletSummary.isLoading}
+          unavailable={!!walletSummary.error}
+          hint={
+            walletSummary.data
+              ? `+${walletSummary.data.credited_last_30d.toLocaleString()} / -${walletSummary.data.debited_last_30d.toLocaleString()} in 30 days · ${walletSummary.data.open_wallets.toLocaleString()} wallets`
+              : undefined
+          }
+        />
         <StatCard
           label="Activities (last 7 days)"
           icon={Zap}
@@ -354,7 +409,16 @@ export default function Overview() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Recently Updated Rules</CardTitle>
+            <div>
+              <CardTitle className="text-lg">{statsForbidden ? 'Recently Updated Rules' : 'Top Rules (30 days)'}</CardTitle>
+              {ruleStats.data && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ruleStats.data.totals.fired.toLocaleString()} firings ·{' '}
+                  {ruleStats.data.totals.points_awarded.toLocaleString()} points ·{' '}
+                  {ruleStats.data.totals.xp_awarded.toLocaleString()} XP
+                </p>
+              )}
+            </div>
             <Link to="/rules">
               <Button variant="ghost" size="sm">
                 View all
@@ -363,24 +427,59 @@ export default function Overview() {
             </Link>
           </CardHeader>
           <CardContent>
-            {recentRules.isLoading ? (
+            {statsForbidden ? (
+              recentRules.isLoading ? (
+                <Skeleton className="h-32 w-full" />
+              ) : (recentRules.data ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {recentRules.error ? 'Rules are unavailable.' : 'No rules yet.'}
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {recentRules.data!.map(r => (
+                    <li key={r.id} className="flex items-center gap-2">
+                      <GitBranch className="w-4 h-4 text-primary shrink-0" />
+                      <span className="flex-1 text-sm truncate">{r.name}</span>
+                      <Badge variant="outline" className="capitalize text-xs">
+                        {r.status}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : ruleStats.isLoading ? (
               <Skeleton className="h-32 w-full" />
-            ) : (recentRules.data ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {recentRules.error ? 'Rules are unavailable.' : 'No rules yet.'}
-              </p>
+            ) : ruleStats.error ? (
+              <p className="text-sm text-muted-foreground">Rule statistics are unavailable.</p>
+            ) : topRules.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No rule has fired in the last 30 days.</p>
             ) : (
-              <ul className="space-y-3">
-                {recentRules.data!.map(r => (
-                  <li key={r.id} className="flex items-center gap-2">
-                    <GitBranch className="w-4 h-4 text-primary shrink-0" />
-                    <span className="flex-1 text-sm truncate">{r.name}</span>
-                    <Badge variant="outline" className="capitalize text-xs">
-                      {r.status}
-                    </Badge>
+              <ol className="space-y-3">
+                {topRules.map((r, i) => (
+                  <li key={r.rule_id} className="flex items-center gap-3">
+                    <span className="w-6 text-sm font-bold text-muted-foreground">#{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      {canManageRules ? (
+                        <Link to={`/rules/${r.rule_id}`} className="text-sm font-medium hover:underline truncate block">
+                          {r.name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-medium truncate block">{r.name}</span>
+                      )}
+                      {(r.points_awarded > 0 || r.xp_awarded > 0) && (
+                        <p className="text-xs text-muted-foreground">
+                          {r.points_awarded > 0 && `${r.points_awarded.toLocaleString()} pts`}
+                          {r.points_awarded > 0 && r.xp_awarded > 0 && ' · '}
+                          {r.xp_awarded > 0 && `${r.xp_awarded.toLocaleString()} XP`}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-sm tabular-nums" title="Times fired">
+                      {r.fired.toLocaleString()}
+                    </span>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
           </CardContent>
         </Card>

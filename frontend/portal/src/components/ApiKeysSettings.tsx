@@ -60,7 +60,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default function ApiKeysSettings() {
   const { toast } = useToast();
   const pager = useCursorPagination(25);
-  const { data, isLoading, isFetching } = useApiKeysQuery({ limit: pager.limit, cursor: pager.cursor });
+  const { data, isLoading, isFetching, error, refetch } = useApiKeysQuery({ limit: pager.limit, cursor: pager.cursor });
   const createKey = useCreateApiKeyMutation();
   const revokeKey = useRevokeApiKeyMutation();
 
@@ -126,6 +126,11 @@ export default function ApiKeysSettings() {
       <CardContent className="space-y-4">
         {isLoading ? (
           <Skeleton className="h-24 w-full" />
+        ) : error ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <p className="text-sm text-destructive">{describe(error, 'Failed to load API keys')}</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+          </div>
         ) : keys.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">No API keys yet.</p>
         ) : (

@@ -13,6 +13,8 @@ import {
   Clock,
   Trash2,
   FlaskConical,
+  Copy,
+  BarChart3,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,8 +53,12 @@ import {
   useDeleteRuleMutation,
   usePublishRuleMutation,
   useRuleDecisionsQuery,
+  useRuleStatsQuery,
+  useDuplicateRuleMutation,
+  ApiRequestError,
   ruleKeys,
 } from '@/services/queries/rules';
+import type { RuleStat } from '@/services/api/models/rules';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Rule, RuleStatus, RuleDecision } from '@/services/api/types';
 import CursorPager from '@/components/CursorPager';
@@ -73,6 +79,75 @@ const triggerIcons: Record<string, string> = {
   referral_completed: '🔗',
   subscription_upgraded: '⬆️',
 };
+
+const STATS_PERIODS = [7, 30, 90] as const;
+type StatsPeriod = (typeof STATS_PERIODS)[number];
+
+/** YYYY-MM-DD (UTC) of `days` days ago: the stats window starts at that UTC midnight. */
+function utcDateDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+}
+
+function StatsSummary({
+  period,
+  onPeriodChange,
+  totals,
+  isLoading,
+  error,
+}: {
+  period: StatsPeriod;
+  onPeriodChange: (p: StatsPeriod) => void;
+  totals: { fired: number; limited: number; points_awarded: number; xp_awarded: number } | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}) {
+  const items = [
+    { label: 'Rules fired', value: totals?.fired },
+    { label: 'Refused by limits', value: totals?.limited },
+    { label: 'Points awarded', value: totals?.points_awarded },
+    { label: 'XP awarded', value: totals?.xp_awarded },
+  ];
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium">Rule activity</span>
+          </div>
+          <Select value={String(period)} onValueChange={v => onPeriodChange(Number(v) as StatsPeriod)}>
+            <SelectTrigger className="w-[140px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATS_PERIODS.map(p => (
+                <SelectItem key={p} value={String(p)}>
+                  Last {p} days
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {error ? (
+          <p className="text-sm text-destructive">{error.message}</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {items.map(i => (
+              <div key={i.label}>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-16 mb-1" />
+                ) : (
+                  <p className="text-2xl font-bold tabular-nums">{(i.value ?? 0).toLocaleString()}</p>
+                )}
+                <p className="text-xs text-muted-foreground">{i.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function DecisionsTab() {
   const pager = useCursorPagination(25);
@@ -193,6 +268,7 @@ export default function Rules() {
   const [simulateRule, setSimulateRule] = useState<Rule | null>(null);
   const [ruleToDelete, setRuleToDelete] = useState<Rule | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>(30);
 
   const { data, isLoading, isFetching, error } = useRulesQuery({
     limit: pager.limit,
@@ -202,6 +278,13 @@ export default function Rules() {
   const updateRule = useUpdateRuleMutation();
   const deleteRule = useDeleteRuleMutation();
   const publishRule = usePublishRuleMutation();
+  const duplicateRule = useDuplicateRuleMutation();
+
+  const statsQuery = useRuleStatsQuery({ from: utcDateDaysAgo(statsPeriod) });
+  /** Stats need rules.view_decisions: without it the column and summary are hidden. */
+  const statsForbidden = statsQuery.error instanceof ApiRequestError && statsQuery.error.status === 403;
+  const statsByRule = new Map<string, RuleStat>((statsQuery.data?.data ?? []).map(r => [r.rule_id, r]));
+  const columnCount = (canManage ? 7 : 6) + (statsForbidden ? 0 : 1);
 
   const rules = (data?.data ?? []).filter(r => {
     const q = searchQuery.trim().toLowerCase();
@@ -252,6 +335,15 @@ export default function Rules() {
     setSelectedRules([]);
   };
 
+  const handleDuplicate = async (rule: Rule) => {
+    try {
+      const copy = await duplicateRule.mutateAsync(rule.id);
+      toast({ title: 'Rule duplicated', description: `"${copy.name}" was created as a draft; it is not live until published.` });
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to duplicate rule', variant: 'destructive' });
+    }
+  };
+
   const handleDelete = async () => {
     if (!ruleToDelete) return;
     const rule = ruleToDelete;
@@ -286,6 +378,16 @@ export default function Rules() {
         </TabsList>
 
         <TabsContent value="rules" className="space-y-6">
+          {!statsForbidden && (
+            <StatsSummary
+              period={statsPeriod}
+              onPeriodChange={setStatsPeriod}
+              totals={statsQuery.data?.totals}
+              isLoading={statsQuery.isLoading}
+              error={statsQuery.error}
+            />
+          )}
+
           <Card>
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-4">
@@ -359,6 +461,14 @@ export default function Rules() {
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Trigger Event</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Priority</th>
+                      {!statsForbidden && (
+                        <th
+                          className="text-right p-4 text-sm font-medium text-muted-foreground"
+                          title={`Times the rule fired in the last ${statsPeriod} days`}
+                        >
+                          Fired ({statsPeriod}d)
+                        </th>
+                      )}
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">Last Modified</th>
                       <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
                     </tr>
@@ -367,18 +477,18 @@ export default function Rules() {
                     {isLoading ? (
                       [...Array(4)].map((_, i) => (
                         <tr key={i} className="border-b border-border/50">
-                          <td colSpan={7} className="p-4">
+                          <td colSpan={columnCount} className="p-4">
                             <Skeleton className="h-8 w-full" />
                           </td>
                         </tr>
                       ))
                     ) : error ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-destructive">{error.message}</td>
+                        <td colSpan={columnCount} className="p-8 text-center text-destructive">{error.message}</td>
                       </tr>
                     ) : rules.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center">
+                        <td colSpan={columnCount} className="p-8 text-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
                               <GitBranch className="w-8 h-8 text-muted-foreground" />
@@ -428,6 +538,26 @@ export default function Rules() {
                           <td className="p-4">
                             <span className="text-muted-foreground">{rule.priority}</span>
                           </td>
+                          {!statsForbidden && (
+                            <td className="p-4 text-right">
+                              {statsQuery.isLoading ? (
+                                <Skeleton className="h-4 w-10 ml-auto" />
+                              ) : statsQuery.error ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <div>
+                                  <span className="font-medium tabular-nums">
+                                    {(statsByRule.get(rule.id)?.fired ?? 0).toLocaleString()}
+                                  </span>
+                                  {(statsByRule.get(rule.id)?.limited ?? 0) > 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {statsByRule.get(rule.id)!.limited.toLocaleString()} limited
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          )}
                           <td className="p-4">
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Clock className="w-4 h-4" />
@@ -451,6 +581,10 @@ export default function Rules() {
                                     <DropdownMenuItem onClick={() => navigate(`/rules/${rule.id}`)}>
                                       <Pencil className="w-4 h-4 mr-2" />
                                       Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem disabled={duplicateRule.isPending} onClick={() => handleDuplicate(rule)}>
+                                      <Copy className="w-4 h-4 mr-2" />
+                                      Duplicate
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onClick={() => runAction('Latest version published', () => publishLatest(rule))}

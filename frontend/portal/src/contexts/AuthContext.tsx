@@ -23,6 +23,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** Stores a session obtained elsewhere (e.g. POST /auth/accept-invite) exactly like login does. */
+  loginWithSession: (session: AuthResponse) => void;
   register: (data: RegisterFormData) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
@@ -212,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       login,
+      loginWithSession: applySession,
       register,
       logout,
       refreshToken,

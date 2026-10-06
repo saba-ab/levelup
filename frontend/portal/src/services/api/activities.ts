@@ -8,7 +8,14 @@ import type {
   CursorPage,
   ID,
 } from './types';
-import { ACTIVITY_ENDPOINTS, toQuery } from '@/lib/api-routes';
+import type { PlayerLastSeen } from './models/players';
+import { ACTIVITY_ENDPOINTS, API_VERSION, toQuery } from '@/lib/api-routes';
+
+/** Activity endpoints added after the shared ACTIVITY_ENDPOINTS. */
+export const ACTIVITY_V2_ENDPOINTS = {
+  /** GET ?player_ids=a,b (max 100): each player's latest activity (activity.view_any). */
+  LAST_SEEN: `${API_VERSION}/activities/last-seen`,
+} as const;
 
 /** Activity ingestion: rules react to activities asynchronously. */
 export function useActivitiesService() {
@@ -30,8 +37,18 @@ export function useActivitiesService() {
     [api],
   );
 
+  /** Players with no activity are absent; order follows playerIds. */
+  const getLastSeen = useCallback(
+    (playerIds: ID[]) =>
+      api.get<{ data: PlayerLastSeen[] }>(
+        `${ACTIVITY_V2_ENDPOINTS.LAST_SEEN}${toQuery({ player_ids: playerIds.join(',') })}`,
+        { showErrorToast: false },
+      ),
+    [api],
+  );
+
   return useMemo(
-    () => ({ listActivities, getActivity, ingestActivity }),
-    [listActivities, getActivity, ingestActivity],
+    () => ({ listActivities, getActivity, ingestActivity, getLastSeen }),
+    [listActivities, getActivity, ingestActivity, getLastSeen],
   );
 }

@@ -248,8 +248,10 @@ export function useDuplicateProgramMutation() {
 // ==================== ENROLLMENTS ====================
 
 /** Invalidates every cursor page of the program's member list. */
+/** Members and the program itself (its member_count), plus lists showing member counts. */
 function invalidateMembers(queryClient: ReturnType<typeof useQueryClient>, programId: ID) {
-  queryClient.invalidateQueries({ queryKey: [...queryKeys.programs.detail(programId), 'players'] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.programs.detail(programId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.programs.lists() });
 }
 
 export function useAddPlayerToProgramMutation() {
