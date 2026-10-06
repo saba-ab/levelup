@@ -28,7 +28,9 @@ tasks:
 
   docs:
     desc: Regenerate OpenAPI from swag annotations
-    sources: ['internal/modules/*/internal/transport/*.go', 'cmd/api/main.go']
+    # swag follows referenced types beyond transport/ (--parseDependency), so
+    # watch all Go sources or a skipped run leaves the docs stale.
+    sources: ['internal/**/*.go', 'cmd/api/main.go']
     generates: ['api/docs/swagger.json', 'api/docs/docs.go']
     cmd: swag init -g cmd/api/main.go -d ./ --parseDependency --parseInternal -o api/docs
 

@@ -498,7 +498,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.EngagementResp"
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.EngagementResp"
                         }
                     },
                     "401": {
@@ -562,7 +562,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.FunnelResp"
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.FunnelResp"
                         }
                     },
                     "401": {
@@ -619,7 +619,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.OverviewResp"
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.OverviewResp"
                         }
                     },
                     "401": {
@@ -676,7 +676,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.RetentionResp"
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.RetentionResp"
                         }
                     },
                     "401": {
@@ -8543,7 +8543,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.SegmentListResp"
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentListResp"
                         }
                     },
                     "401": {
@@ -8598,7 +8598,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/transport.SegmentResp"
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
                         }
                     },
                     "401": {
@@ -8712,7 +8712,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.SegmentResp"
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
                         }
                     },
                     "401": {
@@ -8818,7 +8818,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/transport.SegmentResp"
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
                         }
                     },
                     "401": {
@@ -8952,7 +8952,7 @@ const docTemplate = `{
                     "202": {
                         "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/transport.RefreshResp"
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.RefreshResp"
                         }
                     },
                     "401": {
@@ -11450,6 +11450,49 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_analytics_internal_transport.BadgeCount": {
+            "type": "object",
+            "properties": {
+                "badge_id": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.CohortResp": {
+            "type": "object",
+            "properties": {
+                "cohort_start": {
+                    "type": "string"
+                },
+                "retained": {
+                    "description": "Retained[k] is the percentage (0-100, 2 decimals) of the cohort active\nk weeks after its first week; only weeks that have started are listed.",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.CurvePointResp": {
+            "type": "object",
+            "properties": {
+                "cohorts": {
+                    "type": "integer"
+                },
+                "pct": {
+                    "type": "number"
+                },
+                "week": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_analytics_internal_transport.DayCountResp": {
             "type": "object",
             "properties": {
@@ -11458,6 +11501,277 @@ const docTemplate = `{
                 },
                 "day": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.EngagementDay": {
+            "type": "object",
+            "properties": {
+                "badges_awarded": {
+                    "type": "integer"
+                },
+                "day": {
+                    "type": "string"
+                },
+                "levels_reached": {
+                    "type": "integer"
+                },
+                "missions_completed": {
+                    "type": "integer"
+                },
+                "missions_started": {
+                    "type": "integer"
+                },
+                "rewards_claimed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.EngagementResp": {
+            "type": "object",
+            "properties": {
+                "badges_per_day": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.DayCountResp"
+                    }
+                },
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.EngagementDay"
+                    }
+                },
+                "from": {
+                    "type": "string"
+                },
+                "levels_by_number": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.LevelCount"
+                    }
+                },
+                "levels_reached": {
+                    "type": "integer"
+                },
+                "missions": {
+                    "$ref": "#/definitions/internal_modules_analytics_internal_transport.MissionsResp"
+                },
+                "rewards_claimed": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "top_badges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.BadgeCount"
+                    }
+                },
+                "top_event_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.EventTypeCount"
+                    }
+                },
+                "top_missions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.MissionCount"
+                    }
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.EventTypeCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "event_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.FunnelResp": {
+            "type": "object",
+            "properties": {
+                "approximation": {
+                    "description": "Approximation is \"day\": step order is resolved per UTC day, so steps\ndone on the same day count as in order.",
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.FunnelStepResp"
+                    }
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.FunnelStepResp": {
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                },
+                "pct_of_first_step": {
+                    "type": "number"
+                },
+                "pct_of_previous": {
+                    "type": "number"
+                },
+                "players": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.LevelCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "level_number": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.MissionCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "mission_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.MissionsResp": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "integer"
+                },
+                "started": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.OverviewDay": {
+            "type": "object",
+            "properties": {
+                "active_players": {
+                    "type": "integer"
+                },
+                "activities": {
+                    "type": "integer"
+                },
+                "day": {
+                    "type": "string"
+                },
+                "new_players": {
+                    "type": "integer"
+                },
+                "points_credited": {
+                    "type": "integer"
+                },
+                "points_debited": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.OverviewResp": {
+            "type": "object",
+            "properties": {
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.OverviewDay"
+                    }
+                },
+                "dau": {
+                    "type": "integer"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "mau": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "totals": {
+                    "$ref": "#/definitions/internal_modules_analytics_internal_transport.OverviewTotals"
+                },
+                "wau": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.OverviewTotals": {
+            "type": "object",
+            "properties": {
+                "active_players": {
+                    "type": "integer"
+                },
+                "activities": {
+                    "type": "integer"
+                },
+                "badges_awarded": {
+                    "type": "integer"
+                },
+                "levels_reached": {
+                    "type": "integer"
+                },
+                "missions_completed": {
+                    "type": "integer"
+                },
+                "missions_started": {
+                    "type": "integer"
+                },
+                "new_players": {
+                    "type": "integer"
+                },
+                "points_credited": {
+                    "type": "integer"
+                },
+                "points_debited": {
+                    "type": "integer"
+                },
+                "rewards_claimed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.RetentionResp": {
+            "type": "object",
+            "properties": {
+                "cohort": {
+                    "type": "string"
+                },
+                "cohorts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.CohortResp"
+                    }
+                },
+                "curve": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.CurvePointResp"
+                    }
+                },
+                "weeks": {
+                    "type": "integer"
                 }
             }
         },
@@ -15805,6 +16119,20 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_segments_internal_transport.PlayerSummary": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "external_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_modules_segments_internal_transport.PreviewReq": {
             "type": "object",
             "required": [
@@ -15830,11 +16158,73 @@ const docTemplate = `{
                 "sample": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/transport.PlayerSummary"
+                        "$ref": "#/definitions/internal_modules_segments_internal_transport.PlayerSummary"
                     }
                 },
                 "scanned": {
                     "type": "integer"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.RefreshResp": {
+            "type": "object",
+            "properties": {
+                "segment": {
+                    "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                },
+                "status": {
+                    "description": "\"queued\"",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.SegmentListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.SegmentResp": {
+            "type": "object",
+            "properties": {
+                "conditions": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_refreshed_at": {
+                    "type": "string"
+                },
+                "member_count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "refreshing": {
+                    "type": "boolean"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -16395,396 +16785,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.BadgeCount": {
-            "type": "object",
-            "properties": {
-                "badge_id": {
-                    "type": "string"
-                },
-                "count": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.CohortResp": {
-            "type": "object",
-            "properties": {
-                "cohort_start": {
-                    "type": "string"
-                },
-                "retained": {
-                    "description": "Retained[k] is the percentage (0-100, 2 decimals) of the cohort active\nk weeks after its first week; only weeks that have started are listed.",
-                    "type": "array",
-                    "items": {
-                        "type": "number"
-                    }
-                },
-                "size": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.CurvePointResp": {
-            "type": "object",
-            "properties": {
-                "cohorts": {
-                    "type": "integer"
-                },
-                "pct": {
-                    "type": "number"
-                },
-                "week": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.EngagementDay": {
-            "type": "object",
-            "properties": {
-                "badges_awarded": {
-                    "type": "integer"
-                },
-                "day": {
-                    "type": "string"
-                },
-                "levels_reached": {
-                    "type": "integer"
-                },
-                "missions_completed": {
-                    "type": "integer"
-                },
-                "missions_started": {
-                    "type": "integer"
-                },
-                "rewards_claimed": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.EngagementResp": {
-            "type": "object",
-            "properties": {
-                "badges_per_day": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.DayCountResp"
-                    }
-                },
-                "daily": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.EngagementDay"
-                    }
-                },
-                "from": {
-                    "type": "string"
-                },
-                "levels_by_number": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.LevelCount"
-                    }
-                },
-                "levels_reached": {
-                    "type": "integer"
-                },
-                "missions": {
-                    "$ref": "#/definitions/transport.MissionsResp"
-                },
-                "rewards_claimed": {
-                    "type": "integer"
-                },
-                "to": {
-                    "type": "string"
-                },
-                "top_badges": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.BadgeCount"
-                    }
-                },
-                "top_event_types": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.EventTypeCount"
-                    }
-                },
-                "top_missions": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.MissionCount"
-                    }
-                }
-            }
-        },
-        "transport.EventTypeCount": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "event_type": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.FunnelResp": {
-            "type": "object",
-            "properties": {
-                "approximation": {
-                    "description": "Approximation is \"day\": step order is resolved per UTC day, so steps\ndone on the same day count as in order.",
-                    "type": "string"
-                },
-                "from": {
-                    "type": "string"
-                },
-                "steps": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.FunnelStepResp"
-                    }
-                },
-                "to": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.FunnelStepResp": {
-            "type": "object",
-            "properties": {
-                "event_type": {
-                    "type": "string"
-                },
-                "pct_of_first_step": {
-                    "type": "number"
-                },
-                "pct_of_previous": {
-                    "type": "number"
-                },
-                "players": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.LevelCount": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "level_number": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.MissionCount": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "mission_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.MissionsResp": {
-            "type": "object",
-            "properties": {
-                "completed": {
-                    "type": "integer"
-                },
-                "started": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.OverviewDay": {
-            "type": "object",
-            "properties": {
-                "active_players": {
-                    "type": "integer"
-                },
-                "activities": {
-                    "type": "integer"
-                },
-                "day": {
-                    "type": "string"
-                },
-                "new_players": {
-                    "type": "integer"
-                },
-                "points_credited": {
-                    "type": "integer"
-                },
-                "points_debited": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.OverviewResp": {
-            "type": "object",
-            "properties": {
-                "daily": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.OverviewDay"
-                    }
-                },
-                "dau": {
-                    "type": "integer"
-                },
-                "from": {
-                    "type": "string"
-                },
-                "mau": {
-                    "type": "integer"
-                },
-                "to": {
-                    "type": "string"
-                },
-                "totals": {
-                    "$ref": "#/definitions/transport.OverviewTotals"
-                },
-                "wau": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.OverviewTotals": {
-            "type": "object",
-            "properties": {
-                "active_players": {
-                    "type": "integer"
-                },
-                "activities": {
-                    "type": "integer"
-                },
-                "badges_awarded": {
-                    "type": "integer"
-                },
-                "levels_reached": {
-                    "type": "integer"
-                },
-                "missions_completed": {
-                    "type": "integer"
-                },
-                "missions_started": {
-                    "type": "integer"
-                },
-                "new_players": {
-                    "type": "integer"
-                },
-                "points_credited": {
-                    "type": "integer"
-                },
-                "points_debited": {
-                    "type": "integer"
-                },
-                "rewards_claimed": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.PlayerSummary": {
-            "type": "object",
-            "properties": {
-                "display_name": {
-                    "type": "string"
-                },
-                "external_id": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.RefreshResp": {
-            "type": "object",
-            "properties": {
-                "segment": {
-                    "$ref": "#/definitions/transport.SegmentResp"
-                },
-                "status": {
-                    "description": "\"queued\"",
-                    "type": "string"
-                }
-            }
-        },
-        "transport.RetentionResp": {
-            "type": "object",
-            "properties": {
-                "cohort": {
-                    "type": "string"
-                },
-                "cohorts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.CohortResp"
-                    }
-                },
-                "curve": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.CurvePointResp"
-                    }
-                },
-                "weeks": {
-                    "type": "integer"
-                }
-            }
-        },
-        "transport.SegmentListResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/transport.SegmentResp"
-                    }
-                },
-                "next_cursor": {
-                    "type": "string"
-                }
-            }
-        },
-        "transport.SegmentResp": {
-            "type": "object",
-            "properties": {
-                "conditions": {
-                    "type": "object",
-                    "additionalProperties": {}
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "created_by": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "last_refreshed_at": {
-                    "type": "string"
-                },
-                "member_count": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "refreshing": {
-                    "type": "boolean"
-                },
-                "updated_at": {
                     "type": "string"
                 }
             }

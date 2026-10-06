@@ -344,12 +344,221 @@ definitions:
       today:
         $ref: '#/definitions/internal_modules_ai_internal_transport.UsageDayResp'
     type: object
+  internal_modules_analytics_internal_transport.BadgeCount:
+    properties:
+      badge_id:
+        type: string
+      count:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.CohortResp:
+    properties:
+      cohort_start:
+        type: string
+      retained:
+        description: |-
+          Retained[k] is the percentage (0-100, 2 decimals) of the cohort active
+          k weeks after its first week; only weeks that have started are listed.
+        items:
+          type: number
+        type: array
+      size:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.CurvePointResp:
+    properties:
+      cohorts:
+        type: integer
+      pct:
+        type: number
+      week:
+        type: integer
+    type: object
   internal_modules_analytics_internal_transport.DayCountResp:
     properties:
       count:
         type: integer
       day:
         type: string
+    type: object
+  internal_modules_analytics_internal_transport.EngagementDay:
+    properties:
+      badges_awarded:
+        type: integer
+      day:
+        type: string
+      levels_reached:
+        type: integer
+      missions_completed:
+        type: integer
+      missions_started:
+        type: integer
+      rewards_claimed:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.EngagementResp:
+    properties:
+      badges_per_day:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.DayCountResp'
+        type: array
+      daily:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.EngagementDay'
+        type: array
+      from:
+        type: string
+      levels_by_number:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.LevelCount'
+        type: array
+      levels_reached:
+        type: integer
+      missions:
+        $ref: '#/definitions/internal_modules_analytics_internal_transport.MissionsResp'
+      rewards_claimed:
+        type: integer
+      to:
+        type: string
+      top_badges:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.BadgeCount'
+        type: array
+      top_event_types:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.EventTypeCount'
+        type: array
+      top_missions:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.MissionCount'
+        type: array
+    type: object
+  internal_modules_analytics_internal_transport.EventTypeCount:
+    properties:
+      count:
+        type: integer
+      event_type:
+        type: string
+    type: object
+  internal_modules_analytics_internal_transport.FunnelResp:
+    properties:
+      approximation:
+        description: |-
+          Approximation is "day": step order is resolved per UTC day, so steps
+          done on the same day count as in order.
+        type: string
+      from:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.FunnelStepResp'
+        type: array
+      to:
+        type: string
+    type: object
+  internal_modules_analytics_internal_transport.FunnelStepResp:
+    properties:
+      event_type:
+        type: string
+      pct_of_first_step:
+        type: number
+      pct_of_previous:
+        type: number
+      players:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.LevelCount:
+    properties:
+      count:
+        type: integer
+      level_number:
+        type: string
+    type: object
+  internal_modules_analytics_internal_transport.MissionCount:
+    properties:
+      count:
+        type: integer
+      mission_id:
+        type: string
+    type: object
+  internal_modules_analytics_internal_transport.MissionsResp:
+    properties:
+      completed:
+        type: integer
+      started:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.OverviewDay:
+    properties:
+      active_players:
+        type: integer
+      activities:
+        type: integer
+      day:
+        type: string
+      new_players:
+        type: integer
+      points_credited:
+        type: integer
+      points_debited:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.OverviewResp:
+    properties:
+      daily:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.OverviewDay'
+        type: array
+      dau:
+        type: integer
+      from:
+        type: string
+      mau:
+        type: integer
+      to:
+        type: string
+      totals:
+        $ref: '#/definitions/internal_modules_analytics_internal_transport.OverviewTotals'
+      wau:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.OverviewTotals:
+    properties:
+      active_players:
+        type: integer
+      activities:
+        type: integer
+      badges_awarded:
+        type: integer
+      levels_reached:
+        type: integer
+      missions_completed:
+        type: integer
+      missions_started:
+        type: integer
+      new_players:
+        type: integer
+      points_credited:
+        type: integer
+      points_debited:
+        type: integer
+      rewards_claimed:
+        type: integer
+    type: object
+  internal_modules_analytics_internal_transport.RetentionResp:
+    properties:
+      cohort:
+        type: string
+      cohorts:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.CohortResp'
+        type: array
+      curve:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.CurvePointResp'
+        type: array
+      weeks:
+        type: integer
     type: object
   internal_modules_badges_internal_transport.AwardReq:
     properties:
@@ -3314,6 +3523,15 @@ definitions:
       player_id:
         type: string
     type: object
+  internal_modules_segments_internal_transport.PlayerSummary:
+    properties:
+      display_name:
+        type: string
+      external_id:
+        type: string
+      id:
+        type: string
+    type: object
   internal_modules_segments_internal_transport.PreviewReq:
     properties:
       conditions:
@@ -3333,10 +3551,51 @@ definitions:
         type: integer
       sample:
         items:
-          $ref: '#/definitions/transport.PlayerSummary'
+          $ref: '#/definitions/internal_modules_segments_internal_transport.PlayerSummary'
         type: array
       scanned:
         type: integer
+    type: object
+  internal_modules_segments_internal_transport.RefreshResp:
+    properties:
+      segment:
+        $ref: '#/definitions/internal_modules_segments_internal_transport.SegmentResp'
+      status:
+        description: '"queued"'
+        type: string
+    type: object
+  internal_modules_segments_internal_transport.SegmentListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_segments_internal_transport.SegmentResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_segments_internal_transport.SegmentResp:
+    properties:
+      conditions:
+        additionalProperties: {}
+        type: object
+      created_at:
+        type: string
+      created_by:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      last_refreshed_at:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      refreshing:
+        type: boolean
+      updated_at:
+        type: string
     type: object
   internal_modules_segments_internal_transport.UpdateReq:
     properties:
@@ -3724,265 +3983,6 @@ definitions:
       type:
         type: string
     type: object
-  transport.BadgeCount:
-    properties:
-      badge_id:
-        type: string
-      count:
-        type: integer
-    type: object
-  transport.CohortResp:
-    properties:
-      cohort_start:
-        type: string
-      retained:
-        description: |-
-          Retained[k] is the percentage (0-100, 2 decimals) of the cohort active
-          k weeks after its first week; only weeks that have started are listed.
-        items:
-          type: number
-        type: array
-      size:
-        type: integer
-    type: object
-  transport.CurvePointResp:
-    properties:
-      cohorts:
-        type: integer
-      pct:
-        type: number
-      week:
-        type: integer
-    type: object
-  transport.EngagementDay:
-    properties:
-      badges_awarded:
-        type: integer
-      day:
-        type: string
-      levels_reached:
-        type: integer
-      missions_completed:
-        type: integer
-      missions_started:
-        type: integer
-      rewards_claimed:
-        type: integer
-    type: object
-  transport.EngagementResp:
-    properties:
-      badges_per_day:
-        items:
-          $ref: '#/definitions/internal_modules_analytics_internal_transport.DayCountResp'
-        type: array
-      daily:
-        items:
-          $ref: '#/definitions/transport.EngagementDay'
-        type: array
-      from:
-        type: string
-      levels_by_number:
-        items:
-          $ref: '#/definitions/transport.LevelCount'
-        type: array
-      levels_reached:
-        type: integer
-      missions:
-        $ref: '#/definitions/transport.MissionsResp'
-      rewards_claimed:
-        type: integer
-      to:
-        type: string
-      top_badges:
-        items:
-          $ref: '#/definitions/transport.BadgeCount'
-        type: array
-      top_event_types:
-        items:
-          $ref: '#/definitions/transport.EventTypeCount'
-        type: array
-      top_missions:
-        items:
-          $ref: '#/definitions/transport.MissionCount'
-        type: array
-    type: object
-  transport.EventTypeCount:
-    properties:
-      count:
-        type: integer
-      event_type:
-        type: string
-    type: object
-  transport.FunnelResp:
-    properties:
-      approximation:
-        description: |-
-          Approximation is "day": step order is resolved per UTC day, so steps
-          done on the same day count as in order.
-        type: string
-      from:
-        type: string
-      steps:
-        items:
-          $ref: '#/definitions/transport.FunnelStepResp'
-        type: array
-      to:
-        type: string
-    type: object
-  transport.FunnelStepResp:
-    properties:
-      event_type:
-        type: string
-      pct_of_first_step:
-        type: number
-      pct_of_previous:
-        type: number
-      players:
-        type: integer
-    type: object
-  transport.LevelCount:
-    properties:
-      count:
-        type: integer
-      level_number:
-        type: string
-    type: object
-  transport.MissionCount:
-    properties:
-      count:
-        type: integer
-      mission_id:
-        type: string
-    type: object
-  transport.MissionsResp:
-    properties:
-      completed:
-        type: integer
-      started:
-        type: integer
-    type: object
-  transport.OverviewDay:
-    properties:
-      active_players:
-        type: integer
-      activities:
-        type: integer
-      day:
-        type: string
-      new_players:
-        type: integer
-      points_credited:
-        type: integer
-      points_debited:
-        type: integer
-    type: object
-  transport.OverviewResp:
-    properties:
-      daily:
-        items:
-          $ref: '#/definitions/transport.OverviewDay'
-        type: array
-      dau:
-        type: integer
-      from:
-        type: string
-      mau:
-        type: integer
-      to:
-        type: string
-      totals:
-        $ref: '#/definitions/transport.OverviewTotals'
-      wau:
-        type: integer
-    type: object
-  transport.OverviewTotals:
-    properties:
-      active_players:
-        type: integer
-      activities:
-        type: integer
-      badges_awarded:
-        type: integer
-      levels_reached:
-        type: integer
-      missions_completed:
-        type: integer
-      missions_started:
-        type: integer
-      new_players:
-        type: integer
-      points_credited:
-        type: integer
-      points_debited:
-        type: integer
-      rewards_claimed:
-        type: integer
-    type: object
-  transport.PlayerSummary:
-    properties:
-      display_name:
-        type: string
-      external_id:
-        type: string
-      id:
-        type: string
-    type: object
-  transport.RefreshResp:
-    properties:
-      segment:
-        $ref: '#/definitions/transport.SegmentResp'
-      status:
-        description: '"queued"'
-        type: string
-    type: object
-  transport.RetentionResp:
-    properties:
-      cohort:
-        type: string
-      cohorts:
-        items:
-          $ref: '#/definitions/transport.CohortResp'
-        type: array
-      curve:
-        items:
-          $ref: '#/definitions/transport.CurvePointResp'
-        type: array
-      weeks:
-        type: integer
-    type: object
-  transport.SegmentListResp:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/transport.SegmentResp'
-        type: array
-      next_cursor:
-        type: string
-    type: object
-  transport.SegmentResp:
-    properties:
-      conditions:
-        additionalProperties: {}
-        type: object
-      created_at:
-        type: string
-      created_by:
-        type: string
-      description:
-        type: string
-      id:
-        type: string
-      last_refreshed_at:
-        type: string
-      member_count:
-        type: integer
-      name:
-        type: string
-      refreshing:
-        type: boolean
-      updated_at:
-        type: string
-    type: object
 info:
   contact: {}
   description: Modular monolith blueprint API.
@@ -4300,7 +4300,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.EngagementResp'
+            $ref: '#/definitions/internal_modules_analytics_internal_transport.EngagementResp'
         "401":
           description: Unauthorized
           schema:
@@ -4343,7 +4343,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.FunnelResp'
+            $ref: '#/definitions/internal_modules_analytics_internal_transport.FunnelResp'
         "401":
           description: Unauthorized
           schema:
@@ -4381,7 +4381,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.OverviewResp'
+            $ref: '#/definitions/internal_modules_analytics_internal_transport.OverviewResp'
         "401":
           description: Unauthorized
           schema:
@@ -4420,7 +4420,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.RetentionResp'
+            $ref: '#/definitions/internal_modules_analytics_internal_transport.RetentionResp'
         "401":
           description: Unauthorized
           schema:
@@ -9502,7 +9502,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.SegmentListResp'
+            $ref: '#/definitions/internal_modules_segments_internal_transport.SegmentListResp'
         "401":
           description: Unauthorized
           schema:
@@ -9537,7 +9537,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/transport.SegmentResp'
+            $ref: '#/definitions/internal_modules_segments_internal_transport.SegmentResp'
         "401":
           description: Unauthorized
           schema:
@@ -9601,7 +9601,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.SegmentResp'
+            $ref: '#/definitions/internal_modules_segments_internal_transport.SegmentResp'
         "401":
           description: Unauthorized
           schema:
@@ -9641,7 +9641,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/transport.SegmentResp'
+            $ref: '#/definitions/internal_modules_segments_internal_transport.SegmentResp'
         "401":
           description: Unauthorized
           schema:
@@ -9728,7 +9728,7 @@ paths:
         "202":
           description: Accepted
           schema:
-            $ref: '#/definitions/transport.RefreshResp'
+            $ref: '#/definitions/internal_modules_segments_internal_transport.RefreshResp'
         "401":
           description: Unauthorized
           schema:
