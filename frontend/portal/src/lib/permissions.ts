@@ -26,7 +26,9 @@ export type Permission =
   | 'manage:team'
   | 'manage:billing';
 
-// Role permission mappings
+// Role permission mappings. Mirrors the API's grants: manage:* for webhooks,
+// API keys, segments and notification templates is admin-only (owner,
+// super_admin, admin); every member role can view. The API stays the authority.
 const rolePermissions: Record<TeamRole, Permission[]> = {
   owner: [
     'view:overview', 'view:ai-hub', 'view:programs', 'manage:programs',
@@ -49,17 +51,19 @@ const rolePermissions: Record<TeamRole, Permission[]> = {
     'view:rules', 'manage:rules', 'view:mechanics', 'manage:mechanics',
     'view:players', 'manage:players', 'view:segments', 'manage:segments',
     'view:analytics', 'view:notifications', 'manage:notifications',
-    'view:docs', 'view:settings',
+    'view:integrations', 'manage:integrations', 'view:docs', 'view:audit-logs',
+    'view:settings',
   ],
   program_manager: [
     'view:overview', 'view:ai-hub', 'view:programs', 'manage:programs',
     'view:rules', 'manage:rules', 'view:mechanics', 'manage:mechanics',
-    'view:players', 'view:segments', 'manage:segments', 'view:analytics',
-    'view:notifications', 'manage:notifications', 'view:docs',
+    'view:players', 'view:segments', 'view:analytics',
+    'view:notifications', 'view:integrations', 'view:docs', 'view:audit-logs',
   ],
   developer: [
-    'view:overview', 'view:rules', 'view:mechanics', 'view:players',
-    'view:integrations', 'manage:integrations', 'view:docs', 'view:audit-logs',
+    'view:overview', 'view:ai-hub', 'view:rules', 'view:mechanics', 'view:players',
+    'view:segments', 'view:analytics', 'view:notifications',
+    'view:integrations', 'view:docs', 'view:audit-logs',
   ],
 };
 

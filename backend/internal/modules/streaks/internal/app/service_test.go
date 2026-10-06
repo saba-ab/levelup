@@ -34,6 +34,10 @@ type harness struct {
 	ob    *fakeOutbox
 	clock *clock.Fake
 	tz    *fakeTenants
+
+	// st and t serve the auto-record helpers (patch, deleteStreak).
+	st domain.Streak
+	t  *testing.T
 }
 
 func allPerms() allowKeys {
@@ -53,8 +57,8 @@ func newHarness(t *testing.T, enf authz.Enforcer) *harness {
 		tz:    &fakeTenants{tz: map[string]string{tenantA: "UTC", tenantB: "UTC"}},
 	}
 	players := &fakePlayers{players: map[string]ports.PlayerSnapshot{
-		player1: {ID: player1, TenantID: tenantA, Active: true},
-		player2: {ID: player2, TenantID: tenantA, Active: false},
+		player1: {ID: player1, TenantID: tenantA, ExternalID: "ext-1", Active: true},
+		player2: {ID: player2, TenantID: tenantA, ExternalID: "ext-2", Active: false},
 	}}
 	h.svc = NewService(h.repo, players, h.tz, h.ob, enf, nil, h.clock)
 	h.svc.tx = func(_ context.Context, fn func(tx *gorm.DB) error) error { return fn(nil) }

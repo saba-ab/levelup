@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ApiResponse, ValidationErrors } from '@/hooks/useApi';
 import { useMechanicsService } from '../api/mechanics';
@@ -33,6 +34,9 @@ import type {
   UpdateRewardData,
   RewardClaim,
   ClaimRewardData,
+  MissionStatsFilters,
+  RewardClaimFilters,
+  WalletDailyParams,
 } from '../api/types';
 
 // ==================== ERRORS ====================
@@ -90,7 +94,22 @@ const localKeys = {
   leaderboardEntries: (id: ID, params?: LeaderboardEntriesParams) =>
     [...queryKeys.leaderboards.entries(id, params?.period, params?.cursor), params?.limit] as const,
   leaderboardLists: () => [...queryKeys.leaderboards.list()] as const,
+  badgeStats: () => [...queryKeys.badges.all, 'stats'] as const,
+  missionStatsAll: () => [...queryKeys.missions.all, 'stats'] as const,
+  missionStatsList: (filters?: MissionStatsFilters) => [...queryKeys.missions.all, 'stats', filters] as const,
+  missionStats: (missionId: ID) => [...queryKeys.missions.detail(missionId), 'stats'] as const,
+  /** Under rewards.lists() so every claim / reward change refreshes it. */
+  rewardClaims: (filters?: RewardClaimFilters) => [...queryKeys.rewards.lists(), 'claims', filters] as const,
+  rewardStats: () => [...queryKeys.rewards.lists(), 'stats'] as const,
+  walletAnalytics: () => [...queryKeys.wallets.all, 'analytics'] as const,
+  walletSummary: () => [...queryKeys.wallets.all, 'analytics', 'summary'] as const,
+  walletDistribution: () => [...queryKeys.wallets.all, 'analytics', 'distribution'] as const,
+  walletDaily: (params?: WalletDailyParams) => [...queryKeys.wallets.all, 'analytics', 'daily', params] as const,
+  playersProgress: (playerIds: ID[]) => [...queryKeys.levels.all, 'progress', playerIds] as const,
 };
+
+/** Query key of the wallet analytics (summary, distribution, daily): invalidate after wallet operations. */
+export const walletAnalyticsKey = localKeys.walletAnalytics;
 
 // ==================== BADGES ====================
 
@@ -139,7 +158,10 @@ export function useCreateBadgeMutation() {
   const { createBadge } = useMechanicsService();
   return useMutation({
     mutationFn: async (data: CreateBadgeData) => unwrap(await createBadge(data), 'Failed to create badge'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.badges.lists() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.badges.lists() });
+      queryClient.invalidateQueries({ queryKey: localKeys.badgeStats() });
+    },
   });
 }
 
@@ -152,6 +174,7 @@ export function useUpdateBadgeMutation() {
     onSuccess: (badge, { badgeId }) => {
       queryClient.setQueryData(queryKeys.badges.detail(badgeId), badge);
       queryClient.invalidateQueries({ queryKey: queryKeys.badges.lists() });
+      queryClient.invalidateQueries({ queryKey: localKeys.badgeStats() });
     },
   });
 }
@@ -168,6 +191,15 @@ export function useDeleteBadgeMutation() {
   });
 }
 
+/** Award statistics (GET /badges/stats): per badge, totals, and the last 30 days. */
+export function useBadgeStatsQuery() {
+  const { getBadgeStats } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.badgeStats(),
+    queryFn: async () => unwrap(await getBadgeStats(), 'Failed to fetch badge statistics'),
+  });
+}
+
 /** 409 codes: badge_already_earned, badge_max_awards_reached, badge_inactive. */
 export function useAwardBadgeMutation() {
   const queryClient = useQueryClient();
@@ -175,6 +207,7 @@ export function useAwardBadgeMutation() {
   return useMutation({
     mutationFn: async (data: AwardBadgeData) => unwrap(await awardBadge(data), 'Failed to award badge'),
     onSuccess: (_result, { player_id }) => {
+      queryClient.invalidateQueries({ queryKey: localKeys.badgeStats() });
       queryClient.invalidateQueries({ queryKey: queryKeys.badges.playerBadges(player_id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.players.badges(player_id) });
     },
@@ -253,6 +286,22 @@ export function useDeleteLevelMutation() {
   });
 }
 
+/**
+ * XP and level of up to 100 players at once (GET /progress?player_ids=).
+ * Unknown players are omitted; the result is keyed by player id.
+ */
+export function usePlayersProgressQuery(playerIds: ID[]) {
+  const { getPlayersProgress } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.playersProgress(playerIds),
+    queryFn: async () => {
+      const list = unwrap(await getPlayersProgress(playerIds), 'Failed to fetch player progress');
+      return Object.fromEntries(list.data.map((p) => [p.player_id, p]));
+    },
+    enabled: playerIds.length > 0 && playerIds.length <= 100,
+  });
+}
+
 // ==================== MISSIONS ====================
 
 export function useMissionsQuery(filters?: MissionFilters) {
@@ -282,6 +331,25 @@ export function useMissionAttemptsQuery(missionId: ID, filters?: MissionAttemptF
   });
 }
 
+/** Completion analytics of every mission, one cursor page (?status&type&limit&cursor). */
+export function useMissionStatsListQuery(filters?: MissionStatsFilters) {
+  const { listMissionStats } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.missionStatsList(filters),
+    queryFn: async () => unwrap(await listMissionStats(filters), 'Failed to fetch mission statistics'),
+  });
+}
+
+/** Completion analytics of one mission (404 mission_not_found). */
+export function useMissionStatsQuery(missionId: ID) {
+  const { getMissionStats } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.missionStats(missionId),
+    queryFn: async () => unwrap(await getMissionStats(missionId), 'Failed to fetch mission statistics'),
+    enabled: !!missionId,
+  });
+}
+
 export function usePlayerMissionsQuery(playerId: ID, params?: CursorParams) {
   const { getPlayerMissions } = useMechanicsService();
   return useQuery({
@@ -296,7 +364,10 @@ export function useCreateMissionMutation() {
   const { createMission } = useMechanicsService();
   return useMutation({
     mutationFn: async (data: CreateMissionData) => unwrap(await createMission(data), 'Failed to create mission'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.missions.lists() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.missions.lists() });
+      queryClient.invalidateQueries({ queryKey: localKeys.missionStatsAll() });
+    },
   });
 }
 
@@ -309,6 +380,8 @@ export function useUpdateMissionMutation() {
     onSuccess: (mission, { missionId }) => {
       queryClient.setQueryData(queryKeys.missions.detail(missionId), mission);
       queryClient.invalidateQueries({ queryKey: queryKeys.missions.lists() });
+      queryClient.invalidateQueries({ queryKey: localKeys.missionStatsAll() });
+      queryClient.invalidateQueries({ queryKey: localKeys.missionStats(missionId) });
     },
   });
 }
@@ -329,6 +402,7 @@ function useInvalidateMissionPlayer() {
   const queryClient = useQueryClient();
   return (missionId: ID, playerId: ID) => {
     queryClient.invalidateQueries({ queryKey: queryKeys.missions.detail(missionId) });
+    queryClient.invalidateQueries({ queryKey: localKeys.missionStatsAll() });
     queryClient.invalidateQueries({ queryKey: queryKeys.missions.playerMissions(playerId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.players.missions(playerId) });
   };
@@ -595,6 +669,24 @@ export function usePlayerRewardsQuery(playerId: ID, params?: CursorParams) {
   });
 }
 
+/** Tenant-wide redemption history, one cursor page (?status&reward_id&player_id&from&to). */
+export function useRewardClaimsQuery(filters?: RewardClaimFilters) {
+  const { listRewardClaims } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.rewardClaims(filters),
+    queryFn: async () => unwrap(await listRewardClaims(filters), 'Failed to fetch reward claims'),
+  });
+}
+
+/** Claim statistics per reward plus tenant totals (GET /rewards/stats). */
+export function useRewardStatsQuery() {
+  const { getRewardStats } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.rewardStats(),
+    queryFn: async () => unwrap(await getRewardStats(), 'Failed to fetch reward statistics'),
+  });
+}
+
 export function useCreateRewardMutation() {
   const queryClient = useQueryClient();
   const { createReward } = useMechanicsService();
@@ -672,4 +764,57 @@ export function useCancelRewardClaimMutation() {
     mutationFn: async (claimId: ID) => unwrap(await cancelRewardClaim(claimId), 'Failed to cancel claim'),
     onSuccess: (claim) => invalidate(claim),
   });
+}
+
+// ==================== WALLET ANALYTICS ====================
+
+/** Tenant-wide totals (GET /wallets/summary). */
+export function useWalletSummaryQuery() {
+  const { getWalletSummary } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.walletSummary(),
+    queryFn: async () => unwrap(await getWalletSummary(), 'Failed to fetch wallet summary'),
+  });
+}
+
+/** Balance histogram, 10 equal-width buckets (empty when no wallet exists). */
+export function useWalletDistributionQuery() {
+  const { getWalletDistribution } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.walletDistribution(),
+    queryFn: async () => unwrap(await getWalletDistribution(), 'Failed to fetch balance distribution').data,
+  });
+}
+
+/** Zero-filled daily credited/debited totals, oldest first (UTC days; 422 invalid_range). */
+export function useWalletDailyQuery(params?: WalletDailyParams) {
+  const { getWalletDaily } = useMechanicsService();
+  return useQuery({
+    queryKey: localKeys.walletDaily(params),
+    queryFn: async () => unwrap(await getWalletDaily(params), 'Failed to fetch daily totals').data,
+    retry: false,
+  });
+}
+
+// ==================== AI DRAFTS ====================
+
+/**
+ * onCreated handler for AIGenerateDialog: refreshes the list (and stats) of
+ * the mechanic a draft was created as.
+ */
+export function useInvalidateCreatedDraft() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (kind: string) => {
+      const roots: Record<string, readonly unknown[]> = {
+        badge: queryKeys.badges.all,
+        level: queryKeys.levels.all,
+        mission: queryKeys.missions.all,
+        reward: queryKeys.rewards.all,
+      };
+      const root = roots[kind];
+      if (root) queryClient.invalidateQueries({ queryKey: root });
+    },
+    [queryClient],
+  );
 }

@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, Settings, Shield } from 'lucide-react';
+import { Search, Sun, Moon, ChevronDown, LogOut, User, Settings, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import OperatorAlerts from './OperatorAlerts';
 
 const breadcrumbMap: Record<string, string> = {
   '/': 'Overview',
@@ -135,21 +136,7 @@ export default function Header({ sidebarCollapsed, onOpenSearch }: HeaderProps) 
           )}
         </Button>
 
-        {/* Notifications: no notifications API yet */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Notifications">
-              <Bell className="w-5 h-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <p className="px-3 py-4 text-sm text-muted-foreground">
-              Notifications are coming soon: they are not available in this API version.
-            </p>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <OperatorAlerts />
 
         {/* User Menu */}
         <DropdownMenu>

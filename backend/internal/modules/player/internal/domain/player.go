@@ -191,6 +191,16 @@ func (pl *Player) MarkDeleted(now time.Time) {
 	pl.UpdatedAt = now
 }
 
+// SortName is the display_name sort key: lower-cased display name, or the
+// external id when no name is set. Postgres computes the same expression
+// (lower(COALESCE(display_name, external_id))).
+func (pl Player) SortName() string {
+	if pl.DisplayName != "" {
+		return strings.ToLower(pl.DisplayName)
+	}
+	return strings.ToLower(pl.ExternalID)
+}
+
 func (pl Player) Deleted() bool { return pl.DeletedAt != nil }
 
 // BelongsTo is the tenant-ownership check; a foreign row is reported as

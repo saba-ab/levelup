@@ -45,6 +45,18 @@ const (
 	EffectRejected  = "rejected"
 )
 
+// Execution statuses (rule_executions.status, GET /rules/decisions/{id}
+// executions[].status, GET /rules/stats columns). Additive.
+const (
+	ExecutionFired         = "fired"
+	ExecutionNotMatched    = "not_matched"
+	ExecutionLimited       = "limited"
+	ExecutionOutOfScope    = "out_of_scope"
+	ExecutionInvalid       = "invalid"
+	ExecutionOutOfSchedule = "out_of_schedule" // occurred_at outside the version's schedule
+	ExecutionSkippedByStop = "skipped_by_stop" // a higher-priority stop_processing rule fired
+)
+
 // Job names declared by rules' Jobs() (crons). Additive.
 const (
 	JobEffectsReconcile = "rules.effects_reconcile"

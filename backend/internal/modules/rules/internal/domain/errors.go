@@ -24,4 +24,8 @@ var (
 	ErrPublishRequired   = errs.WithCode(errs.New(errs.Conflict, "a rule becomes active by publishing a version"), "publish_required")
 	ErrRuleArchived      = errs.WithCode(errs.New(errs.Conflict, "archived rules cannot change"), "rule_archived")
 	ErrInvalidTransition = errs.WithCode(errs.New(errs.Conflict, "invalid rule status transition"), "invalid_status_transition")
+	ErrBadStatsRange     = errs.WithCode(errs.WithFields(errs.New(errs.Invalid, "from must be before to and the range at most 366 days"),
+		map[string]string{"from": "must be before to, at most 366 days apart"}), "invalid_stats_range")
+	ErrDraftTriggerMismatch = errs.WithCode(errs.WithFields(errs.New(errs.Invalid, "event_type must equal definition.trigger_event"),
+		map[string]string{"event_type": "must equal definition.trigger_event"}), "draft_trigger_mismatch")
 )

@@ -12,10 +12,24 @@ graph LR
     activity -->|contracts| player
     activity -->|contracts| progression
     activity -->|contracts| rules
+    ai -->|contracts| identity
+    analytics -->|contracts| activity
+    analytics -->|contracts| badges
+    analytics -->|contracts| identity
+    analytics -->|contracts| missions
+    analytics -->|contracts| player
+    analytics -->|contracts| points
+    analytics -->|contracts| progression
+    analytics -->|contracts| rewards
+    badges -->|contracts| activity
     badges -->|contracts| identity
+    badges -->|contracts| missions
     badges -->|contracts| player
     badges -->|contracts| points
+    badges -->|contracts| progression
+    badges -->|contracts| streaks
     eventcatalog -->|contracts| identity
+    leaderboards -->|contracts| activity
     leaderboards -->|contracts| badges
     leaderboards -->|contracts| identity
     leaderboards -->|contracts| missions
@@ -23,11 +37,21 @@ graph LR
     leaderboards -->|contracts| points
     leaderboards -->|contracts| program
     leaderboards -->|contracts| progression
+    missions -->|contracts| activity
     missions -->|contracts| badges
     missions -->|contracts| identity
     missions -->|contracts| player
     missions -->|contracts| points
     missions -->|contracts| progression
+    notifications -->|contracts| badges
+    notifications -->|contracts| identity
+    notifications -->|contracts| missions
+    notifications -->|contracts| player
+    notifications -->|contracts| points
+    notifications -->|contracts| progression
+    notifications -->|contracts| rewards
+    notifications -->|contracts| streaks
+    player -->|contracts| activity
     player -->|contracts| identity
     points -->|contracts| identity
     points -->|contracts| player
@@ -37,6 +61,7 @@ graph LR
     progression -->|contracts| identity
     progression -->|contracts| player
     progression -->|contracts| points
+    rewards -->|contracts| badges
     rewards -->|contracts| identity
     rewards -->|contracts| player
     rewards -->|contracts| points
@@ -51,9 +76,27 @@ graph LR
     rules -->|contracts| progression
     rules -->|contracts| rewards
     rules -->|contracts| streaks
+    segments -->|contracts| activity
+    segments -->|contracts| badges
+    segments -->|contracts| identity
+    segments -->|contracts| player
+    segments -->|contracts| points
+    segments -->|contracts| progression
+    streaks -->|contracts| activity
     streaks -->|contracts| identity
     streaks -->|contracts| player
     streaks -->|contracts| points
+    webhooks -->|contracts| activity
+    webhooks -->|contracts| badges
+    webhooks -->|contracts| identity
+    webhooks -->|contracts| leaderboards
+    webhooks -->|contracts| missions
+    webhooks -->|contracts| player
+    webhooks -->|contracts| points
+    webhooks -->|contracts| progression
+    webhooks -->|contracts| rewards
+    webhooks -->|contracts| rules
+    webhooks -->|contracts| streaks
 ```
 
 Async reactions (event subscriptions) are not imports and do not

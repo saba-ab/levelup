@@ -5,6 +5,7 @@ package transport
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -29,6 +30,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(httpx.RequireAuth)
 		r.Get("/", h.list)
 		r.Post("/", h.create)
+		r.Get("/claims", h.listClaims)
+		r.Get("/stats", h.stats)
 		r.Get("/claims/{claimID}", h.getClaim)
 		r.Post("/claims/{claimID}/redeem", h.redeem)
 		r.Post("/claims/{claimID}/cancel", h.cancel)
@@ -303,6 +306,79 @@ func (h *Handler) playerClaims(w http.ResponseWriter, r *http.Request) {
 		out.Data[i] = toClaimResp(c)
 	}
 	httpx.JSON(w, http.StatusOK, out)
+}
+
+// @Summary      List the tenant's reward claims (redemption history)
+// @Description  Newest first, keyset paginated. from (inclusive) and to (exclusive) bound created_at, RFC 3339.
+// @Tags         rewards
+// @Produce      json
+// @Security     BearerAuth
+// @Param        status    query string false "Claim status" Enums(pending_payment, claimed, rejected, redeemed, expired, cancelled, refund_pending, refunded)
+// @Param        reward_id query string false "Reward id (uuid)"
+// @Param        player_id query string false "Player id (uuid)"
+// @Param        from      query string false "Created at or after (RFC 3339)"
+// @Param        to        query string false "Created before (RFC 3339)"
+// @Param        limit     query int    false "Page size (default 25, max 100)"
+// @Param        cursor    query string false "Opaque cursor from next_cursor"
+// @Success      200 {object} ClaimListResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem
+// @Router       /rewards/claims [get]
+func (h *Handler) listClaims(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := app.ClaimFilter{Status: q.Get("status"), RewardID: q.Get("reward_id"), PlayerID: q.Get("player_id")}
+	fields := map[string]string{}
+	for name, dst := range map[string]**time.Time{"from": &f.From, "to": &f.To} {
+		v := q.Get(name)
+		if v == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			fields[name] = "must be an RFC 3339 timestamp"
+			continue
+		}
+		t = t.UTC()
+		*dst = &t
+	}
+	if len(fields) > 0 {
+		httpx.Error(w, r, errs.WithFields(errs.New(errs.Invalid, "validation failed"), fields))
+		return
+	}
+	limit, err := limitOf(r)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	rows, next, err := h.svc.ListClaims(r.Context(), f, q.Get("cursor"), limit)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	out := ClaimListResp{Data: make([]ClaimResp, len(rows)), NextCursor: next}
+	for i, c := range rows {
+		out.Data[i] = toClaimResp(c)
+	}
+	httpx.JSON(w, http.StatusOK, out)
+}
+
+// @Summary      Claim statistics per reward
+// @Description  Every live reward (and deleted rewards that have claims) with claimed, redeemed, expired, cancelled and points_spent, plus tenant totals.
+// @Tags         rewards
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} StatsResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Router       /rewards/stats [get]
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	rep, err := h.svc.Stats(r.Context())
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toStatsResp(rep))
 }
 
 func limitOf(r *http.Request) (int, error) {

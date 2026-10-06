@@ -359,3 +359,68 @@ func (f *fakePlayers) PlayersByIDs(_ context.Context, tenantID string, ids []str
 	}
 	return out, nil
 }
+
+func (f *fakePlayers) PlayersByExternalIDs(_ context.Context, tenantID string, ext []string) (map[string]ports.PlayerSnapshot, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := map[string]ports.PlayerSnapshot{}
+	for _, p := range f.players {
+		if p.TenantID != tenantID || p.ExternalID == "" {
+			continue
+		}
+		for _, x := range ext {
+			if x == p.ExternalID {
+				out[x] = p
+			}
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) AutoMissions(_ context.Context, tenantID, eventType string) ([]domain.Mission, error) {
+	var out []domain.Mission
+	for _, m := range f.missions {
+		et, _ := m.Criteria["event_type"].(string)
+		if m.TenantID == tenantID && m.DeletedAt == nil && m.Status == contracts.MissionActive && et == eventType {
+			out = append(out, m)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (f *fakeRepo) AttemptStats(_ context.Context, tenantID string, missionIDs []string) (map[string]AttemptStats, error) {
+	want := map[string]bool{}
+	for _, x := range missionIDs {
+		want[x] = true
+	}
+	out := map[string]AttemptStats{}
+	hours := map[string][]float64{}
+	for _, a := range f.attempts {
+		if a.TenantID != tenantID || !want[a.MissionID] {
+			continue
+		}
+		st := out[a.MissionID]
+		st.Started++
+		switch a.Status {
+		case contracts.AttemptInProgress:
+			st.InProgress++
+		case contracts.AttemptCompleted:
+			st.Completed++
+			hours[a.MissionID] = append(hours[a.MissionID], a.CompletedAt.Sub(a.StartedAt).Hours())
+		}
+		out[a.MissionID] = st
+	}
+	for mid, hs := range hours {
+		sum := 0.0
+		for _, h := range hs {
+			sum += h
+		}
+		avg := sum / float64(len(hs))
+		st := out[mid]
+		st.AvgHoursToComplete = &avg
+		out[mid] = st
+	}
+	return out, nil
+}

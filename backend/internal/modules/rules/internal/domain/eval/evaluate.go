@@ -3,6 +3,7 @@ package eval
 import (
 	"encoding/json"
 	"sort"
+	"time"
 )
 
 // RuleSource is one live rule version as stored: the input of Compile.
@@ -15,6 +16,15 @@ type RuleSource struct {
 	Conditions    json.RawMessage
 	Actions       json.RawMessage
 	Limits        json.RawMessage
+	// Schedule and StopProcessing are part of the version (grammar v1).
+	Schedule       json.RawMessage
+	StopProcessing bool
+}
+
+// Spec is the source's rule body.
+func (s RuleSource) Spec() Spec {
+	return Spec{Conditions: s.Conditions, Actions: s.Actions, Limits: s.Limits,
+		Schedule: s.Schedule, StopProcessing: s.StopProcessing}
 }
 
 type compiledRule struct {
@@ -30,6 +40,7 @@ type Program struct {
 	needsProgress bool
 	needsPoints   bool
 	programScoped bool
+	historyTypes  map[string]bool
 }
 
 // Compile builds a Program from stored versions. Rules are ordered priority
@@ -48,9 +59,9 @@ func Compile(sources []RuleSource, opts Options) *Program {
 		}
 		return sorted[i].RuleVersionID < sorted[j].RuleVersionID
 	})
-	p := &Program{rules: make([]compiledRule, len(sorted))}
+	p := &Program{rules: make([]compiledRule, len(sorted)), historyTypes: map[string]bool{}}
 	for i, s := range sorted {
-		def, err := CompileDefinition(s.Conditions, s.Actions, s.Limits, opts)
+		def, err := CompileSpec(s.Spec(), opts)
 		p.rules[i] = compiledRule{src: s, def: def, err: err}
 		if err != nil {
 			continue
@@ -58,6 +69,9 @@ func Compile(sources []RuleSource, opts Options) *Program {
 		p.needsProgress = p.needsProgress || def.needsProgress
 		p.needsPoints = p.needsPoints || def.needsPoints
 		p.programScoped = p.programScoped || s.ProgramID != ""
+		for et := range def.historyTypes {
+			p.historyTypes[et] = true
+		}
 	}
 	return p
 }
@@ -81,6 +95,8 @@ type Activity struct {
 	Properties     map[string]any
 	Context        map[string]any
 	CausationDepth int
+	// OccurredAt is when the activity happened; schedules are judged on it.
+	OccurredAt time.Time
 }
 
 // Player is the player part of Facts: one snapshot taken before evaluation,
@@ -107,6 +123,9 @@ type Facts struct {
 	// the set of programs the player is enrolled in.
 	ProgramScoping   bool
 	EnrolledPrograms []string
+	// History is the player's prior activity (grammar v2); nil = not
+	// loaded, and every history fact is then missing.
+	History *History
 }
 
 // CondTrace records one evaluated leaf ("why did the player get X").
@@ -133,7 +152,11 @@ type RuleResult struct {
 	Trace         []CondTrace
 	Actions       []Action
 	Limits        Limits
-	Error         string
+	// StopProcessing is the version flag; StoppedBy names the rule whose
+	// firing skipped this one (status skipped_by_stop).
+	StopProcessing bool
+	StoppedBy      string
+	Error          string
 }
 
 // Result lists every rule of the program in evaluation order.
@@ -174,12 +197,17 @@ func Evaluate(p *Program, f Facts) Result {
 			ProgramID:     r.src.ProgramID,
 			Priority:      r.src.Priority,
 		}
+		if r.def != nil {
+			rr.StopProcessing = r.def.StopProcessing
+		}
 		switch {
 		case r.err != nil:
 			rr.Status = StatusInvalid
 			rr.Error = r.err.Error()
 		case f.ProgramScoping && r.src.ProgramID != "" && !enrolled[r.src.ProgramID]:
 			rr.Status = StatusOutOfScope
+		case !r.def.Schedule.Contains(f.Activity.OccurredAt):
+			rr.Status = StatusOutOfSchedule
 		default:
 			rr.Matched = evalNode(r.def.cond, &f, &rr.Trace)
 			rr.Status = StatusNotMatched
@@ -248,6 +276,8 @@ func resolve(l *leaf, f *Facts) value {
 		default:
 			return lookupMap(f.Activity.Properties, l.segs)
 		}
+	case SourceHistory:
+		return resolveHistory(l, f)
 	case SourcePlayer:
 		pl := f.Player
 		if pl == nil {
@@ -294,4 +324,51 @@ func lookupMap(m map[string]any, segs []string) value {
 		return value{k: kMissing}
 	}
 	return lookup(m, segs)
+}
+
+// StopGate applies stop_processing in evaluation order. Evaluate never cuts
+// the list itself because only the caller knows whether a matched rule
+// actually fired (limits are enforced outside the evaluator):
+//
+//	var g StopGate
+//	for i := range res.Rules {
+//		if !g.Admit(&res.Rules[i]) { continue }   // rewritten to skipped_by_stop
+//		if fired(res.Rules[i]) { g.Fired(res.Rules[i]) }
+//	}
+type StopGate struct{ stoppedBy string }
+
+// Stopped reports whether a stop_processing rule has fired.
+func (g *StopGate) Stopped() bool { return g.stoppedBy != "" }
+
+// Admit returns true when rr may proceed. Once the gate is closed it
+// rewrites rr to skipped_by_stop (no trace, no actions, no limits) and
+// returns false.
+func (g *StopGate) Admit(rr *RuleResult) bool {
+	if g.stoppedBy == "" {
+		return true
+	}
+	*rr = RuleResult{
+		RuleID: rr.RuleID, RuleVersionID: rr.RuleVersionID, Name: rr.Name, ProgramID: rr.ProgramID,
+		Priority: rr.Priority, StopProcessing: rr.StopProcessing,
+		Status: StatusSkippedByStop, StoppedBy: g.stoppedBy,
+	}
+	return false
+}
+
+// Fired records that rr fired; a stop_processing rule closes the gate.
+func (g *StopGate) Fired(rr RuleResult) {
+	if rr.StopProcessing && g.stoppedBy == "" {
+		g.stoppedBy = rr.RuleID
+	}
+}
+
+// ApplyStop applies stop_processing treating every matched rule as fired
+// (simulation: limits are reported, not enforced).
+func (r *Result) ApplyStop() {
+	var g StopGate
+	for i := range r.Rules {
+		if g.Admit(&r.Rules[i]) && r.Rules[i].Matched {
+			g.Fired(r.Rules[i])
+		}
+	}
 }

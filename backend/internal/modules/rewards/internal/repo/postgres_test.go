@@ -45,7 +45,7 @@ func ptr[T any](v T) *T { return &v }
 func seedReward(t *testing.T, r *repo.Postgres, db *gorm.DB, tenant string, mut func(*domain.RewardPatch)) domain.Reward {
 	t.Helper()
 	p := domain.RewardPatch{Name: ptr("Reward " + id.NewID()), Status: ptr(contracts.RewardActive), PointsCost: ptr(int64(100)),
-		Metadata: map[string]any{"color": "red"}, Value: ptr("10.50"), ValueType: ptr("fixed")}
+		Metadata: map[string]any{"color": "red"}, Value: ptr("10.00"), ValueType: ptr("fixed")}
 	if mut != nil {
 		mut(&p)
 	}
@@ -104,7 +104,7 @@ func TestRewardRoundTripAndSlugUniqueness(t *testing.T) {
 	got, err := r.RewardByID(ctx, tenant, rw.ID, false)
 	require.NoError(t, err)
 	require.Equal(t, "mug", got.Slug)
-	require.Equal(t, "10.50", *got.Value)
+	require.Equal(t, "10.00", *got.Value)
 	require.Equal(t, "red", got.Metadata["color"])
 
 	_, err = r.RewardByID(ctx, id.NewID(), rw.ID, false)
@@ -355,4 +355,91 @@ func TestSagaSettlementAgainstPostgres(t *testing.T) {
 	list, _, err := svc.ListPlayerClaims(ctx, paid.PlayerID, "", 10)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
+}
+
+// Fulfilment, the tenant-wide history and the stats aggregate against real
+// SQL: fulfilled_at persists, a redelivered grant delivers once, the
+// filters and the keyset work, and the FILTER aggregates match.
+func TestFulfilmentHistoryAndStatsAgainstPostgres(t *testing.T) {
+	r, db := setup(t)
+	tenant := id.NewID()
+	points := seedReward(t, r, db, tenant, func(p *domain.RewardPatch) {
+		p.PointsCost = ptr(int64(0))
+		p.Value = ptr("300")
+	})
+	paid := seedReward(t, r, db, tenant, func(p *domain.RewardPatch) { p.PointsCost = ptr(int64(40)) })
+	ob := &nopOutbox{}
+	svc := app.NewService(r, players{}, levels{}, noOutcome{}, ob, allow{}, db, clock.System(), app.Settings{})
+	ctx := authz.Into(context.Background(), authz.Principal{UserID: "u", TenantID: tenant})
+	bg := context.Background()
+	p1, p2 := id.NewID(), id.NewID()
+
+	claimed, _, err := svc.Claim(ctx, points.ID, p1, "")
+	require.NoError(t, err)
+	redeemed, err := svc.Redeem(ctx, claimed.ID)
+	require.NoError(t, err)
+	require.NotNil(t, redeemed.FulfilledAt)
+	got, err := r.ClaimByID(bg, tenant, claimed.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.FulfilledAt, "fulfilled_at round-trips")
+	require.WithinDuration(t, *redeemed.FulfilledAt, *got.FulfilledAt, time.Millisecond)
+
+	ob.topics = nil
+	cmd := contracts.GrantCmdV1{IdempotencyKey: "rule:" + id.NewID(), TenantID: tenant, PlayerID: p2, RewardID: points.ID}
+	require.NoError(t, svc.Grant(bg, cmd))
+	require.NoError(t, svc.Grant(bg, cmd))
+	require.Equal(t, []string{pointscontracts.Topic(pointscontracts.JobCredit), contracts.TopicClaimed}, ob.topics)
+	granted, err := r.ClaimByGrantKey(bg, tenant, cmd.IdempotencyKey)
+	require.NoError(t, err)
+	require.NotNil(t, granted.FulfilledAt)
+
+	pc, _, err := svc.Claim(ctx, paid.ID, p1, "")
+	require.NoError(t, err)
+	require.NoError(t, svc.OnDebited(bg, pointscontracts.LedgerMovedV1{IdempotencyKey: pc.DebitKey, TenantID: tenant}))
+
+	all, next, err := svc.ListClaims(ctx, app.ClaimFilter{}, "", 2)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	require.NotEmpty(t, next)
+	rest, next, err := svc.ListClaims(ctx, app.ClaimFilter{}, next, 2)
+	require.NoError(t, err)
+	require.Len(t, rest, 1)
+	require.Empty(t, next)
+	require.ElementsMatch(t, []string{claimed.ID, granted.ID, pc.ID}, append(claimIDs(all), claimIDs(rest)...))
+
+	byStatus, _, err := svc.ListClaims(ctx, app.ClaimFilter{Status: contracts.ClaimRedeemed}, "", 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{claimed.ID}, claimIDs(byStatus))
+	byPlayer, _, err := svc.ListClaims(ctx, app.ClaimFilter{PlayerID: p1, RewardID: paid.ID}, "", 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{pc.ID}, claimIDs(byPlayer))
+	future := time.Now().Add(time.Hour)
+	none, _, err := svc.ListClaims(ctx, app.ClaimFilter{From: &future}, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, none)
+	past := time.Now().Add(-time.Hour)
+	window, _, err := svc.ListClaims(ctx, app.ClaimFilter{From: &past, To: &future}, "", 10)
+	require.NoError(t, err)
+	require.Len(t, window, 3)
+	other, err := r.ListClaims(bg, id.NewID(), app.ClaimFilter{}, app.Page{Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, other)
+
+	// A deleted reward without claims drops out of the stats.
+	gone := seedReward(t, r, db, tenant, nil)
+	require.NoError(t, postgres.InTx(bg, db, func(tx *gorm.DB) error {
+		return r.SoftDeleteReward(bg, tx, tenant, gone.ID, time.Now())
+	}))
+	rep, err := svc.Stats(ctx)
+	require.NoError(t, err)
+	require.Len(t, rep.Rewards, 2)
+	byID := map[string]app.RewardStats{}
+	for _, s := range rep.Rewards {
+		byID[s.RewardID] = s
+	}
+	require.Equal(t, app.RewardStats{RewardID: points.ID, Slug: points.Slug, Name: points.Name, Type: points.Type,
+		Claimed: 2, Redeemed: 1}, byID[points.ID])
+	require.Equal(t, app.RewardStats{RewardID: paid.ID, Slug: paid.Slug, Name: paid.Name, Type: paid.Type,
+		Claimed: 1, PointsSpent: 40}, byID[paid.ID])
+	require.Equal(t, app.RewardStats{Claimed: 3, Redeemed: 1, PointsSpent: 40}, rep.Totals)
 }

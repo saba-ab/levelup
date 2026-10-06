@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -454,4 +455,28 @@ func snapIDs(ps []contracts.PlayerSnapshot) []string {
 		out[i] = p.ID
 	}
 	return out
+}
+
+func TestListPlayerIDsPagesAndValidates(t *testing.T) {
+	f := newFixture(t, allPerms)
+	ctx := context.Background()
+	var ids []string
+	for _, ext := range []string{"a", "b", "c"} {
+		p, err := f.svc.Create(asTenant(tenantA), app.CreateCmd{ExternalID: ext})
+		require.NoError(t, err)
+		ids = append(ids, p.ID)
+	}
+	slices.Sort(ids)
+
+	page, err := f.svc.ListPlayerIDs(ctx, tenantA, "", 2)
+	require.NoError(t, err)
+	require.Equal(t, ids[:2], page)
+	page, err = f.svc.ListPlayerIDs(ctx, tenantA, page[1], 2)
+	require.NoError(t, err)
+	require.Equal(t, ids[2:], page)
+
+	_, err = f.svc.ListPlayerIDs(ctx, "", "", 10)
+	require.Equal(t, errs.Invalid, errs.KindOf(err))
+	_, err = f.svc.ListPlayerIDs(ctx, tenantA, "not-a-uuid", 10)
+	require.Equal(t, errs.Invalid, errs.KindOf(err))
 }

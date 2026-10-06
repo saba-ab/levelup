@@ -11,32 +11,32 @@ const benefits = [
   {
     icon: Building,
     title: "Multi-Tenant Architecture",
-    description: "Each organization gets isolated data and complete customization. Scale from startup to enterprise without changing infrastructure.",
-    highlights: ["Complete data isolation", "Custom branding per tenant", "Independent configurations"],
+    description: "Each organization is a tenant with its own players, rules and mechanics. Tenant data is isolated on every request and every background job.",
+    highlights: ["Tenant-scoped data", "Role-based access", "Per-tenant configuration"],
   },
   {
     icon: Code2,
     title: "API-First Design",
-    description: "RESTful API for seamless integration with any platform. Well-documented endpoints with SDKs for popular languages.",
-    highlights: ["RESTful endpoints", "Comprehensive documentation", "SDK support"],
+    description: "A REST API with JSON in and out, server-side API keys, and official TypeScript and Python SDKs.",
+    highlights: ["REST + JSON", "Hashed API keys", "Official TypeScript and Python SDKs"],
   },
   {
     icon: Sparkles,
     title: "Automated Rules Engine",
-    description: "Set up event-driven gamification without writing custom code. Define triggers and the system handles the rest.",
-    highlights: ["No-code automation", "Event-driven triggers", "Real-time processing"],
+    description: "Define event types and rules in the portal. Activities are queued and evaluated asynchronously, and each effect is applied exactly once.",
+    highlights: ["Rules configured in the portal", "Rule simulator", "Idempotent processing"],
   },
   {
     icon: ScrollText,
-    title: "Complete Audit Trail",
-    description: "Every transaction, badge award, and action is tracked. Perfect for compliance and analytics.",
-    highlights: ["Full event history", "Compliance ready", "Analytics insights"],
+    title: "Ledger-Backed History",
+    description: "Points movements, XP grants, badge awards and rule decisions are recorded as append-only history you can query.",
+    highlights: ["Append-only ledgers", "Rule decision history", "Scheduled reconciliation"],
   },
   {
     icon: Puzzle,
-    title: "Flexible & Extensible",
-    description: "Customize every aspect of your gamification program. Extend with webhooks and custom integrations.",
-    highlights: ["Webhook support", "Custom integrations", "Unlimited customization"],
+    title: "Webhooks & SDKs",
+    description: "React to what happens in LevelUp from your own systems, and integrate faster with official client libraries.",
+    highlights: ["Signed webhooks for badges, levels, points and more", "Official TypeScript and Python SDKs"],
   },
 ];
 
@@ -55,7 +55,7 @@ const BenefitsSection = () => {
             <span className="text-gradient-primary">Developers & Teams</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Enterprise-grade infrastructure with developer-friendly APIs and complete flexibility.
+            A correct, tenant-isolated engine behind a plain, well-documented API.
           </p>
         </div>
 

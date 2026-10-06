@@ -3,6 +3,7 @@
 package missions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/pressly/goose/v3"
 
+	activitycontracts "levelup/internal/modules/activity/contracts"
 	identitycontracts "levelup/internal/modules/identity/contracts"
 	"levelup/internal/modules/missions/contracts"
 	"levelup/internal/modules/missions/internal/app"
@@ -34,6 +36,7 @@ type Module struct {
 // adapters.NewLocalPlayers(playerMod.Reader()) in-process. No I/O here.
 func New(d modkit.Deps, cfg Config, players PlayerReader) *Module {
 	svc := app.NewService(repo.NewPostgres(d.DB), players, d.Outbox, d.Authz, d.DB, d.Clock, cfg.SweepBatchSize)
+	svc.SetMaxCausationDepth(cfg.MaxCausationDepth)
 	return &Module{svc: svc, deps: d, cfg: cfg}
 }
 
@@ -56,7 +59,21 @@ func (m *Module) Subscriptions() []bus.Subscription {
 	return []bus.Subscription{
 		{Topic: identitycontracts.TopicTenantDeleted, Group: contracts.Module, Handler: m.onTenantDeleted},
 		{Topic: playercontracts.TopicPlayerDeleted, Group: contracts.Module, Handler: m.onPlayerDeleted},
+		{Topic: activitycontracts.TopicReceived, Group: contracts.Module, Handler: m.onActivityReceived},
 	}
+}
+
+// onActivityReceived progresses every mission whose criteria match the
+// activity. Numbers stay json.Number so criteria compare them exactly.
+func (m *Module) onActivityReceived(ctx context.Context, e bus.Envelope) error {
+	var ev activitycontracts.ReceivedV1
+	dec := json.NewDecoder(bytes.NewReader(e.Payload))
+	dec.UseNumber()
+	if err := dec.Decode(&ev); err != nil {
+		return errs.Wrap(errs.Invalid, "undecodable activity.received.v1", err)
+	}
+	_, err := m.svc.HandleActivity(ctx, ev)
+	return err
 }
 
 func (m *Module) onTenantDeleted(ctx context.Context, e bus.Envelope) error {

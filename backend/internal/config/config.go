@@ -13,18 +13,23 @@ import (
 	"github.com/caarlos0/env/v11"
 
 	"levelup/internal/modules/activity"
+	"levelup/internal/modules/ai"
+	"levelup/internal/modules/analytics"
 	"levelup/internal/modules/badges"
 	"levelup/internal/modules/eventcatalog"
 	"levelup/internal/modules/identity"
 	"levelup/internal/modules/leaderboards"
 	"levelup/internal/modules/missions"
+	"levelup/internal/modules/notifications"
 	"levelup/internal/modules/player"
 	"levelup/internal/modules/points"
 	"levelup/internal/modules/program"
 	"levelup/internal/modules/progression"
 	"levelup/internal/modules/rewards"
 	"levelup/internal/modules/rules"
+	"levelup/internal/modules/segments"
 	"levelup/internal/modules/streaks"
+	"levelup/internal/modules/webhooks"
 	"levelup/internal/shared/validate"
 )
 
@@ -79,6 +84,17 @@ type Config struct {
 		MgmtPass string `env:"MGMT_PASS" envDefault:"guest"`
 	} `envPrefix:"RABBIT_"`
 
+	// Mail is transactional email (password resets, invitations, player
+	// notifications). Driver "log" (default) only logs messages.
+	Mail struct {
+		Driver   string `env:"DRIVER" envDefault:"log" validate:"oneof=log smtp"`
+		From     string `env:"FROM" envDefault:"LevelUp <no-reply@levelupos.ge>"`
+		Host     string `env:"HOST"`
+		Port     int    `env:"PORT" envDefault:"587"`
+		Username string `env:"USERNAME"`
+		Password string `env:"PASSWORD"`
+	} `envPrefix:"MAIL_"`
+
 	Outbox struct {
 		// MaxPublishAttempts caps broker nacks per row before the dispatcher
 		// parks it in outbox_svc.dead_letters (R23). With the dispatcher's
@@ -91,19 +107,24 @@ type Config struct {
 	// module-specific key. One line per module, for example:
 	//
 	//	Billing billing.Config `envPrefix:"BILLING_"`
-	Identity     identity.Config     `envPrefix:"IDENTITY_"`
-	Player       player.Config       `envPrefix:"PLAYER_"`
-	EventCatalog eventcatalog.Config `envPrefix:"EVENTCATALOG_"`
-	Program      program.Config      `envPrefix:"PROGRAM_"`
-	Points       points.Config       `envPrefix:"POINTS_"`
-	Badges       badges.Config       `envPrefix:"BADGES_"`
-	Progression  progression.Config  `envPrefix:"PROGRESSION_"`
-	Streaks      streaks.Config      `envPrefix:"STREAKS_"`
-	Missions     missions.Config     `envPrefix:"MISSIONS_"`
-	Rewards      rewards.Config      `envPrefix:"REWARDS_"`
-	Leaderboards leaderboards.Config `envPrefix:"LEADERBOARDS_"`
-	Activity     activity.Config     `envPrefix:"ACTIVITY_"`
-	Rules        rules.Config        `envPrefix:"RULES_"`
+	Identity      identity.Config      `envPrefix:"IDENTITY_"`
+	Player        player.Config        `envPrefix:"PLAYER_"`
+	EventCatalog  eventcatalog.Config  `envPrefix:"EVENTCATALOG_"`
+	Program       program.Config       `envPrefix:"PROGRAM_"`
+	Points        points.Config        `envPrefix:"POINTS_"`
+	Badges        badges.Config        `envPrefix:"BADGES_"`
+	Progression   progression.Config   `envPrefix:"PROGRESSION_"`
+	Streaks       streaks.Config       `envPrefix:"STREAKS_"`
+	Missions      missions.Config      `envPrefix:"MISSIONS_"`
+	Rewards       rewards.Config       `envPrefix:"REWARDS_"`
+	Leaderboards  leaderboards.Config  `envPrefix:"LEADERBOARDS_"`
+	Activity      activity.Config      `envPrefix:"ACTIVITY_"`
+	Rules         rules.Config         `envPrefix:"RULES_"`
+	Webhooks      webhooks.Config      `envPrefix:"WEBHOOKS_"`
+	Notifications notifications.Config `envPrefix:"NOTIFICATIONS_"`
+	AI            ai.Config            `envPrefix:"AI_"`
+	Segments      segments.Config      `envPrefix:"SEGMENTS_"`
+	Analytics     analytics.Config     `envPrefix:"ANALYTICS_"`
 }
 
 func Load() (Config, error) {

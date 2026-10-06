@@ -68,6 +68,7 @@ type rewardClaim struct {
 	RedeemedAt      *time.Time
 	ExpiresAt       *time.Time
 	CancelledAt     *time.Time
+	FulfilledAt     *time.Time
 	Code            *string
 	Metadata        *string `gorm:"type:jsonb"`
 	Version         int
@@ -81,6 +82,10 @@ type reconcileMarker struct {
 }
 
 var heldStatuses = []string{contracts.ClaimPendingPayment, contracts.ClaimClaimed, contracts.ClaimRedeemed}
+
+// schema qualifies raw SQL: Deps.DB pins the prefix only for model-derived
+// table names, and search_path is not usable behind PgBouncer.
+const schema = "rewards_svc."
 
 type Postgres struct{ db *gorm.DB }
 
@@ -301,6 +306,7 @@ func (r *Postgres) SaveClaim(ctx context.Context, tx *gorm.DB, c domain.Claim) e
 			"redeemed_at":     m.RedeemedAt,
 			"expires_at":      m.ExpiresAt,
 			"cancelled_at":    m.CancelledAt,
+			"fulfilled_at":    m.FulfilledAt,
 			"code":            m.Code,
 			"updated_at":      m.UpdatedAt,
 			"version":         gorm.Expr("version + 1"),
@@ -337,6 +343,81 @@ func (r *Postgres) ListPlayerClaims(ctx context.Context, tenantID, playerID stri
 		q = q.Where("(created_at, id) < (?, ?)", p.AfterTime, p.AfterID)
 	}
 	return r.findClaims(q.Order("created_at DESC, id DESC").Limit(p.Limit), "list player claims")
+}
+
+// ListClaims is the tenant-wide claim history, keyset over (created_at, id).
+func (r *Postgres) ListClaims(ctx context.Context, tenantID string, f app.ClaimFilter, p app.Page) ([]domain.Claim, error) {
+	if !isUUID(tenantID) {
+		return nil, nil
+	}
+	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+	if f.Status != "" {
+		q = q.Where("status = ?", f.Status)
+	}
+	if f.RewardID != "" {
+		q = q.Where("reward_id = ?", f.RewardID)
+	}
+	if f.PlayerID != "" {
+		q = q.Where("player_id = ?", f.PlayerID)
+	}
+	if f.From != nil {
+		q = q.Where("created_at >= ?", *f.From)
+	}
+	if f.To != nil {
+		q = q.Where("created_at < ?", *f.To)
+	}
+	if !p.AfterTime.IsZero() {
+		q = q.Where("(created_at, id) < (?, ?)", p.AfterTime, p.AfterID)
+	}
+	return r.findClaims(q.Order("created_at DESC, id DESC").Limit(p.Limit), "list claims")
+}
+
+const rewardStatsSQL = `
+SELECT r.id AS reward_id, r.slug, r.name, r.type, r.deleted_at IS NOT NULL AS deleted,
+       COALESCE(c.claimed, 0) AS claimed, COALESCE(c.redeemed, 0) AS redeemed,
+       COALESCE(c.expired, 0) AS expired, COALESCE(c.cancelled, 0) AS cancelled,
+       COALESCE(c.points_spent, 0) AS points_spent
+FROM ` + schema + `rewards r
+LEFT JOIN (
+    SELECT reward_id,
+           COUNT(*) FILTER (WHERE claimed_at IS NOT NULL) AS claimed,
+           COUNT(*) FILTER (WHERE status = 'redeemed') AS redeemed,
+           COUNT(*) FILTER (WHERE status = 'expired') AS expired,
+           COUNT(*) FILTER (WHERE status IN ('cancelled','refund_pending','refunded')) AS cancelled,
+           COALESCE(SUM(points_cost) FILTER (WHERE status IN ('claimed','redeemed','expired')), 0) AS points_spent
+    FROM ` + schema + `reward_claims
+    WHERE tenant_id = ?
+    GROUP BY reward_id
+) c ON c.reward_id = r.id
+WHERE r.tenant_id = ? AND (r.deleted_at IS NULL OR c.reward_id IS NOT NULL)
+ORDER BY r.created_at DESC, r.id DESC`
+
+type rewardStatsRow struct {
+	RewardID    string
+	Slug        string
+	Name        string
+	Type        string
+	Deleted     bool
+	Claimed     int64
+	Redeemed    int64
+	Expired     int64
+	Cancelled   int64
+	PointsSpent int64
+}
+
+func (r *Postgres) RewardStats(ctx context.Context, tenantID string) ([]app.RewardStats, error) {
+	if !isUUID(tenantID) {
+		return nil, nil
+	}
+	var rows []rewardStatsRow
+	if err := r.db.WithContext(ctx).Raw(rewardStatsSQL, tenantID, tenantID).Scan(&rows).Error; err != nil {
+		return nil, errs.Wrap(errs.Internal, "reward stats", err)
+	}
+	out := make([]app.RewardStats, len(rows))
+	for i, row := range rows {
+		out[i] = app.RewardStats(row)
+	}
+	return out, nil
 }
 
 func (r *Postgres) DuePendingClaims(ctx context.Context, now time.Time, limit int) ([]domain.Claim, error) {
@@ -475,7 +556,7 @@ func (m rewardClaim) toDomain() domain.Claim {
 		ClientRequestID: m.ClientRequestID, GrantKey: m.GrantKey,
 		HoldExpiresAt: utcPtr(m.HoldExpiresAt), ClaimedAt: utcPtr(m.ClaimedAt),
 		RedeemedAt: utcPtr(m.RedeemedAt), ExpiresAt: utcPtr(m.ExpiresAt), CancelledAt: utcPtr(m.CancelledAt),
-		Code: m.Code, Version: m.Version,
+		FulfilledAt: utcPtr(m.FulfilledAt), Code: m.Code, Version: m.Version,
 		CreatedAt: m.CreatedAt.UTC(), UpdatedAt: m.UpdatedAt.UTC(),
 	}
 	if m.RejectReason != nil {
@@ -491,7 +572,7 @@ func claimFromDomain(d domain.Claim) rewardClaim {
 		PointsCost: d.PointsCost, DebitKey: d.DebitKey,
 		ClientRequestID: d.ClientRequestID, GrantKey: d.GrantKey,
 		HoldExpiresAt: d.HoldExpiresAt, ClaimedAt: d.ClaimedAt, RedeemedAt: d.RedeemedAt,
-		ExpiresAt: d.ExpiresAt, CancelledAt: d.CancelledAt, Code: d.Code, Version: d.Version,
+		ExpiresAt: d.ExpiresAt, CancelledAt: d.CancelledAt, FulfilledAt: d.FulfilledAt, Code: d.Code, Version: d.Version,
 		CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
 	}
 	if d.RejectReason != "" {

@@ -212,6 +212,31 @@ func (r *Postgres) MissionsByIDs(ctx context.Context, tenantID string, ids []str
 	return out, nil
 }
 
+// AutoMissions uses ix_missions_auto_event_type.
+func (r *Postgres) AutoMissions(ctx context.Context, tenantID, eventType string) ([]domain.Mission, error) {
+	if !validUUID(tenantID) || eventType == "" {
+		return nil, nil
+	}
+	var rows []mission
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND deleted_at IS NULL AND status = ? AND criteria ->> 'event_type' = ?",
+			tenantID, contracts.MissionActive, eventType).
+		Order("created_at, id").
+		Find(&rows).Error
+	if err != nil {
+		return nil, errs.Wrap(errs.Internal, "load auto missions", err)
+	}
+	out := make([]domain.Mission, 0, len(rows))
+	for _, row := range rows {
+		m, err := row.toDomain()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 // ---- attempts ----
 
 func (r *Postgres) OpenAttemptForUpdate(ctx context.Context, tx *gorm.DB, tenantID, missionID, playerID, periodKey string) (domain.Attempt, bool, error) {
@@ -351,6 +376,44 @@ func (r *Postgres) CompletedCounts(ctx context.Context, tenantID string, playerI
 	}
 	for _, row := range rows {
 		out[row.PlayerID] = int(row.N)
+	}
+	return out, nil
+}
+
+// AttemptStats is one grouped scan over ix_mission_attempts_stats.
+func (r *Postgres) AttemptStats(ctx context.Context, tenantID string, missionIDs []string) (map[string]app.AttemptStats, error) {
+	missionIDs = onlyUUIDs(missionIDs)
+	out := make(map[string]app.AttemptStats, len(missionIDs))
+	if len(missionIDs) == 0 || !validUUID(tenantID) {
+		return out, nil
+	}
+	var rows []struct {
+		MissionID  string
+		Started    int64
+		InProgress int64
+		Completed  int64
+		AvgHours   *float64
+	}
+	err := r.db.WithContext(ctx).Model(&missionAttempt{}).
+		Select(`mission_id,
+			COUNT(*) AS started,
+			COUNT(*) FILTER (WHERE status = ?) AS in_progress,
+			COUNT(*) FILTER (WHERE status = ?) AS completed,
+			AVG(EXTRACT(EPOCH FROM (completed_at - started_at)) / 3600.0)
+				FILTER (WHERE status = ?) AS avg_hours`,
+			contracts.AttemptInProgress, contracts.AttemptCompleted, contracts.AttemptCompleted).
+		Where("tenant_id = ? AND mission_id IN ?", tenantID, missionIDs).
+		Group("mission_id").Scan(&rows).Error
+	if err != nil {
+		return nil, errs.Wrap(errs.Internal, "aggregate mission attempts", err)
+	}
+	for _, row := range rows {
+		out[row.MissionID] = app.AttemptStats{
+			Started:            row.Started,
+			InProgress:         row.InProgress,
+			Completed:          row.Completed,
+			AvgHoursToComplete: row.AvgHours,
+		}
 	}
 	return out, nil
 }

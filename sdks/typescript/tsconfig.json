@@ -1,0 +1,14 @@
+// Development config: type-checks src + tests and emits them to build/ so that
+// `node --test build/test/` runs the suite without any TypeScript loader.
+// Publishing builds use tsconfig.esm.json and tsconfig.cjs.json (`npm run build`).
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "build",
+    "declaration": false
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"]
+}

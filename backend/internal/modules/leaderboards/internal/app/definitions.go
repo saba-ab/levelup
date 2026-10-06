@@ -28,6 +28,7 @@ type CreateInput struct {
 	Metric         string
 	ResetFrequency string
 	ProgramID      string
+	Activity       *domain.ActivityConfig // type activity only
 	MaxEntries     int
 	Active         bool
 }
@@ -49,6 +50,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (domain.Leaderboar
 		Metric:         in.Metric,
 		ResetFrequency: in.ResetFrequency,
 		ProgramID:      in.ProgramID,
+		Activity:       in.Activity,
 		MaxEntries:     in.MaxEntries,
 		Active:         in.Active,
 	}, s.clock.Now())

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,7 @@ func TestRoutesRequireAuth(t *testing.T) {
 		{http.MethodPatch, "/rules/x"}, {http.MethodDelete, "/rules/x"}, {http.MethodPost, "/rules/x/publish"},
 		{http.MethodGet, "/rules/x/versions"}, {http.MethodPost, "/rules/x/versions"},
 		{http.MethodPost, "/rules/simulate"}, {http.MethodGet, "/rules/decisions"}, {http.MethodGet, "/rules/decisions/x"},
+		{http.MethodGet, "/rules/stats"},
 	} {
 		rec := httptest.NewRecorder()
 		router().ServeHTTP(rec, httptest.NewRequest(rt.method, rt.path, strings.NewReader(`{}`)))
@@ -55,4 +57,34 @@ func TestNullableStringDistinguishesAbsentFromNull(t *testing.T) {
 	require.Equal(t, "x", c.Description.Value)
 	require.Nil(t, a.Conditions, "absent conditions stay untouched")
 	require.Equal(t, "null", string(c.Conditions), "explicit null clears conditions (always true)")
+}
+
+func TestTimeParamAcceptsRFC3339AndDates(t *testing.T) {
+	got, err := timeParam("", "from")
+	require.NoError(t, err)
+	require.Nil(t, got)
+	got, err = timeParam("2026-10-05", "from")
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC), *got)
+	got, err = timeParam("2026-10-05T12:00:00+04:00", "to")
+	require.NoError(t, err)
+	require.True(t, got.Equal(time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)))
+	_, err = timeParam("yesterday", "to")
+	require.Error(t, err)
+}
+
+func TestScheduleAndStopProcessingDecode(t *testing.T) {
+	var u UpdateRuleReq
+	require.NoError(t, json.Unmarshal([]byte(`{"schedule":null,"stop_processing":false}`), &u))
+	require.Equal(t, "null", string(u.Schedule), "explicit null clears the schedule")
+	require.NotNil(t, u.StopProcessing)
+	require.False(t, *u.StopProcessing)
+
+	var s SimulateReq
+	require.NoError(t, json.Unmarshal([]byte(`{"occurred_at":"2026-10-10T10:00:00Z","definition":{"trigger_event":"purchase",`+
+		`"actions":[{"type":"grant_xp","amount":1}],"schedule":{"days_of_week":[6]},"stop_processing":true}}`), &s))
+	require.Empty(t, s.EventType)
+	require.NotNil(t, s.Definition)
+	require.True(t, s.Definition.StopProcessing)
+	require.Equal(t, 2026, s.OccurredAt.Year())
 }

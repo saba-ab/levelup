@@ -18,7 +18,6 @@ import (
 	"levelup/internal/platform/postgres"
 	"levelup/internal/shared/errs"
 	"levelup/internal/shared/id"
-	"levelup/internal/shared/pagination"
 )
 
 const (
@@ -26,6 +25,8 @@ const (
 	MaxPageSize     = 100
 	// MaxBatch bounds one Reader call; callers chunk larger sets.
 	MaxBatch = 500
+	// MaxIDPage bounds one ListPlayerIDs page.
+	MaxIDPage = 1000
 )
 
 // Ref identifies a player for cache eviction: both lookup keys.
@@ -34,14 +35,20 @@ type Ref struct {
 	ExternalID string
 }
 
-// ListFilter is a keyset page request; the cursor is (created_at, id) DESC.
+// ListFilter is a keyset page request. Sort is one of the contracts.Sort*
+// values (never empty here); the keyset is (created_at, id) for the
+// created sorts and (SortName, id) for display_name.
 type ListFilter struct {
-	Active   *bool
-	Search   string // case-insensitive prefix of external_id, display_name or email
-	After    time.Time
-	AfterID  string
-	Limit    int
-	HasAfter bool
+	Active      *bool
+	Search      string // case-insensitive prefix of external_id, display_name or email
+	Sort        string
+	CreatedFrom *time.Time // inclusive
+	CreatedTo   *time.Time // exclusive
+	After       time.Time
+	AfterKey    string // display_name sort only
+	AfterID     string
+	Limit       int
+	HasAfter    bool
 }
 
 // Repository is consumed here and implemented in internal/repo. Write
@@ -51,6 +58,10 @@ type Repository interface {
 	// Create inserts unless a live player holds (tenant, external_id); then
 	// it returns domain.ErrExternalIDTaken (race-safe, no pre-check).
 	Create(ctx context.Context, tx *gorm.DB, p domain.Player) error
+	// CreateIfAbsent inserts unless ANY unique key collides (the primary key,
+	// even of a soft-deleted row, or the live (tenant, external_id)); it
+	// reports whether a row was written and never aborts the transaction.
+	CreateIfAbsent(ctx context.Context, tx *gorm.DB, p domain.Player) (bool, error)
 	ByID(ctx context.Context, tenantID, id string) (domain.Player, error)
 	ByExternalID(ctx context.Context, tenantID, externalID string) (domain.Player, error)
 	ByIDForUpdate(ctx context.Context, tx *gorm.DB, tenantID, id string) (domain.Player, error)
@@ -59,6 +70,7 @@ type Repository interface {
 	List(ctx context.Context, tenantID string, f ListFilter) ([]domain.Player, error)
 	ByIDs(ctx context.Context, tenantID string, ids []string) ([]domain.Player, error)
 	ByExternalIDs(ctx context.Context, tenantID string, externalIDs []string) ([]domain.Player, error)
+	IDsAfter(ctx context.Context, tenantID, afterID string, limit int) ([]string, error)
 	// PurgeTenantBatch hard-deletes up to limit of the tenant's rows (live
 	// or soft-deleted) and returns what it removed.
 	PurgeTenantBatch(ctx context.Context, tx *gorm.DB, tenantID string, limit int) ([]Ref, error)
@@ -181,12 +193,16 @@ func (s *Service) GetByExternalID(ctx context.Context, externalID string) (domai
 	return pl, nil
 }
 
-// ListQuery is the HTTP-facing page request.
+// ListQuery is the HTTP-facing page request. Sort "" means
+// contracts.SortCreatedDesc. CreatedFrom is inclusive, CreatedTo exclusive.
 type ListQuery struct {
-	Cursor string
-	Limit  int
-	Active *bool
-	Search string
+	Cursor      string
+	Limit       int
+	Active      *bool
+	Search      string
+	Sort        string
+	CreatedFrom *time.Time
+	CreatedTo   *time.Time
 }
 
 // Page is one keyset page; NextCursor is empty on the last page.
@@ -210,16 +226,30 @@ func (s *Service) List(ctx context.Context, q ListQuery) (Page, error) {
 	if limit > MaxPageSize {
 		limit = MaxPageSize
 	}
-	f := ListFilter{Active: q.Active, Search: strings.TrimSpace(q.Search), Limit: limit + 1}
+	sortBy := q.Sort
+	if sortBy == "" {
+		sortBy = contracts.SortCreatedDesc
+	}
+	if !validSort(sortBy) {
+		return Page{}, domain.ErrInvalidSort
+	}
+	if q.CreatedFrom != nil && q.CreatedTo != nil && !q.CreatedFrom.Before(*q.CreatedTo) {
+		return Page{}, domain.ErrInvalidCreatedRange
+	}
+	f := ListFilter{
+		Active:      q.Active,
+		Search:      strings.TrimSpace(q.Search),
+		Sort:        sortBy,
+		CreatedFrom: utc(q.CreatedFrom),
+		CreatedTo:   utc(q.CreatedTo),
+		Limit:       limit + 1,
+	}
 	if q.Cursor != "" {
-		at, afterID, err := pagination.DecodeCursor(q.Cursor)
+		c, err := decodeListCursor(sortBy, q.Cursor)
 		if err != nil {
 			return Page{}, err
 		}
-		if !isUUID(afterID) {
-			return Page{}, errs.New(errs.Invalid, "malformed cursor")
-		}
-		f.After, f.AfterID, f.HasAfter = at, afterID, true
+		f.After, f.AfterKey, f.AfterID, f.HasAfter = c.at, c.key, c.id, true
 	}
 	rows, err := s.repo.List(ctx, p.TenantID, f)
 	if err != nil {
@@ -228,8 +258,7 @@ func (s *Service) List(ctx context.Context, q ListQuery) (Page, error) {
 	page := Page{Players: rows}
 	if len(rows) > limit {
 		page.Players = rows[:limit]
-		last := page.Players[limit-1]
-		page.NextCursor = pagination.EncodeCursor(last.CreatedAt, last.ID)
+		page.NextCursor = encodeListCursor(sortBy, page.Players[limit-1])
 	}
 	return page, nil
 }
@@ -451,6 +480,22 @@ func (s *Service) PlayersByExternalIDs(ctx context.Context, tenantID string, ext
 		return nil, err
 	}
 	return toSnapshots(rows, tenantID), nil
+}
+
+// ListPlayerIDs pages the tenant's live player ids in ascending id order,
+// strictly after afterID ("" starts at the beginning). A page shorter than
+// limit is the last one. In-process trust, like the contracts.Reader methods.
+func (s *Service) ListPlayerIDs(ctx context.Context, tenantID, afterID string, limit int) ([]string, error) {
+	if tenantID == "" {
+		return nil, errs.New(errs.Invalid, "tenant id required")
+	}
+	if afterID != "" && !isUUID(afterID) {
+		return nil, errs.New(errs.Invalid, "after id must be a uuid")
+	}
+	if limit <= 0 || limit > MaxIDPage {
+		limit = MaxIDPage
+	}
+	return s.repo.IDsAfter(ctx, tenantID, afterID, limit)
 }
 
 func toSnapshots(rows []domain.Player, tenantID string) []contracts.PlayerSnapshot {

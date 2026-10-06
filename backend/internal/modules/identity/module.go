@@ -19,6 +19,7 @@ import (
 	"levelup/internal/platform/authz"
 	"levelup/internal/platform/bus"
 	"levelup/internal/platform/jobs"
+	"levelup/internal/platform/mail"
 	"levelup/internal/platform/modkit"
 )
 
@@ -28,10 +29,12 @@ type Module struct {
 }
 
 // New wires the module. auth is passed explicitly because identity owns
-// credentials (like the blueprint's reference user module). Constructors do
-// no I/O; a nil auth (binaries that never serve HTTP) only disables the
-// token-issuing endpoints.
-func New(d modkit.Deps, cfg Config, auth *authn.Auth) *Module {
+// credentials (like the blueprint's reference user module), and so is the
+// mailer for account emails (password reset, invitations, verification).
+// Constructors do no I/O; a nil auth (binaries that never serve HTTP) only
+// disables the token-issuing endpoints, and a nil mailer falls back to the
+// log driver.
+func New(d modkit.Deps, cfg Config, auth *authn.Auth, mailer mail.Mailer) *Module {
 	var (
 		issuer  app.AccessIssuer
 		refresh app.RefreshTokens
@@ -46,7 +49,12 @@ func New(d modkit.Deps, cfg Config, auth *authn.Auth) *Module {
 	}
 	pg := repo.NewPostgres(d.DB)
 	svc := app.NewService(pg, d.Outbox, d.Authz, issuer, refresh, d.DB, d.Clock, d.Log,
-		app.Settings{BcryptCost: cfg.BcryptCost, AllowSelfSignup: cfg.AllowSelfSignup})
+		app.Settings{
+			BcryptCost: cfg.BcryptCost, AllowSelfSignup: cfg.AllowSelfSignup,
+			PortalURL: cfg.PortalURL, PasswordResetTTL: cfg.PasswordResetTTL,
+			InvitationTTL: cfg.InvitationTTL, EmailVerificationTTL: cfg.EmailVerificationTTL,
+			ResetRequestsPerHour: cfg.PasswordResetsPerHour,
+		})
 	var keyCache app.KeyCache
 	if d.Cache != nil {
 		// Short TTL: a suspended tenant's keys stop within a minute even
@@ -54,6 +62,14 @@ func New(d modkit.Deps, cfg Config, auth *authn.Auth) *Module {
 		keyCache = d.Cache.WithTTL(time.Minute)
 	}
 	svc.WithAPIKeys(pg, keyCache)
+	if mailer == nil {
+		mailer = mail.Log{}
+	}
+	var throttle app.Throttle
+	if d.Redis != nil {
+		throttle = repo.NewThrottle(d.Redis)
+	}
+	svc.WithAccountTokens(pg, mailer, throttle)
 	return &Module{svc: svc, deps: d}
 }
 

@@ -44,6 +44,7 @@ func (r *Postgres) SaveStreak(ctx context.Context, tx *gorm.DB, s domain.Streak)
 			"points_per_period": m.PointsPerPeriod,
 			"milestones":        m.Milestones,
 			"is_active":         m.IsActive,
+			"auto_record":       m.AutoRecord,
 			"updated_at":        m.UpdatedAt,
 			"version":           gorm.Expr("version + 1"),
 		})

@@ -21,7 +21,7 @@ const useCases = [
     icon: Smartphone,
     title: "Mobile Apps",
     description: "Drive daily logins with streaks, level progression, and engaging challenges.",
-    examples: ["Daily check-ins", "Level progression", "Achievement unlocks", "Social leaderboards"],
+    examples: ["Daily check-ins", "Level progression", "Achievement unlocks", "Leaderboards"],
     gradient: "from-gold/20 to-gold/5",
     borderColor: "hover:border-gold/40",
   },

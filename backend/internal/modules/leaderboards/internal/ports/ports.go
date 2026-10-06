@@ -17,3 +17,10 @@ type PlayerSnapshot struct {
 	DisplayName string
 	Active      bool
 }
+
+// ExternalIDResolver is implemented by player adapters that can resolve a
+// tenant's external id. It is optional (type-asserted) so test fakes of
+// PlayerReader need not implement it.
+type ExternalIDResolver interface {
+	IDByExternalID(ctx context.Context, tenantID, externalID string) (string, bool, error)
+}

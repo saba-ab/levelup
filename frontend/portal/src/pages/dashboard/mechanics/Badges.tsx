@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Award, Sparkles, Loader2, UserPlus, UserMinus } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Plus, Award, Sparkles, Loader2, UserPlus, UserMinus, Zap, Users, BarChart3 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge as BadgeUI } from '@/components/ui/badge';
@@ -30,13 +31,28 @@ import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 import { PlayerActionDialog } from '@/components/mechanics/PlayerActionDialog';
 import { changedFields } from '@/components/mechanics/patch';
+import { BadgeRequirementsEditor } from '@/components/mechanics/BadgeRequirementsEditor';
+import { StatBarChart } from '@/components/mechanics/StatBarChart';
+import {
+  draftToRequirements,
+  emptyRequirementsDraft,
+  requirementsToDraft,
+  summarizeRequirements,
+  validateRequirementsDraft,
+  type RequirementsDraft,
+} from '@/components/mechanics/requirements';
+import { StatCard } from '@/components/players/StatCard';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   useBadgesQuery,
+  useBadgeStatsQuery,
+  MechanicsApiError,
   useCreateBadgeMutation,
   useUpdateBadgeMutation,
   useDeleteBadgeMutation,
   useAwardBadgeMutation,
   useRevokeBadgeMutation,
+  useInvalidateCreatedDraft,
   describeMechanicsError,
 } from '@/services/queries/mechanics';
 import type { Badge, BadgeFilters, CreateBadgeData, UpdateBadgeData, BadgeTier, BadgeCategory } from '@/services/api/types';
@@ -79,6 +95,136 @@ const awardErrors: Record<string, string> = {
 
 const ALL = 'all';
 
+/** "Auto-award" summary of a badge's requirements on its card. */
+function RequirementsSummary({ requirements }: { requirements: Badge['requirements'] }) {
+  const { all, any } = summarizeRequirements(requirements);
+  if (all.length === 0 && any.length === 0) return null;
+  return (
+    <div className="mt-3 text-left rounded-md bg-secondary/50 p-2 space-y-1">
+      <p className="text-xs font-medium flex items-center gap-1">
+        <Zap className="w-3 h-3 text-primary" /> Auto-awarded when
+      </p>
+      {all.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {all.length > 1 ? 'All of: ' : ''}{all.join(' · ')}
+        </p>
+      )}
+      {any.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {all.length > 0 ? 'and any of: ' : 'Any of: '}{any.join(' · ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Stats table and chart for GET /badges/stats. */
+function BadgeStatsPanel() {
+  const { data: stats, isLoading, error } = useBadgeStatsQuery();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        </div>
+        <Skeleton className="h-72" />
+      </div>
+    );
+  }
+  if (error || !stats) {
+    return (
+      <Card className="p-8 text-center border-destructive">
+        <p className="text-destructive">Failed to load badge statistics: {error?.message ?? 'no data'}</p>
+      </Card>
+    );
+  }
+
+  const awardedBadges = stats.badges.filter((b) => b.awarded_count > 0).length;
+  const ranked = [...stats.badges].sort((a, b) => b.awarded_count - a.awarded_count);
+  const chartData = stats.awards_per_day.map((d) => ({ date: d.date, awards: d.count }));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard icon={<Award className="w-6 h-6" />} iconClassName="text-amber-500" value={stats.total_awarded} label="Awards applied (all time)" />
+        <StatCard icon={<Users className="w-6 h-6" />} iconClassName="text-violet-500" value={stats.unique_players} label="Players with a badge" />
+        <StatCard
+          icon={<BarChart3 className="w-6 h-6" />}
+          iconClassName="text-emerald-500"
+          value={`${awardedBadges} / ${stats.badges.filter((b) => !b.deleted).length}`}
+          label="Badges awarded at least once"
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Awards per day</CardTitle>
+          <CardDescription>Applied awards over the last 30 days (UTC).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {chartData.every((d) => d.awards === 0) ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">No awards in the last 30 days.</p>
+          ) : (
+            <StatBarChart
+              data={chartData}
+              xKey="date"
+              series={[{ key: 'awards', label: 'Awards', color: 'hsl(var(--primary))' }]}
+              tickFormatter={(d) => d.slice(5)}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Per badge</CardTitle>
+          <CardDescription>From the award ledger: revokes do not subtract.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {ranked.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-6 text-center">No badges yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 text-sm font-medium text-muted-foreground">Badge</th>
+                    <th className="text-left p-3 text-sm font-medium text-muted-foreground">Tier</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Awards</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Players</th>
+                    <th className="text-left p-3 text-sm font-medium text-muted-foreground">Last awarded</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((b) => (
+                    <tr key={b.badge_id} className="border-b border-border/50">
+                      <td className="p-3">
+                        <span className="font-medium">{b.name}</span>
+                        {b.deleted && <BadgeUI variant="outline" className="ml-2 text-xs text-muted-foreground">Deleted</BadgeUI>}
+                      </td>
+                      <td className="p-3">
+                        <BadgeUI variant="outline" className={`capitalize ${tierColors[b.tier] ?? ''}`}>
+                          {tierIcons[b.tier] ?? ''} {b.tier}
+                        </BadgeUI>
+                      </td>
+                      <td className="p-3 text-right font-mono">{b.awarded_count.toLocaleString()}</td>
+                      <td className="p-3 text-right font-mono">{b.unique_players.toLocaleString()}</td>
+                      <td className="p-3 text-sm text-muted-foreground">
+                        {b.last_awarded_at ? new Date(b.last_awarded_at).toLocaleString() : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 interface BadgeFormState {
   name: string;
   description: string;
@@ -114,7 +260,13 @@ export default function Badges() {
   const [formState, setFormState] = useState<BadgeFormState>(defaultFormState);
   const [awardingBadge, setAwardingBadge] = useState<Badge | null>(null);
   const [revokingBadge, setRevokingBadge] = useState<Badge | null>(null);
+  const [requirements, setRequirements] = useState<RequirementsDraft>(emptyRequirementsDraft);
+  const [requirementsUnsupported, setRequirementsUnsupported] = useState(false);
+  const [requirementsError, setRequirementsError] = useState<string | null>(null);
   const { toast } = useToast();
+  const invalidateCreatedDraft = useInvalidateCreatedDraft();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
   const pager = useCursorPagination(24);
 
   const filters: BadgeFilters = {
@@ -153,10 +305,16 @@ export default function Badges() {
         is_active: badge.is_active,
         is_secret: badge.is_secret,
       });
+      const { draft, unsupported } = requirementsToDraft(badge.requirements);
+      setRequirements(draft);
+      setRequirementsUnsupported(unsupported);
     } else {
       setEditingBadge(null);
       setFormState(defaultFormState);
+      setRequirements(emptyRequirementsDraft);
+      setRequirementsUnsupported(false);
     }
+    setRequirementsError(null);
     setIsDialogOpen(true);
   };
 
@@ -168,11 +326,23 @@ export default function Badges() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const invalid = validateRequirementsDraft(requirements);
+    if (invalid) {
+      setRequirementsError(invalid);
+      return;
+    }
+    setRequirementsError(null);
+    const requirementsPayload = draftToRequirements(requirements) as Record<string, unknown> | null;
 
     try {
       if (editingBadge) {
         const next: UpdateBadgeData = { ...formState };
         const patch = changedFields(editingBadge, next);
+        // null clears the requirements; only send them when they changed.
+        const before = editingBadge.requirements && Object.keys(editingBadge.requirements).length > 0 ? editingBadge.requirements : null;
+        if (requirementsUnsupported ? requirementsPayload !== null : JSON.stringify(before) !== JSON.stringify(requirementsPayload)) {
+          patch.requirements = requirementsPayload;
+        }
         if (Object.keys(patch).length > 0) {
           await updateMutation.mutateAsync({ badgeId: editingBadge.id, data: patch });
         }
@@ -189,17 +359,22 @@ export default function Badges() {
           max_awards: formState.max_awards ?? undefined,
           is_active: formState.is_active,
           is_secret: formState.is_secret,
+          requirements: requirementsPayload ?? undefined,
         };
         await createMutation.mutateAsync(createData);
         toast({ title: 'Badge created', description: 'New badge has been created successfully.' });
       }
       handleCloseDialog();
     } catch (err) {
+      if (err instanceof MechanicsApiError && err.code === 'invalid_badge_requirements') {
+        setRequirementsError(err.validationErrors?.requirements?.[0] ?? err.message);
+      }
       toast({
         title: 'Error',
         description: describeMechanicsError(err, 'Something went wrong', {
           badge_slug_taken: 'A badge with this name/slug already exists.',
           version_conflict: 'The badge was changed by someone else. Reload and try again.',
+          invalid_badge_requirements: 'The requirements are not valid: see the requirements section.',
         }),
         variant: 'destructive',
       });
@@ -252,10 +427,6 @@ export default function Badges() {
     }
   };
 
-  const handleAIGenerate = async (prompt: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Badge Idea:\n\n"${prompt}"\n\nName: Achievement Unlocked\nDescription: Awarded to users who demonstrate exceptional dedication.\nTier: Gold\nCategory: Achievement`;
-  };
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const hasFilters = tierFilter !== ALL || categoryFilter !== ALL || activeFilter !== ALL;
@@ -268,7 +439,7 @@ export default function Badges() {
           <h1 className="text-3xl font-bold">Badges</h1>
           <p className="text-muted-foreground mt-1">Create and manage achievement badges for your users.</p>
         </div>
-        <div className="flex gap-2">
+        {canManage && <div className="flex gap-2">
           <AIGenerateDialog
             trigger={
               <Button variant="outline" className="gap-2">
@@ -279,7 +450,8 @@ export default function Badges() {
             title="Generate Badge Ideas"
             placeholder="E.g., Create a badge for users who complete 100 purchases..."
             context="Generate badge names, descriptions, and tier suggestions"
-            onGenerate={handleAIGenerate}
+            kind="badge"
+            onCreated={invalidateCreatedDraft}
           />
           <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog(); else setIsDialogOpen(true); }}>
             <DialogTrigger asChild>
@@ -470,6 +642,12 @@ export default function Badges() {
                       <Label htmlFor="is_active">Active</Label>
                     </div>
                   </div>
+                  <BadgeRequirementsEditor
+                    value={requirements}
+                    onChange={(next) => { setRequirements(next); setRequirementsError(null); }}
+                    unsupported={requirementsUnsupported}
+                    error={requirementsError}
+                  />
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={handleCloseDialog}>
@@ -483,149 +661,163 @@ export default function Badges() {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
+        </div>}
       </div>
 
-      {/* Filters (server-side: ?tier&category&active) */}
-      <div className="flex flex-wrap gap-3">
-        <Select value={tierFilter} onValueChange={setFilter(setTierFilter)}>
-          <SelectTrigger className="w-40" aria-label="Filter by tier"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All tiers</SelectItem>
-            {(Object.keys(tierIcons) as BadgeTier[]).map((tier) => (
-              <SelectItem key={tier} value={tier} className="capitalize">{tierIcons[tier]} {tier}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={categoryFilter} onValueChange={setFilter(setCategoryFilter)}>
-          <SelectTrigger className="w-44" aria-label="Filter by category"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All categories</SelectItem>
-            {Object.entries(categoryLabels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={activeFilter} onValueChange={setFilter(setActiveFilter)}>
-          <SelectTrigger className="w-36" aria-label="Filter by status"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Any status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Tabs defaultValue="badges" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="badges">Badges</TabsTrigger>
+          <TabsTrigger value="stats">Statistics</TabsTrigger>
+        </TabsList>
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
-            <Card key={i} className="stat-card">
-              <CardContent className="p-6 text-center">
-                <Skeleton className="w-20 h-20 rounded-full mx-auto mb-4" />
-                <Skeleton className="h-5 w-32 mx-auto mb-2" />
-                <Skeleton className="h-4 w-40 mx-auto mb-3" />
-                <Skeleton className="h-6 w-20 mx-auto" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+        <TabsContent value="stats">
+          <BadgeStatsPanel />
+        </TabsContent>
 
-      {/* Error State */}
-      {error && (
-        <Card className="p-8 text-center border-destructive">
-          <p className="text-destructive">Failed to load badges: {error.message}</p>
-        </Card>
-      )}
-
-      {/* Badges Grid */}
-      {!isLoading && !error && badges.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {badges.map((badge, index) => (
-            <Card
-              key={badge.id}
-              className="stat-card group"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <CardContent className="p-6 text-center relative">
-                <div className="absolute top-2 right-2">
-                  <ItemActionsMenu
-                    itemName={badge.name}
-                    onEdit={() => handleOpenDialog(badge)}
-                    onDelete={() => handleDelete(badge)}
-                    actions={[
-                      { label: 'Award to player', icon: UserPlus, onClick: () => setAwardingBadge(badge), disabled: !badge.is_active },
-                      { label: 'Revoke from player', icon: UserMinus, onClick: () => setRevokingBadge(badge) },
-                    ]}
-                    showInGroup
-                  />
-                </div>
-                <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl transition-transform group-hover:scale-110 bg-secondary">
-                  {badge.icon_url ? (
-                    <img src={badge.icon_url} alt={badge.name} className="w-full h-full rounded-full object-cover" />
-                  ) : (
-                    tierIcons[badge.tier]
-                  )}
-                </div>
-                <h3 className="font-semibold text-lg mb-1">{badge.name}</h3>
-                {badge.description && (
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{badge.description}</p>
-                )}
-                <div className="flex flex-wrap gap-2 justify-center">
-                  <BadgeUI variant="outline" className={tierColors[badge.tier]}>
-                    {tierIcons[badge.tier]} {badge.tier}
-                  </BadgeUI>
-                  <BadgeUI variant="outline" className="bg-secondary">
-                    <Award className="w-3 h-3 mr-1" />
-                    {badge.points_value} pts
-                  </BadgeUI>
-                  {badge.is_stackable && (
-                    <BadgeUI variant="outline" className="bg-secondary">Stackable</BadgeUI>
-                  )}
-                  {badge.max_awards !== null && (
-                    <BadgeUI variant="outline" className="bg-secondary">Max {badge.max_awards}</BadgeUI>
-                  )}
-                  {badge.is_secret && (
-                    <BadgeUI variant="outline" className="bg-amber-500/20 text-amber-500 border-amber-500/30">🔒 Secret</BadgeUI>
-                  )}
-                </div>
-                {!badge.is_active && (
-                  <BadgeUI variant="outline" className="mt-2 bg-muted text-muted-foreground">
-                    Inactive
-                  </BadgeUI>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!isLoading && !error && badges.length === 0 && (
-        <Card className="p-8 text-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
-              <Award className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-medium">No badges found</p>
-              <p className="text-sm text-muted-foreground">
-                {hasFilters ? 'Try different filters.' : 'Create your first badge to reward your users.'}
-              </p>
-            </div>
+        <TabsContent value="badges" className="space-y-6">
+          {/* Filters (server-side: ?tier&category&active) */}
+          <div className="flex flex-wrap gap-3">
+            <Select value={tierFilter} onValueChange={setFilter(setTierFilter)}>
+              <SelectTrigger className="w-40" aria-label="Filter by tier"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All tiers</SelectItem>
+                {(Object.keys(tierIcons) as BadgeTier[]).map((tier) => (
+                  <SelectItem key={tier} value={tier} className="capitalize">{tierIcons[tier]} {tier}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setFilter(setCategoryFilter)}>
+              <SelectTrigger className="w-44" aria-label="Filter by category"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All categories</SelectItem>
+                {Object.entries(categoryLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={activeFilter} onValueChange={setFilter(setActiveFilter)}>
+              <SelectTrigger className="w-36" aria-label="Filter by status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Any status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </Card>
-      )}
 
-      <CursorPager
-        page={pager.page}
-        hasPrevious={pager.hasPrevious}
-        nextCursor={badgesData?.next_cursor}
-        onPrevious={pager.previous}
-        onNext={pager.next}
-        isFetching={isFetching}
-      />
+          {/* Loading State */}
+          {isLoading && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...Array(8)].map((_, i) => (
+                <Card key={i} className="stat-card">
+                  <CardContent className="p-6 text-center">
+                    <Skeleton className="w-20 h-20 rounded-full mx-auto mb-4" />
+                    <Skeleton className="h-5 w-32 mx-auto mb-2" />
+                    <Skeleton className="h-4 w-40 mx-auto mb-3" />
+                    <Skeleton className="h-6 w-20 mx-auto" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <Card className="p-8 text-center border-destructive">
+              <p className="text-destructive">Failed to load badges: {error.message}</p>
+            </Card>
+          )}
+
+          {/* Badges Grid */}
+          {!isLoading && !error && badges.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {badges.map((badge, index) => (
+                <Card
+                  key={badge.id}
+                  className="stat-card group"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <CardContent className="p-6 text-center relative">
+                    {canManage && <div className="absolute top-2 right-2">
+                      <ItemActionsMenu
+                        itemName={badge.name}
+                        onEdit={() => handleOpenDialog(badge)}
+                        onDelete={() => handleDelete(badge)}
+                        actions={[
+                          { label: 'Award to player', icon: UserPlus, onClick: () => setAwardingBadge(badge), disabled: !badge.is_active },
+                          { label: 'Revoke from player', icon: UserMinus, onClick: () => setRevokingBadge(badge) },
+                        ]}
+                        showInGroup
+                      />
+                    </div>}
+                    <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl transition-transform group-hover:scale-110 bg-secondary">
+                      {badge.icon_url ? (
+                        <img src={badge.icon_url} alt={badge.name} className="w-full h-full rounded-full object-cover" />
+                      ) : (
+                        tierIcons[badge.tier]
+                      )}
+                    </div>
+                    <h3 className="font-semibold text-lg mb-1">{badge.name}</h3>
+                    {badge.description && (
+                      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{badge.description}</p>
+                    )}
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      <BadgeUI variant="outline" className={tierColors[badge.tier]}>
+                        {tierIcons[badge.tier]} {badge.tier}
+                      </BadgeUI>
+                      <BadgeUI variant="outline" className="bg-secondary">
+                        <Award className="w-3 h-3 mr-1" />
+                        {badge.points_value} pts
+                      </BadgeUI>
+                      {badge.is_stackable && (
+                        <BadgeUI variant="outline" className="bg-secondary">Stackable</BadgeUI>
+                      )}
+                      {badge.max_awards !== null && (
+                        <BadgeUI variant="outline" className="bg-secondary">Max {badge.max_awards}</BadgeUI>
+                      )}
+                      {badge.is_secret && (
+                        <BadgeUI variant="outline" className="bg-amber-500/20 text-amber-500 border-amber-500/30">🔒 Secret</BadgeUI>
+                      )}
+                    </div>
+                    {!badge.is_active && (
+                      <BadgeUI variant="outline" className="mt-2 bg-muted text-muted-foreground">
+                        Inactive
+                      </BadgeUI>
+                    )}
+                    <RequirementsSummary requirements={badge.requirements} />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && badges.length === 0 && (
+            <Card className="p-8 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
+                  <Award className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="font-medium">No badges found</p>
+                  <p className="text-sm text-muted-foreground">
+                    {hasFilters ? 'Try different filters.' : 'Create your first badge to reward your users.'}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <CursorPager
+            page={pager.page}
+            hasPrevious={pager.hasPrevious}
+            nextCursor={badgesData?.next_cursor}
+            onPrevious={pager.previous}
+            onNext={pager.next}
+            isFetching={isFetching}
+          />
+        </TabsContent>
+      </Tabs>
 
       <PlayerActionDialog
         open={!!awardingBadge}

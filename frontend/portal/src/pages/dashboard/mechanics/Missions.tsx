@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Target, Calendar, Sparkles, Loader2, Play, TrendingUp, CheckCircle2, ListChecks } from 'lucide-react';
+import { Plus, Target, Calendar, Sparkles, Loader2, Play, TrendingUp, CheckCircle2, ListChecks, Zap, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +23,9 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { cn } from '@/lib/utils';
 import CursorPager from '@/components/CursorPager';
@@ -31,8 +33,20 @@ import { AIGenerateDialog } from '@/components/ai/AIGenerateDialog';
 import { ItemActionsMenu } from '@/components/mechanics/ItemActionsMenu';
 import { PlayerActionDialog } from '@/components/mechanics/PlayerActionDialog';
 import { changedFields, dateToRfc3339, optionalNumber, rfc3339ToDate } from '@/components/mechanics/patch';
+import { MissionCriteriaEditor } from '@/components/mechanics/MissionCriteriaEditor';
+import {
+  criteriaToDraft,
+  draftToCriteria,
+  emptyCriteriaDraft,
+  summarizeCriteria,
+  validateCriteriaDraft,
+  type CriteriaDraft,
+} from '@/components/mechanics/criteria';
 import {
   useMissionsQuery,
+  useMissionStatsQuery,
+  useMissionStatsListQuery,
+  MechanicsApiError,
   useMissionAttemptsQuery,
   useAllBadgesQuery,
   useCreateMissionMutation,
@@ -41,6 +55,7 @@ import {
   useStartMissionMutation,
   useUpdateMissionProgressMutation,
   useCompleteMissionMutation,
+  useInvalidateCreatedDraft,
   describeMechanicsError,
 } from '@/services/queries/mechanics';
 import type {
@@ -51,6 +66,7 @@ import type {
   MissionAttemptStatus,
   CreateMissionData,
   UpdateMissionData,
+  MissionStats,
 } from '@/services/api/types';
 
 const typeLabels: Record<MissionType, string> = {
@@ -98,6 +114,7 @@ const missionErrors: Record<string, string> = {
   mission_not_completed: 'The mission target has not been reached yet.',
   attempt_not_in_progress: 'The player\'s attempt is not in progress.',
   player_inactive: 'This player is inactive.',
+  invalid_mission_criteria: 'The criteria are not valid: see the highlighted fields.',
 };
 
 const ALL = 'all';
@@ -109,7 +126,6 @@ interface MissionFormData {
   type: MissionType;
   status: MissionStatus;
   target: number;
-  criteria: string;
   points_reward: number;
   xp_reward: number;
   badge_reward_id: string;
@@ -124,7 +140,6 @@ const initialFormData: MissionFormData = {
   type: 'one_time',
   status: 'draft',
   target: 1,
-  criteria: '{}',
   points_reward: 0,
   xp_reward: 0,
   badge_reward_id: '',
@@ -135,6 +150,135 @@ const initialFormData: MissionFormData = {
 
 type PlayerAction = { kind: 'start' | 'progress' | 'complete'; mission: Mission };
 
+const formatRate = (rate: number) => `${(rate * 100).toFixed(rate > 0 && rate < 0.1 ? 1 : 0)}%`;
+const formatHours = (hours: number | null) =>
+  hours === null ? '-' : hours < 1 ? `${Math.round(hours * 60)} min` : hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} days`;
+
+/** Completion numbers of one mission (GET /missions/{id}/stats or a row of /missions/stats). */
+function MissionStatsSummary({ stats }: { stats: MissionStats }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {[
+        { label: 'Started', value: stats.started.toLocaleString() },
+        { label: 'In progress', value: stats.in_progress.toLocaleString() },
+        { label: 'Completed', value: stats.completed.toLocaleString() },
+        { label: 'Completion rate', value: formatRate(stats.completion_rate) },
+        { label: 'Avg. time to complete', value: formatHours(stats.avg_hours_to_complete) },
+      ].map((item) => (
+        <div key={item.label} className="rounded-md border border-border p-3 text-center">
+          <p className="text-lg font-bold">{item.value}</p>
+          <p className="text-xs text-muted-foreground">{item.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Tenant-wide mission analytics (GET /missions/stats, cursor paginated). */
+function MissionAnalyticsPanel() {
+  const [statusFilter, setStatusFilter] = useState<string>(ALL);
+  const [typeFilter, setTypeFilter] = useState<string>(ALL);
+  const pager = useCursorPagination(25);
+  const { data, isLoading, isFetching, error } = useMissionStatsListQuery({
+    limit: pager.limit,
+    cursor: pager.cursor,
+    status: statusFilter === ALL ? undefined : (statusFilter as MissionStatus),
+    type: typeFilter === ALL ? undefined : (typeFilter as MissionType),
+  });
+  const rows = data?.data ?? [];
+  const setFilter = (setter: (v: string) => void) => (value: string) => {
+    setter(value);
+    pager.reset();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Completion analytics</CardTitle>
+            <CardDescription>Attempts started and completed per mission.</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Select value={statusFilter} onValueChange={setFilter(setStatusFilter)}>
+              <SelectTrigger className="w-36" aria-label="Filter analytics by status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All statuses</SelectItem>
+                {(Object.keys(statusLabels) as MissionStatus[]).map((s) => (
+                  <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setFilter(setTypeFilter)}>
+              <SelectTrigger className="w-36" aria-label="Filter analytics by type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All types</SelectItem>
+                {(Object.keys(typeLabels) as MissionType[]).map((t) => (
+                  <SelectItem key={t} value={t}>{typeLabels[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="p-6 space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : error ? (
+          <p className="p-6 text-sm text-destructive">Failed to load mission analytics: {error.message}</p>
+        ) : rows.length === 0 ? (
+          <p className="p-6 text-sm text-muted-foreground text-center">No missions match.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Mission</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="text-right p-3 text-sm font-medium text-muted-foreground">Started</th>
+                  <th className="text-right p-3 text-sm font-medium text-muted-foreground">In progress</th>
+                  <th className="text-right p-3 text-sm font-medium text-muted-foreground">Completed</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground w-48">Completion rate</th>
+                  <th className="text-right p-3 text-sm font-medium text-muted-foreground">Avg. time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.mission_id} className="border-b border-border/50">
+                    <td className="p-3">
+                      <p className="font-medium">{row.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{row.slug}</p>
+                    </td>
+                    <td className="p-3"><Badge variant="outline" className="capitalize">{row.status}</Badge></td>
+                    <td className="p-3 text-right font-mono">{row.started.toLocaleString()}</td>
+                    <td className="p-3 text-right font-mono">{row.in_progress.toLocaleString()}</td>
+                    <td className="p-3 text-right font-mono">{row.completed.toLocaleString()}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <Progress value={row.completion_rate * 100} className="h-2" />
+                        <span className="text-sm font-mono w-12 text-right">{formatRate(row.completion_rate)}</span>
+                      </div>
+                    </td>
+                    <td className="p-3 text-right text-sm text-muted-foreground">{formatHours(row.avg_hours_to_complete)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <CursorPager
+          page={pager.page}
+          hasPrevious={pager.hasPrevious}
+          nextCursor={data?.next_cursor}
+          onPrevious={pager.previous}
+          onNext={pager.next}
+          isFetching={isFetching}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Missions() {
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [typeFilter, setTypeFilter] = useState<string>(ALL);
@@ -144,7 +288,13 @@ export default function Missions() {
   const [playerAction, setPlayerAction] = useState<PlayerAction | null>(null);
   const [increment, setIncrement] = useState(1);
   const [attemptsMission, setAttemptsMission] = useState<Mission | null>(null);
+  const [criteria, setCriteria] = useState<CriteriaDraft>(emptyCriteriaDraft);
+  const [criteriaUnsupported, setCriteriaUnsupported] = useState(false);
+  const [criteriaErrors, setCriteriaErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
+  const invalidateCreatedDraft = useInvalidateCreatedDraft();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
   const pager = useCursorPagination(20);
   const attemptsPager = useCursorPagination(20);
 
@@ -160,6 +310,7 @@ export default function Missions() {
     limit: attemptsPager.limit,
     cursor: attemptsPager.cursor,
   });
+  const missionStatsQuery = useMissionStatsQuery(attemptsMission?.id ?? '');
   const createMutation = useCreateMissionMutation();
   const updateMutation = useUpdateMissionMutation();
   const deleteMutation = useDeleteMissionMutation();
@@ -175,10 +326,23 @@ export default function Missions() {
     pager.reset();
   };
 
+  const resetCriteria = (raw?: Record<string, unknown> | null) => {
+    const { draft, unsupported } = criteriaToDraft(raw);
+    setCriteria(draft);
+    setCriteriaUnsupported(unsupported);
+    setCriteriaErrors({});
+  };
+
   const openCreate = () => {
     setEditingMission(null);
     setFormData(initialFormData);
+    resetCriteria(null);
     setIsDialogOpen(true);
+  };
+
+  const openStats = (mission: Mission) => {
+    attemptsPager.reset();
+    setAttemptsMission(mission);
   };
 
   const openEdit = (mission: Mission) => {
@@ -189,7 +353,6 @@ export default function Missions() {
       type: mission.type,
       status: mission.status,
       target: mission.target,
-      criteria: JSON.stringify(mission.criteria ?? {}, null, 2),
       points_reward: mission.points_reward,
       xp_reward: mission.xp_reward,
       badge_reward_id: mission.badge_reward_id ?? '',
@@ -197,26 +360,20 @@ export default function Missions() {
       ends_at: rfc3339ToDate(mission.ends_at),
       max_completions_per_player: mission.max_completions_per_player?.toString() ?? '',
     });
+    resetCriteria(mission.criteria);
     setIsDialogOpen(true);
-  };
-
-  const parseCriteria = (): Record<string, unknown> | null => {
-    try {
-      const parsed = JSON.parse(formData.criteria || '{}');
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-    } catch {
-      // fall through
-    }
-    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const criteria = parseCriteria();
-    if (!criteria) {
-      toast({ title: 'Validation Error', description: 'Criteria must be a JSON object.', variant: 'destructive' });
+    const clientErrors = validateCriteriaDraft(criteria);
+    if (Object.keys(clientErrors).length > 0) {
+      setCriteriaErrors(clientErrors);
+      toast({ title: 'Validation Error', description: 'Fix the highlighted criteria fields.', variant: 'destructive' });
       return;
     }
+    setCriteriaErrors({});
+    const criteriaPayload = draftToCriteria(criteria) as Record<string, unknown>;
 
     try {
       if (editingMission) {
@@ -226,7 +383,7 @@ export default function Missions() {
           type: formData.type,
           status: formData.status,
           target: formData.target,
-          criteria,
+          criteria: criteriaPayload,
           points_reward: formData.points_reward,
           xp_reward: formData.xp_reward,
           badge_reward_id: formData.badge_reward_id || undefined,
@@ -249,7 +406,7 @@ export default function Missions() {
           type: formData.type,
           status: formData.status === 'active' ? 'active' : 'draft',
           target: formData.target,
-          criteria,
+          criteria: criteriaPayload,
           points_reward: formData.points_reward,
           xp_reward: formData.xp_reward,
           badge_reward_id: formData.badge_reward_id || undefined,
@@ -262,6 +419,12 @@ export default function Missions() {
       }
       setIsDialogOpen(false);
     } catch (err) {
+      if (err instanceof MechanicsApiError && err.code === 'invalid_mission_criteria') {
+        const fields = Object.fromEntries(
+          Object.entries(err.validationErrors ?? {}).map(([field, msgs]) => [field, msgs.join(', ')]),
+        );
+        setCriteriaErrors(Object.keys(fields).length > 0 ? fields : { criteria: err.message });
+      }
       toast({
         title: 'Error',
         description: describeMechanicsError(err, 'Failed to save mission', missionErrors),
@@ -312,10 +475,6 @@ export default function Missions() {
     }
   };
 
-  const handleAIGenerate = async (prompt: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Mission Idea:\n\n"${prompt}"\n\nName: Challenge Champion\nDescription: A mission that drives engagement.\nType: Weekly\nTarget: 3\nCriteria: {"event_type": "purchase_completed"}\n\nSuggested Rewards:\n- 750 XP\n- Exclusive "Champion" badge`;
-  };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const statusOptions: MissionStatus[] = editingMission
@@ -331,7 +490,7 @@ export default function Missions() {
           <h1 className="text-3xl font-bold">Missions</h1>
           <p className="text-muted-foreground mt-1">Create and manage player missions.</p>
         </div>
-        <div className="flex gap-2">
+        {canManage && <div className="flex gap-2">
           <AIGenerateDialog
             trigger={
               <Button variant="outline" className="gap-2">
@@ -342,13 +501,14 @@ export default function Missions() {
             title="Generate Mission Ideas"
             placeholder="E.g., Create a weekly mission that encourages social engagement..."
             context="Generate mission names, targets, and reward structures"
-            onGenerate={handleAIGenerate}
+            kind="mission"
+            onCreated={invalidateCreatedDraft}
           />
           <Button variant="glow" onClick={openCreate}>
             <Plus className="w-4 h-4" />
             Create Mission
           </Button>
-        </div>
+        </div>}
       </div>
 
       {/* Create / Edit Mission Dialog */}
@@ -453,20 +613,12 @@ export default function Missions() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="mission-criteria">Criteria (JSON)</Label>
-                  <Textarea
-                    id="mission-criteria"
-                    rows={3}
-                    className="font-mono text-sm"
-                    placeholder='{"event_type": "purchase_completed", "min_amount": 100}'
-                    value={formData.criteria}
-                    onChange={(e) => setFormData({ ...formData, criteria: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Documents which activities count; rules evaluate it and send progress.
-                  </p>
-                </div>
+                <MissionCriteriaEditor
+                  value={criteria}
+                  onChange={(next) => { setCriteria(next); setCriteriaErrors({}); }}
+                  errors={criteriaErrors}
+                  unsupported={criteriaUnsupported}
+                />
               </div>
 
               {/* Rewards */}
@@ -548,168 +700,197 @@ export default function Missions() {
         </DialogContent>
       </Dialog>
 
-      {/* Filters (server-side: ?status&type) */}
-      <div className="flex flex-wrap gap-3">
-        <Select value={statusFilter} onValueChange={setFilter(setStatusFilter)}>
-          <SelectTrigger className="w-40" aria-label="Filter by status"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All statuses</SelectItem>
-            {(Object.keys(statusLabels) as MissionStatus[]).map((s) => (
-              <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setFilter(setTypeFilter)}>
-          <SelectTrigger className="w-40" aria-label="Filter by type"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All types</SelectItem>
-            {(Object.keys(typeLabels) as MissionType[]).map((t) => (
-              <SelectItem key={t} value={t}>{typeLabels[t]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <Tabs defaultValue="missions" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="missions">Missions</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        </TabsList>
 
-      {/* Missions Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-6 w-3/4 mb-2" />
-                <Skeleton className="h-4 w-full" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-20 w-full" />
+        <TabsContent value="analytics">
+          <MissionAnalyticsPanel />
+        </TabsContent>
+
+        <TabsContent value="missions" className="space-y-6">
+          {/* Filters (server-side: ?status&type) */}
+          <div className="flex flex-wrap gap-3">
+            <Select value={statusFilter} onValueChange={setFilter(setStatusFilter)}>
+              <SelectTrigger className="w-40" aria-label="Filter by status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All statuses</SelectItem>
+                {(Object.keys(statusLabels) as MissionStatus[]).map((s) => (
+                  <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setFilter(setTypeFilter)}>
+              <SelectTrigger className="w-40" aria-label="Filter by type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All types</SelectItem>
+                {(Object.keys(typeLabels) as MissionType[]).map((t) => (
+                  <SelectItem key={t} value={t}>{typeLabels[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Missions Grid */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <Card key={i}>
+                  <CardHeader>
+                    <Skeleton className="h-6 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-full" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-20 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : error ? (
+            <Card className="p-8 text-center border-destructive">
+              <p className="text-destructive">Failed to load missions: {error.message}</p>
+            </Card>
+          ) : missions.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Target className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-medium mb-2">No missions found</h3>
+                <p className="text-muted-foreground mb-4">
+                  {hasFilters ? 'Try different filters.' : 'Create your first mission to get started.'}
+                </p>
+                {!hasFilters && canManage && (
+                  <Button onClick={openCreate}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Mission
+                  </Button>
+                )}
               </CardContent>
             </Card>
-          ))}
-        </div>
-      ) : error ? (
-        <Card className="p-8 text-center border-destructive">
-          <p className="text-destructive">Failed to load missions: {error.message}</p>
-        </Card>
-      ) : missions.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Target className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">No missions found</h3>
-            <p className="text-muted-foreground mb-4">
-              {hasFilters ? 'Try different filters.' : 'Create your first mission to get started.'}
-            </p>
-            {!hasFilters && (
-              <Button onClick={openCreate}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Mission
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {missions.map((mission, index) => {
-            const criteriaKeys = Object.keys(mission.criteria ?? {});
-            const reward = badgeName(mission.badge_reward_id);
-            return (
-              <Card key={mission.id} className="stat-card overflow-hidden group" style={{ animationDelay: `${index * 100}ms` }}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center",
-                        mission.status === 'active' ? "bg-green-500/10" : "bg-amber-500/10"
-                      )}>
-                        <Target className={cn(
-                          "w-6 h-6",
-                          mission.status === 'active' ? "text-green-500" : "text-amber-500"
-                        )} />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">{mission.name}</CardTitle>
-                        <CardDescription>{mission.description || 'No description'}</CardDescription>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "capitalize",
-                          mission.status === 'active'
-                            ? "border-green-500/50 text-green-500 bg-green-500/10"
-                            : mission.status === 'draft' || mission.status === 'paused'
-                            ? "border-amber-500/50 text-amber-500 bg-amber-500/10"
-                            : "border-muted-foreground"
-                        )}
-                      >
-                        {mission.status}
-                      </Badge>
-                      <ItemActionsMenu
-                        itemName={mission.name}
-                        onEdit={() => openEdit(mission)}
-                        onDelete={() => handleDelete(mission)}
-                        actions={[
-                          { label: 'Start for player', icon: Play, onClick: () => openPlayerAction('start', mission), disabled: mission.status !== 'active' },
-                          { label: 'Add progress', icon: TrendingUp, onClick: () => openPlayerAction('progress', mission), disabled: mission.status !== 'active' },
-                          { label: 'Complete for player', icon: CheckCircle2, onClick: () => openPlayerAction('complete', mission), disabled: mission.status !== 'active' },
-                          { label: 'View attempts', icon: ListChecks, onClick: () => { attemptsPager.reset(); setAttemptsMission(mission); } },
-                        ]}
-                        showInGroup
-                      />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{typeLabels[mission.type]}</Badge>
-                    <Badge variant="outline">Target: {mission.target}</Badge>
-                    {mission.max_completions_per_player !== null && (
-                      <Badge variant="outline">Max {mission.max_completions_per_player}× per player</Badge>
-                    )}
-                  </div>
-
-                  {criteriaKeys.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Criteria</p>
-                      <code className="block text-xs bg-secondary rounded px-2 py-1 overflow-x-auto">
-                        {JSON.stringify(mission.criteria)}
-                      </code>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {(mission.starts_at || mission.ends_at) && (
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {mission.starts_at ? new Date(mission.starts_at).toLocaleDateString() : '…'}
-                          {' – '}
-                          {mission.ends_at ? new Date(mission.ends_at).toLocaleDateString() : '…'}
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {missions.map((mission, index) => {
+                const criteriaKeys = Object.keys(mission.criteria ?? {});
+                const criteriaSummary = summarizeCriteria(mission.criteria);
+                const reward = badgeName(mission.badge_reward_id);
+                return (
+                  <Card key={mission.id} className="stat-card overflow-hidden group" style={{ animationDelay: `${index * 100}ms` }}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-12 h-12 rounded-xl flex items-center justify-center",
+                            mission.status === 'active' ? "bg-green-500/10" : "bg-amber-500/10"
+                          )}>
+                            <Target className={cn(
+                              "w-6 h-6",
+                              mission.status === 'active' ? "text-green-500" : "text-amber-500"
+                            )} />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">{mission.name}</CardTitle>
+                            <CardDescription>{mission.description || 'No description'}</CardDescription>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {mission.xp_reward > 0 && <Badge variant="secondary">+{mission.xp_reward} XP</Badge>}
-                      {mission.points_reward > 0 && <Badge variant="secondary">+{mission.points_reward} Points</Badge>}
-                      {reward && (
-                        <Badge variant="outline" className="border-primary/50 text-primary">🏅 {reward}</Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "capitalize",
+                              mission.status === 'active'
+                                ? "border-green-500/50 text-green-500 bg-green-500/10"
+                                : mission.status === 'draft' || mission.status === 'paused'
+                                ? "border-amber-500/50 text-amber-500 bg-amber-500/10"
+                                : "border-muted-foreground"
+                            )}
+                          >
+                            {mission.status}
+                          </Badge>
+                          {canManage && <ItemActionsMenu
+                            itemName={mission.name}
+                            onEdit={() => openEdit(mission)}
+                            onDelete={() => handleDelete(mission)}
+                            actions={[
+                              { label: 'Start for player', icon: Play, onClick: () => openPlayerAction('start', mission), disabled: mission.status !== 'active' },
+                              { label: 'Add progress', icon: TrendingUp, onClick: () => openPlayerAction('progress', mission), disabled: mission.status !== 'active' },
+                              { label: 'Complete for player', icon: CheckCircle2, onClick: () => openPlayerAction('complete', mission), disabled: mission.status !== 'active' },
+                              { label: 'Stats & attempts', icon: ListChecks, onClick: () => openStats(mission) },
+                            ]}
+                            showInGroup
+                          />}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">{typeLabels[mission.type]}</Badge>
+                        <Badge variant="outline">Target: {mission.target}</Badge>
+                        {mission.max_completions_per_player !== null && (
+                          <Badge variant="outline">Max {mission.max_completions_per_player}× per player</Badge>
+                        )}
+                      </div>
 
-      <CursorPager
-        page={pager.page}
-        hasPrevious={pager.hasPrevious}
-        nextCursor={missionsData?.next_cursor}
-        onPrevious={pager.previous}
-        onNext={pager.next}
-        isFetching={isFetching}
-      />
+                      {criteriaSummary ? (
+                        <div className="space-y-1 rounded-md bg-secondary/50 p-2">
+                          <p className="text-sm font-medium flex items-center gap-1">
+                            <Zap className="w-4 h-4 text-primary" /> Auto-progress on <code className="text-xs">{criteriaSummary.eventType}</code>
+                          </p>
+                          {criteriaSummary.conditions.length > 0 && (
+                            <p className="text-xs text-muted-foreground">When {criteriaSummary.conditions.join(' and ')}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">{criteriaSummary.increment}</p>
+                        </div>
+                      ) : criteriaKeys.length > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Criteria</p>
+                          <code className="block text-xs bg-secondary rounded px-2 py-1 overflow-x-auto">
+                            {JSON.stringify(mission.criteria)}
+                          </code>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Manual progress (rules or API).</p>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 border-t border-border">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 gap-1" onClick={() => openStats(mission)}>
+                            <BarChart3 className="w-4 h-4" /> Stats
+                          </Button>
+                          {(mission.starts_at || mission.ends_at) && (
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              {mission.starts_at ? new Date(mission.starts_at).toLocaleDateString() : '…'}
+                              {' – '}
+                              {mission.ends_at ? new Date(mission.ends_at).toLocaleDateString() : '…'}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {mission.xp_reward > 0 && <Badge variant="secondary">+{mission.xp_reward} XP</Badge>}
+                          {mission.points_reward > 0 && <Badge variant="secondary">+{mission.points_reward} Points</Badge>}
+                          {reward && (
+                            <Badge variant="outline" className="border-primary/50 text-primary">🏅 {reward}</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          <CursorPager
+            page={pager.page}
+            hasPrevious={pager.hasPrevious}
+            nextCursor={missionsData?.next_cursor}
+            onPrevious={pager.previous}
+            onNext={pager.next}
+            isFetching={isFetching}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Player actions: start / progress / complete */}
       <PlayerActionDialog
@@ -752,9 +933,17 @@ export default function Missions() {
       <Dialog open={!!attemptsMission} onOpenChange={(open) => !open && setAttemptsMission(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Attempts: {attemptsMission?.name}</DialogTitle>
-            <DialogDescription>Each player's runs at this mission, newest first.</DialogDescription>
+            <DialogTitle>{attemptsMission?.name}</DialogTitle>
+            <DialogDescription>Completion analytics and each player's runs at this mission, newest first.</DialogDescription>
           </DialogHeader>
+          {missionStatsQuery.isLoading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : missionStatsQuery.error ? (
+            <p className="text-sm text-destructive">Failed to load statistics: {missionStatsQuery.error.message}</p>
+          ) : missionStatsQuery.data ? (
+            <MissionStatsSummary stats={missionStatsQuery.data} />
+          ) : null}
+          <h4 className="font-semibold text-sm pt-2">Attempts</h4>
           {attemptsQuery.isLoading ? (
             <p className="text-sm text-muted-foreground py-4">Loading attempts...</p>
           ) : attemptsQuery.error ? (

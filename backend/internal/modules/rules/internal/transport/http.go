@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/trace"
 
 	"levelup/internal/modules/rules/contracts"
 	"levelup/internal/modules/rules/internal/app"
+	"levelup/internal/modules/rules/internal/domain"
 	"levelup/internal/platform/httpx"
 	"levelup/internal/shared/errs"
 	"levelup/internal/shared/validate"
@@ -36,6 +38,7 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Get("/", h.list)
 			r.Post("/", h.create)
 			r.Post("/simulate", h.simulate)
+			r.Get("/stats", h.stats)
 			r.Get("/decisions", h.listDecisions)
 			r.Get("/decisions/{id}", h.getDecision)
 			r.Get("/{id}", h.get)
@@ -104,6 +107,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	view, err := h.svc.CreateRule(r.Context(), app.CreateRuleInput{
 		Slug: req.Slug, Name: req.Name, Description: req.Description, TriggerEvent: req.TriggerEvent,
 		ProgramID: req.ProgramID, Priority: req.Priority, Conditions: req.Conditions, Actions: req.Actions, Limits: req.Limits,
+		Schedule: req.Schedule, StopProcessing: req.StopProcessing,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -132,7 +136,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Update a rule
-// @Description  Partial update. conditions/actions/limits edit the latest version only while it is a draft (409 no_draft_version otherwise: published versions are immutable). status may be active (needs a published version), inactive or archived.
+// @Description  Partial update. conditions/actions/limits/schedule/stop_processing edit the latest version only while it is a draft (409 no_draft_version otherwise: published versions are immutable). status may be active (needs a published version), inactive or archived.
 // @Tags         rules
 // @Accept       json
 // @Produce      json
@@ -160,6 +164,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name, Description: req.Description.opt(), TriggerEvent: req.TriggerEvent,
 		ProgramID: req.ProgramID.opt(), Priority: req.Priority, Status: req.Status,
 		Conditions: req.Conditions, Actions: req.Actions, Limits: req.Limits,
+		Schedule: req.Schedule, StopProcessing: req.StopProcessing,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -232,6 +237,7 @@ func (h *Handler) createVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.svc.CreateVersion(r.Context(), chi.URLParam(r, "id"), app.CreateVersionInput{
 		FromVersion: req.FromVersion, Conditions: req.Conditions, Actions: req.Actions, Limits: req.Limits,
+		Schedule: req.Schedule, StopProcessing: req.StopProcessing,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -269,8 +275,8 @@ func (h *Handler) publish(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, toRuleView(view))
 }
 
-// @Summary      Simulate an activity against the live ruleset
-// @Description  Synchronous evaluation with no writes: no decision, no counters, no effects. Limits are reported, not enforced.
+// @Summary      Simulate an activity against the live ruleset or a draft definition
+// @Description  Synchronous evaluation with no writes: no decision, no counters, no history, no effects. Limits are reported, not enforced (stop_processing treats every match as a firing). With definition, only that unpublished body is evaluated (event_type defaults to definition.trigger_event); compile errors are 422 invalid_rule_definition with field errors under definition.*. occurred_at (default now) drives schedules and history windows; history facts are loaded for stored players only.
 // @Tags         rules
 // @Accept       json
 // @Produce      json
@@ -290,7 +296,12 @@ func (h *Handler) simulate(w http.ResponseWriter, r *http.Request) {
 	}
 	in := app.SimulateInput{
 		EventType: req.EventType, PlayerID: req.PlayerID, PlayerExternalID: req.PlayerExternalID,
-		Properties: req.Properties, Context: req.Context, CausationDepth: req.CausationDepth,
+		Properties: req.Properties, Context: req.Context, CausationDepth: req.CausationDepth, OccurredAt: req.OccurredAt,
+	}
+	if d := req.Definition; d != nil {
+		in.Definition = &app.DraftDefinition{TriggerEvent: d.TriggerEvent, Definition: domain.Definition{
+			Conditions: d.Conditions, Actions: d.Actions, Limits: d.Limits, Schedule: d.Schedule, StopProcessing: d.StopProcessing,
+		}}
 	}
 	if req.Player != nil {
 		in.Player = &app.SimPlayer{ExternalID: req.Player.ExternalID, IsActive: req.Player.IsActive,
@@ -302,6 +313,52 @@ func (h *Handler) simulate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toSimulate(res))
+}
+
+// @Summary      Rule statistics
+// @Description  Per rule over [from, to): executions by status (fired, not_matched, limited, out_of_schedule, skipped_by_stop), effects applied/rejected, and points_awarded / xp_awarded (sums of credit_points / grant_xp amounts of fired executions, whatever their settlement), plus totals. Rules are ordered by fired DESC. Defaults: to = now, from = to - 30 days; the range is at most 366 days.
+// @Tags         rules
+// @Produce      json
+// @Security     BearerAuth
+// @Param        from query string false "RFC 3339 timestamp or YYYY-MM-DD (UTC midnight)"
+// @Param        to   query string false "RFC 3339 timestamp or YYYY-MM-DD (UTC midnight), exclusive"
+// @Success      200 {object} RuleStatsResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem
+// @Router       /rules/stats [get]
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, err := timeParam(q.Get("from"), "from")
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	to, err := timeParam(q.Get("to"), "to")
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	res, err := h.svc.Stats(r.Context(), from, to)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toStats(res))
+}
+
+// timeParam parses an optional RFC 3339 timestamp or a YYYY-MM-DD date.
+func timeParam(v, name string) (*time.Time, error) {
+	if v == "" {
+		return nil, nil
+	}
+	for _, layout := range []string{time.RFC3339, time.DateOnly} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return &t, nil
+		}
+	}
+	return nil, errs.WithFields(errs.New(errs.Invalid, name+" must be an RFC 3339 timestamp or YYYY-MM-DD"),
+		map[string]string{name: "must be an RFC 3339 timestamp or YYYY-MM-DD"})
 }
 
 // @Summary      List decisions

@@ -1,7 +1,15 @@
 import { useApi } from '@/hooks/useApi';
 import { useCallback, useMemo } from 'react';
 import type { User, CreateUserData, UpdateUserData, UserFilters, CursorPage, ID } from './types';
-import { USER_ENDPOINTS, toQuery } from '@/lib/api-routes';
+import { API_VERSION, USER_ENDPOINTS, toQuery } from '@/lib/api-routes';
+import type { CreateInvitationData, Invitation, InvitationFilters } from './models/identity';
+
+/** Tenant invitations; need users.create and a signed-in user (not an API key). */
+export const INVITATION_ENDPOINTS = {
+  LIST: `${API_VERSION}/users/invitations`,
+  CREATE: `${API_VERSION}/users/invitations`,
+  REVOKE: (id: ID) => `${API_VERSION}/users/invitations/${id}`,
+} as const;
 
 /** Writes report errors to the caller, not as toasts. */
 const QUIET = { showErrorToast: false } as const;
@@ -32,8 +40,37 @@ export function useUsersService() {
     [api],
   );
 
+  /** Open invitations (pending and expired), newest first. */
+  const listInvitations = useCallback(
+    (filters?: InvitationFilters) =>
+      api.get<CursorPage<Invitation>>(`${INVITATION_ENDPOINTS.LIST}${toQuery(filters)}`),
+    [api],
+  );
+
+  /** Emails an accept link valid 7 days; re-inviting an address revokes its earlier invitation. 409 email_taken. */
+  const createInvitation = useCallback(
+    (data: CreateInvitationData) => api.post<Invitation>(INVITATION_ENDPOINTS.CREATE, data, QUIET),
+    [api],
+  );
+
+  /** Idempotent; 409 invitation_already_accepted. */
+  const revokeInvitation = useCallback(
+    (invitationId: ID) => api.delete<void>(INVITATION_ENDPOINTS.REVOKE(invitationId), QUIET),
+    [api],
+  );
+
   return useMemo(
-    () => ({ listUsers, getUser, createUser, updateUser, deleteUser, assignRoles }),
-    [listUsers, getUser, createUser, updateUser, deleteUser, assignRoles],
+    () => ({
+      listUsers,
+      getUser,
+      createUser,
+      updateUser,
+      deleteUser,
+      assignRoles,
+      listInvitations,
+      createInvitation,
+      revokeInvitation,
+    }),
+    [listUsers, getUser, createUser, updateUser, deleteUser, assignRoles, listInvitations, createInvitation, revokeInvitation],
   );
 }

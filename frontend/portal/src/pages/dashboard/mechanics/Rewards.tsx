@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Gift, Clock, Sparkles, Loader2, ShoppingCart, RefreshCw, CheckCircle2, XCircle, Ticket } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Gift, Clock, Sparkles, Loader2, ShoppingCart, RefreshCw, CheckCircle2, XCircle, Ticket, History, PackageCheck, Coins, Ban, Hourglass } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +26,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { StatCard } from '@/components/players/StatCard';
+import { StatBarChart } from '@/components/mechanics/StatBarChart';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { cn } from '@/lib/utils';
 import CursorPager from '@/components/CursorPager';
@@ -35,6 +39,8 @@ import { PlayerPicker } from '@/components/mechanics/PlayerPicker';
 import { changedFields, dateToRfc3339, optionalNumber, rfc3339ToDate } from '@/components/mechanics/patch';
 import {
   useRewardsQuery,
+  useRewardClaimsQuery,
+  useRewardStatsQuery,
   useRewardClaimQuery,
   usePlayerRewardsQuery,
   useAllBadgesQuery,
@@ -45,6 +51,7 @@ import {
   useClaimRewardMutation,
   useRedeemRewardMutation,
   useCancelRewardClaimMutation,
+  useInvalidateCreatedDraft,
   describeMechanicsError,
 } from '@/services/queries/mechanics';
 import type {
@@ -102,6 +109,24 @@ const rewardErrors: Record<string, string> = {
   player_inactive: 'This player is inactive.',
   invalid_status_transition: 'This claim cannot change to that status.',
   claim_expired: 'This claim has expired and cannot be redeemed.',
+  invalid_reward_value:
+    'A points or level reward needs a positive whole-number value: the points credited or the XP granted on redemption.',
+  invalid_limit: 'Limits, claim validity and minimum level must be at least 1.',
+  invalid_points_cost: 'The cost must be zero or positive.',
+};
+
+/** Types whose value is delivered on redemption and so must be a positive whole number. */
+const WHOLE_VALUE_TYPES: RewardType[] = ['points', 'level'];
+const isPositiveWhole = (value: string) => /^\d{1,8}(\.0{1,2})?$/.test(value) && Number(value) >= 1;
+
+/** What redeeming a reward delivers (rewards/internal/app/fulfil.go). */
+const fulfilmentHint: Record<RewardType, string> = {
+  points: 'On redemption the value is credited to the player as points.',
+  level: 'On redemption the value is granted to the player as XP.',
+  badge: 'On redemption the badge below is awarded.',
+  discount: 'The voucher code is the fulfilment; deliver the discount in your system.',
+  item: 'The voucher code is the fulfilment; ship the item from your system.',
+  custom: 'The voucher code is the fulfilment.',
 };
 
 const ALL = 'all';
@@ -149,7 +174,270 @@ const initialForm: RewardFormState = {
 /** Decimal string with at most 2 decimals and 8 integer digits (backend rule). */
 const isValidDecimal = (value: string) => /^\d{1,8}(\.\d{1,2})?$/.test(value);
 
-const formatDateTime = (value: string | null) => (value ? new Date(value).toLocaleString() : '-');
+const formatDateTime = (value: string | null | undefined) => (value ? new Date(value).toLocaleString() : '-');
+
+/** Delivery state of a claim (fulfilled_at), shown next to its status. */
+function FulfilmentCell({ claim }: { claim: RewardClaim }) {
+  if (claim.fulfilled_at) {
+    return (
+      <span className="inline-flex items-center gap-1 text-sm text-green-500" title={new Date(claim.fulfilled_at).toLocaleString()}>
+        <PackageCheck className="w-4 h-4" /> {new Date(claim.fulfilled_at).toLocaleDateString()}
+      </span>
+    );
+  }
+  return <span className="text-sm text-muted-foreground">{claim.status === 'redeemed' ? 'Pending delivery' : '-'}</span>;
+}
+
+/** Claim statistics per reward and tenant totals (GET /rewards/stats). */
+function RewardStatsPanel() {
+  const { data: stats, isLoading, error } = useRewardStatsQuery();
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28" />)}</div>
+        <Skeleton className="h-72" />
+      </div>
+    );
+  }
+  if (error || !stats) {
+    return (
+      <Card className="p-8 text-center border-destructive">
+        <p className="text-destructive">Failed to load reward statistics: {error?.message ?? 'no data'}</p>
+      </Card>
+    );
+  }
+  const ranked = [...stats.rewards].sort((a, b) => b.claimed + b.redeemed - (a.claimed + a.redeemed));
+  const chartData = ranked
+    .filter((r) => r.claimed + r.redeemed + r.expired + r.cancelled > 0)
+    .slice(0, 10)
+    .map((r) => ({ name: r.name, claimed: r.claimed, redeemed: r.redeemed }));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard icon={<Ticket className="w-6 h-6" />} iconClassName="text-blue-500" value={stats.totals.claimed} label="Claimed (open)" />
+        <StatCard icon={<CheckCircle2 className="w-6 h-6" />} iconClassName="text-green-500" value={stats.totals.redeemed} label="Redeemed" />
+        <StatCard icon={<Hourglass className="w-6 h-6" />} iconClassName="text-muted-foreground" value={stats.totals.expired} label="Expired" />
+        <StatCard icon={<Ban className="w-6 h-6" />} iconClassName="text-muted-foreground" value={stats.totals.cancelled} label="Cancelled" />
+        <StatCard icon={<Coins className="w-6 h-6" />} iconClassName="text-amber-500" value={stats.totals.points_spent} label="Points spent" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Most claimed rewards</CardTitle>
+          <CardDescription>Open claims and redemptions, top 10.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {chartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">No claims yet.</p>
+          ) : (
+            <StatBarChart
+              data={chartData}
+              xKey="name"
+              series={[
+                { key: 'claimed', label: 'Claimed', color: 'hsl(217 91% 60%)' },
+                { key: 'redeemed', label: 'Redeemed', color: 'hsl(142 71% 45%)' },
+              ]}
+              tickFormatter={(n) => (n.length > 14 ? `${n.slice(0, 13)}…` : n)}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Per reward</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {ranked.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-6 text-center">No rewards yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 text-sm font-medium text-muted-foreground">Reward</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Claimed</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Redeemed</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Expired</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Cancelled</th>
+                    <th className="text-right p-3 text-sm font-medium text-muted-foreground">Points spent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map((r) => (
+                    <tr key={r.reward_id} className="border-b border-border/50">
+                      <td className="p-3">
+                        <span className="mr-2">{typeLabels[r.type]?.icon ?? '🎁'}</span>
+                        <span className="font-medium">{r.name}</span>
+                        {r.deleted && <Badge variant="outline" className="ml-2 text-xs text-muted-foreground">Deleted</Badge>}
+                      </td>
+                      <td className="p-3 text-right font-mono">{r.claimed.toLocaleString()}</td>
+                      <td className="p-3 text-right font-mono">{r.redeemed.toLocaleString()}</td>
+                      <td className="p-3 text-right font-mono">{r.expired.toLocaleString()}</td>
+                      <td className="p-3 text-right font-mono">{r.cancelled.toLocaleString()}</td>
+                      <td className="p-3 text-right font-mono">{r.points_spent.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface RedemptionHistoryPanelProps {
+  rewards: Reward[];
+  claimActions: (claim: RewardClaim) => React.ReactNode;
+}
+
+/** Tenant-wide redemption history (GET /rewards/claims), newest first, with filters. */
+function RedemptionHistoryPanel({ rewards, claimActions }: RedemptionHistoryPanelProps) {
+  const [status, setStatus] = useState<string>(ALL);
+  const [rewardId, setRewardId] = useState<string>(ALL);
+  const [playerId, setPlayerId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const pager = useCursorPagination(25);
+  const filtered = (setter: (v: string) => void) => (v: string) => {
+    setter(v);
+    pager.reset();
+  };
+  // "to" is exclusive on the API: include the whole picked day.
+  const toExclusive = to ? new Date(new Date(`${to}T00:00:00Z`).getTime() + 86_400_000).toISOString() : undefined;
+  const { data, isLoading, isFetching, error, refetch } = useRewardClaimsQuery({
+    limit: pager.limit,
+    cursor: pager.cursor,
+    status: status === ALL ? undefined : (status as RewardClaimStatus),
+    reward_id: rewardId === ALL ? undefined : rewardId,
+    player_id: playerId || undefined,
+    from: dateToRfc3339(from),
+    to: toExclusive,
+  });
+  const claims = data?.data ?? [];
+  const rewardName = (claim: RewardClaim) => rewards.find((r) => r.id === claim.reward_id)?.name ?? claim.reward_slug;
+  const hasFilters = status !== ALL || rewardId !== ALL || !!playerId || !!from || !!to;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><History className="w-5 h-5" /> Redemption history</CardTitle>
+        <CardDescription>Every claim across all players, newest first.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+          <div className="space-y-2">
+            <Label htmlFor="history-status">Status</Label>
+            <Select value={status} onValueChange={filtered(setStatus)}>
+              <SelectTrigger id="history-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All statuses</SelectItem>
+                {(Object.keys(claimStatusClass) as RewardClaimStatus[]).map((st) => (
+                  <SelectItem key={st} value={st} className="capitalize">{st.replace('_', ' ')}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="history-reward">Reward</Label>
+            <Select value={rewardId} onValueChange={filtered(setRewardId)}>
+              <SelectTrigger id="history-reward"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All rewards</SelectItem>
+                {rewards.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="history-from">From</Label>
+            <Input id="history-from" type="date" value={from} onChange={(e) => filtered(setFrom)(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="history-to">To</Label>
+            <Input id="history-to" type="date" value={to} onChange={(e) => filtered(setTo)(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="w-full max-w-md">
+            <PlayerPicker id="history-player" label="Player (optional)" value={playerId} onChange={filtered(setPlayerId)} />
+          </div>
+          {hasFilters && (
+            <Button
+              variant="ghost"
+              onClick={() => { setStatus(ALL); setRewardId(ALL); setPlayerId(''); setFrom(''); setTo(''); pager.reset(); }}
+            >
+              Clear filters
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="sm:ml-auto">
+            <RefreshCw className={cn('w-4 h-4 mr-1', isFetching && 'animate-spin')} /> Refresh
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : error ? (
+          <p className="text-sm text-destructive">Failed to load claims: {error.message}</p>
+        ) : claims.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            {hasFilters ? 'No claims match these filters.' : 'No reward has been claimed yet.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Reward</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Player</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Cost</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Status</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Code</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Created</th>
+                  <th className="text-left p-3 text-sm font-medium text-muted-foreground">Fulfilled</th>
+                  <th className="text-right p-3 text-sm font-medium text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.map((claim) => (
+                  <tr key={claim.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                    <td className="p-3 font-medium">{rewardName(claim)}</td>
+                    <td className="p-3">
+                      <Link to={`/players/${claim.player_id}`} className="text-xs font-mono text-primary hover:underline">
+                        {claim.player_id.slice(0, 8)}…
+                      </Link>
+                    </td>
+                    <td className="p-3"><Badge variant="secondary" className="font-mono">{claim.points_cost.toLocaleString()} pts</Badge></td>
+                    <td className="p-3">
+                      <ClaimStatusBadge status={claim.status} />
+                      {claim.status === 'rejected' && claim.reject_reason && (
+                        <p className="text-xs text-muted-foreground mt-1">{claim.reject_reason}</p>
+                      )}
+                    </td>
+                    <td className="p-3"><code className="text-sm">{claim.code ?? '-'}</code></td>
+                    <td className="p-3 text-sm text-muted-foreground">{formatDateTime(claim.created_at)}</td>
+                    <td className="p-3"><FulfilmentCell claim={claim} /></td>
+                    <td className="p-3">{claimActions(claim)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <CursorPager
+          page={pager.page}
+          hasPrevious={pager.hasPrevious}
+          nextCursor={data?.next_cursor}
+          onPrevious={pager.previous}
+          onNext={pager.next}
+          isFetching={isFetching}
+        />
+      </CardContent>
+    </Card>
+  );
+}
 
 function ClaimStatusBadge({ status }: { status: RewardClaimStatus }) {
   return (
@@ -161,6 +449,7 @@ function ClaimStatusBadge({ status }: { status: RewardClaimStatus }) {
 
 export default function Rewards() {
   const { toast } = useToast();
+  const invalidateCreatedDraft = useInvalidateCreatedDraft();
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [typeFilter, setTypeFilter] = useState<string>(ALL);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -171,6 +460,8 @@ export default function Rewards() {
   const [claimsPlayerId, setClaimsPlayerId] = useState('');
   const pager = useCursorPagination(24);
   const claimsPager = useCursorPagination(20);
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
 
   const filters: RewardFilters = {
     limit: pager.limit,
@@ -257,6 +548,10 @@ export default function Rewards() {
       toast({ title: 'Validation Error', description: rewardErrors.invalid_value, variant: 'destructive' });
       return;
     }
+    if (WHOLE_VALUE_TYPES.includes(form.type) && form.value && !isPositiveWhole(form.value)) {
+      toast({ title: 'Validation Error', description: rewardErrors.invalid_reward_value, variant: 'destructive' });
+      return;
+    }
     try {
       if (editingReward) {
         const next: UpdateRewardData = formToData();
@@ -331,15 +626,11 @@ export default function Rewards() {
     }
   };
 
-  const handleAIGenerate = async (prompt: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return `Generated Reward Idea:\n\n"${prompt}"\n\nName: Exclusive Perk\nDescription: A unique reward that drives user engagement.\nSuggested cost: 2,500 points\nType: Custom`;
-  };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const hasFilters = statusFilter !== ALL || typeFilter !== ALL;
 
-  const claimActions = (claim: RewardClaim) => (
+  const claimActions = (claim: RewardClaim) => !canManage ? null : (
     <div className="flex justify-end gap-2">
       {claim.status === 'claimed' && (
         <Button size="sm" variant="outline" onClick={() => handleRedeem(claim)} disabled={redeemMutation.isPending}>
@@ -361,7 +652,7 @@ export default function Rewards() {
           <h1 className="text-3xl font-bold">Rewards Catalog</h1>
           <p className="text-muted-foreground mt-1">Manage rewards and player claims.</p>
         </div>
-        <div className="flex gap-2">
+        {canManage && <div className="flex gap-2">
           <AIGenerateDialog
             trigger={
               <Button variant="outline" className="gap-2">
@@ -372,13 +663,14 @@ export default function Rewards() {
             title="Generate Reward Ideas"
             placeholder="E.g., Create a reward for loyal customers that feels exclusive..."
             context="Generate reward names, descriptions, pricing, and types"
-            onGenerate={handleAIGenerate}
+            kind="reward"
+            onCreated={invalidateCreatedDraft}
           />
           <Button variant="glow" onClick={openCreate}>
             <Plus className="w-4 h-4" />
             Add Reward
           </Button>
-        </div>
+        </div>}
       </div>
 
       {/* Create / Edit dialog */}
@@ -440,14 +732,16 @@ export default function Rewards() {
                   <Label htmlFor="reward-value">Value</Label>
                   <Input
                     id="reward-value"
-                    inputMode="decimal"
-                    placeholder="e.g., 10 or 12.50"
+                    inputMode={WHOLE_VALUE_TYPES.includes(form.type) ? 'numeric' : 'decimal'}
+                    placeholder={form.type === 'points' ? 'Points credited, e.g. 500' : form.type === 'level' ? 'XP granted, e.g. 1000' : 'e.g., 10 or 12.50'}
                     value={form.value}
                     onChange={(e) => setForm({ ...form, value: e.target.value.trim() })}
                   />
-                  {form.value && !isValidDecimal(form.value) && (
+                  {form.value && !isValidDecimal(form.value) ? (
                     <p className="text-xs text-destructive">At most 2 decimals, e.g. 10 or 12.50.</p>
-                  )}
+                  ) : form.value && WHOLE_VALUE_TYPES.includes(form.type) && !isPositiveWhole(form.value) ? (
+                    <p className="text-xs text-destructive">Must be a positive whole number for {form.type} rewards.</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reward-value-type">Value type</Label>
@@ -461,6 +755,7 @@ export default function Rewards() {
                   </Select>
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground -mt-2">{fulfilmentHint[form.type]}</p>
               {form.type === 'badge' && (
                 <div className="space-y-2">
                   <Label htmlFor="reward-badge">Badge granted</Label>
@@ -544,6 +839,8 @@ export default function Rewards() {
                     ? 'Points are being debited; this updates automatically.'
                     : trackedClaim.data.status === 'rejected'
                     ? `Rejected${trackedClaim.data.reject_reason ? `: ${trackedClaim.data.reject_reason}` : ''}`
+                    : trackedClaim.data.fulfilled_at
+                    ? `Delivered ${formatDateTime(trackedClaim.data.fulfilled_at)}${trackedClaim.data.code ? ` · code ${trackedClaim.data.code}` : ''}`
                     : trackedClaim.data.code
                     ? `Code: ${trackedClaim.data.code}`
                     : `${trackedClaim.data.points_cost.toLocaleString()} points`}
@@ -563,10 +860,20 @@ export default function Rewards() {
       )}
 
       <Tabs defaultValue="catalog" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="catalog">Catalog</TabsTrigger>
+          <TabsTrigger value="history">Redemption History</TabsTrigger>
           <TabsTrigger value="claims">Player Claims</TabsTrigger>
+          <TabsTrigger value="stats">Statistics</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="history">
+          <RedemptionHistoryPanel rewards={rewards} claimActions={claimActions} />
+        </TabsContent>
+
+        <TabsContent value="stats">
+          <RewardStatsPanel />
+        </TabsContent>
 
         <TabsContent value="catalog" className="space-y-4">
           {/* Filters (server-side: ?status&type) */}
@@ -627,13 +934,15 @@ export default function Rewards() {
                         </div>
                         <div className="flex items-center gap-1">
                           <Badge variant="outline" className="capitalize">{reward.status}</Badge>
-                          <ItemActionsMenu
-                            itemName={reward.name}
-                            onEdit={() => openEdit(reward)}
-                            onDelete={() => handleDelete(reward)}
-                            actions={[{ label: 'Claim for player', icon: ShoppingCart, onClick: () => setClaimingReward(reward), disabled: !claimable }]}
-                            showInGroup
-                          />
+                          {canManage && (
+                            <ItemActionsMenu
+                              itemName={reward.name}
+                              onEdit={() => openEdit(reward)}
+                              onDelete={() => handleDelete(reward)}
+                              actions={[{ label: 'Claim for player', icon: ShoppingCart, onClick: () => setClaimingReward(reward), disabled: !claimable }]}
+                              showInGroup
+                            />
+                          )}
                         </div>
                       </div>
                       <h3 className="font-semibold text-lg mb-1">{reward.name}</h3>
@@ -707,6 +1016,7 @@ export default function Rewards() {
                         <th className="text-left p-3 text-sm font-medium text-muted-foreground">Status</th>
                         <th className="text-left p-3 text-sm font-medium text-muted-foreground">Code</th>
                         <th className="text-left p-3 text-sm font-medium text-muted-foreground">Claimed</th>
+                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">Fulfilled</th>
                         <th className="text-right p-3 text-sm font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
@@ -720,6 +1030,7 @@ export default function Rewards() {
                           <td className="p-3"><ClaimStatusBadge status={claim.status} /></td>
                           <td className="p-3"><code className="text-sm">{claim.code ?? '-'}</code></td>
                           <td className="p-3 text-sm text-muted-foreground">{formatDateTime(claim.claimed_at ?? claim.created_at)}</td>
+                          <td className="p-3"><FulfilmentCell claim={claim} /></td>
                           <td className="p-3">{claimActions(claim)}</td>
                         </tr>
                       ))}

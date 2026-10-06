@@ -56,9 +56,12 @@ func (c Category) Valid() bool { return categories[c] }
 
 // Badge is a tenant's badge definition.
 //
-// Requirements is stored and returned verbatim but NEVER evaluated: rules
-// (and missions, rewards, progression) decide awards and issue
-// job.badges.award. This matches Laravel, where the column was opaque.
+// Requirements, when set, follows the grammar in requirements.go and is
+// evaluated by badges itself against its per-player stats projection: a
+// player meeting it is awarded the badge automatically, once. Rows written
+// before the grammar existed are returned verbatim and simply never match
+// (Laravel stored the column opaquely). Rules, missions, rewards and
+// progression still award explicitly through job.badges.award.
 type Badge struct {
 	ID           string
 	TenantID     string
@@ -131,6 +134,11 @@ func NewBadge(p NewBadgeParams, now time.Time) (Badge, error) {
 	} else {
 		b.PointsValue = b.Tier.DefaultPoints()
 	}
+	req, err := checkRequirements(p.Requirements)
+	if err != nil {
+		return Badge{}, err
+	}
+	b.Requirements = req
 	if err := b.validate(); err != nil {
 		return Badge{}, err
 	}
@@ -189,7 +197,11 @@ func (b *Badge) Apply(p Patch, now time.Time) error {
 		next.MaxAwards = p.MaxAwards
 	}
 	if p.RequirementsSet {
-		next.Requirements = p.Requirements
+		req, err := checkRequirements(p.Requirements)
+		if err != nil {
+			return err
+		}
+		next.Requirements = req
 	}
 	if p.Active != nil {
 		next.Active = *p.Active
@@ -228,6 +240,28 @@ func (b Badge) validate() error {
 		return ErrInvalidMaxAwards
 	}
 	return nil
+}
+
+// checkRequirements validates requirements written by a client. An empty
+// object is stored as no requirements.
+func checkRequirements(raw map[string]any) (map[string]any, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if _, _, err := ParseRequirements(raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+// AutoRequirements returns the evaluable requirements of the badge.
+// ok=false when it has none, or holds a pre-grammar value that is ignored.
+func (b Badge) AutoRequirements() (Requirements, bool) {
+	req, ok, err := ParseRequirements(b.Requirements)
+	if err != nil {
+		return Requirements{}, false
+	}
+	return req, ok
 }
 
 // Deleted reports whether the badge was soft-deleted.

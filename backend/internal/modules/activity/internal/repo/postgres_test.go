@@ -220,3 +220,43 @@ func TestDeleteTenantAndMarkers(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, at.Add(time.Minute).Equal(last))
 }
+
+func TestLastSeenPicksNewestPerPlayerWithinTenant(t *testing.T) {
+	r, db := setupRepo(t)
+	ctx := context.Background()
+	tenant, other := id.NewID(), id.NewID()
+	p1, p2, p3 := id.NewID(), id.NewID(), id.NewID()
+	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+
+	add := func(tenantID, playerID, eventType string, occurred time.Time) {
+		a := newActivity(t, tenantID, id.NewID(), at)
+		a.PlayerID = playerID
+		a.EventType = eventType
+		a.OccurredAt = occurred
+		require.True(t, insert(t, r, db, a))
+	}
+	add(tenant, p1, "login", at)
+	add(tenant, p1, "purchase_completed", at.Add(2*time.Hour))
+	add(tenant, p1, "login", at.Add(time.Hour)) // inserted later, occurred earlier
+	add(tenant, p2, "login", at.Add(3*time.Hour))
+	add(other, p3, "login", at.Add(5*time.Hour))
+	add(tenant, "", "login", at.Add(6*time.Hour)) // unresolved
+
+	got, err := r.LastSeen(ctx, tenant, []string{p1, p2, p3})
+	require.NoError(t, err)
+	byID := map[string]domain.LastSeen{}
+	for _, g := range got {
+		byID[g.PlayerID] = g
+	}
+	require.Len(t, byID, 2, "p3 belongs to another tenant")
+	require.Equal(t, domain.LastSeen{PlayerID: p1, At: at.Add(2 * time.Hour), EventType: "purchase_completed"}, byID[p1])
+	require.Equal(t, domain.LastSeen{PlayerID: p2, At: at.Add(3 * time.Hour), EventType: "login"}, byID[p2])
+
+	none, err := r.LastSeen(ctx, tenant, nil)
+	require.NoError(t, err)
+	require.Empty(t, none)
+
+	var idx int64
+	require.NoError(t, db.Raw(`SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_activities_tenant_player_occurred'`).Scan(&idx).Error)
+	require.EqualValues(t, 1, idx, "migration 0004 created the index")
+}

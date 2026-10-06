@@ -50,9 +50,9 @@ func newHarness(t *testing.T, enf authz.Enforcer) *harness {
 	repo, ob := newFakeRepo(), &fakeOutbox{}
 	c := clock.NewFake(start)
 	players := &fakePlayers{players: map[string]ports.PlayerSnapshot{
-		player1:  {ID: player1, TenantID: tenantA, Active: true},
-		player2:  {ID: player2, TenantID: tenantA, Active: true},
-		inactive: {ID: inactive, TenantID: tenantA, Active: false},
+		player1:  {ID: player1, TenantID: tenantA, ExternalID: "ext-1", Active: true},
+		player2:  {ID: player2, TenantID: tenantA, ExternalID: "ext-2", Active: true},
+		inactive: {ID: inactive, TenantID: tenantA, ExternalID: "ext-inactive", Active: false},
 	}}
 	svc := NewService(repo, players, ob, enf, nil, c, 2)
 	svc.tx = func(_ context.Context, fn func(tx *gorm.DB) error) error { return fn(nil) }

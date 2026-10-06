@@ -30,7 +30,7 @@ import (
 
 // allModules is the production MODULES_ENABLED, in dependency order.
 var allModules = []string{
-	"identity", "player", "eventcatalog", "program", "points", "badges", "progression", "streaks", "missions", "rewards", "leaderboards", "activity", "rules",
+	"identity", "player", "eventcatalog", "program", "points", "badges", "progression", "streaks", "missions", "rewards", "leaderboards", "activity", "rules", "segments", "analytics", "webhooks", "notifications", "ai",
 }
 
 // offlinePlatform builds a Platform whose clients never dial: constructors

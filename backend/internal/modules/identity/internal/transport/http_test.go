@@ -31,6 +31,15 @@ func TestRequestShapeValidation(t *testing.T) {
 		"users anonymous":             {"GET", "/users", ``, 401},
 		"tenant anonymous":            {"GET", "/tenant", ``, 401},
 		"platform anonymous":          {"GET", "/platform/tenants", ``, 401},
+		"forgot bad email":            {"POST", "/auth/forgot-password", `{"email":"nope"}`, 422},
+		"reset short password":        {"POST", "/auth/reset-password", `{"token":"t","password":"short"}`, 422},
+		"reset missing token":         {"POST", "/auth/reset-password", `{"password":"long-enough"}`, 422},
+		"verify missing token":        {"POST", "/auth/verify-email", `{}`, 422},
+		"resend anonymous":            {"POST", "/auth/resend-verification", ``, 401},
+		"accept mismatched confirm":   {"POST", "/auth/accept-invite", `{"token":"t","password":"long-enough","password_confirmation":"other-value"}`, 422},
+		"invitations anonymous":       {"GET", "/users/invitations", ``, 401},
+		"invite anonymous":            {"POST", "/users/invitations", `{}`, 401},
+		"revoke invite anonymous":     {"DELETE", "/users/invitations/x", ``, 401},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 		rec := httptest.NewRecorder()

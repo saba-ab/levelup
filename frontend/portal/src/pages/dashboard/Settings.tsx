@@ -38,6 +38,9 @@ import {
   UserCheck,
   Loader2,
   KeyRound,
+  Mail,
+  Send,
+  Ban,
 } from 'lucide-react';
 import { useAuthService } from '@/services/api/auth';
 import {
@@ -46,7 +49,11 @@ import {
   useUpdateUserMutation,
   useAssignUserRolesMutation,
   useDeleteUserMutation,
+  useInvitationsQuery,
+  useCreateInvitationMutation,
+  useRevokeInvitationMutation,
 } from '@/services/queries/users';
+import type { Invitation } from '@/services/api/models/identity';
 import { ApiRequestError } from '@/services/queries/rules';
 import { ROLE_IDS } from '@/services/api/types';
 import type { RoleKey, Tenant, User } from '@/services/api/types';
@@ -244,6 +251,273 @@ function GeneralSettings({ canManage }: { canManage: boolean }) {
   );
 }
 
+function TeamInvitations({ inviteOpen, setInviteOpen }: { inviteOpen: boolean; setInviteOpen: (open: boolean) => void }) {
+  const { toast } = useToast();
+  const pager = useCursorPagination(10);
+  const { data, isLoading, isFetching, error, refetch } = useInvitationsQuery({ limit: pager.limit, cursor: pager.cursor });
+  const createInvitation = useCreateInvitationMutation();
+  const revokeInvitation = useRevokeInvitationMutation();
+  const [form, setForm] = useState({ email: '', name: '', role: 'developer' as RoleKey });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<Invitation | null>(null);
+
+  const invitations = data?.data ?? [];
+
+  const closeInvite = (open: boolean) => {
+    setInviteOpen(open);
+    if (!open) {
+      setForm({ email: '', name: '', role: 'developer' });
+      setFormError(null);
+    }
+  };
+
+  const handleInvite = async () => {
+    setFormError(null);
+    const email = form.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFormError('Please enter a valid email address.');
+      return;
+    }
+    try {
+      await createInvitation.mutateAsync({
+        email,
+        name: form.name.trim() || undefined,
+        role_ids: [ROLE_IDS[form.role]],
+      });
+      pager.reset();
+      toast({ title: 'Invitation sent', description: `${email} will get an email with a link to join (valid 7 days).` });
+      closeInvite(false);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.code === 'email_taken') {
+        setFormError('Someone with this email already has an account.');
+        return;
+      }
+      setFormError(errorText(err, 'Failed to send invitation'));
+    }
+  };
+
+  const handleResend = async (invitation: Invitation) => {
+    const role = invitation.roles.map(r => r.key).find(k => ASSIGNABLE_ROLES.includes(k));
+    try {
+      await createInvitation.mutateAsync({
+        email: invitation.email,
+        name: invitation.name || undefined,
+        role_ids: invitation.role_ids.length > 0 ? invitation.role_ids : [ROLE_IDS[role ?? 'developer']],
+      });
+      toast({ title: 'Invitation resent', description: `A new link was emailed to ${invitation.email}; the old one no longer works.` });
+    } catch (err) {
+      toast({ title: 'Error', description: errorText(err, 'Failed to resend invitation'), variant: 'destructive' });
+    }
+  };
+
+  const handleRevoke = async () => {
+    if (!revokeTarget) return;
+    const invitation = revokeTarget;
+    setRevokeTarget(null);
+    try {
+      await revokeInvitation.mutateAsync(invitation.id);
+      toast({ title: 'Invitation revoked', description: `The link sent to ${invitation.email} no longer works.` });
+    } catch (err) {
+      toast({ title: 'Error', description: errorText(err, 'Failed to revoke invitation'), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Pending Invitations</CardTitle>
+            <CardDescription>People invited by email who haven't joined yet. Links are valid for 7 days.</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
+            <Mail className="h-4 w-4 mr-2" />
+            Invite by Email
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invitee</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Invited</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <Skeleton className="h-8 w-full" />
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center">
+                    <p className="text-destructive">{error.message}</p>
+                    <Button variant="link" size="sm" onClick={() => refetch()}>
+                      Retry
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ) : invitations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No pending invitations. Invite teammates by email and they'll set their own password.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                invitations.map(invitation => {
+                  const role = invitation.roles[0]?.key;
+                  const cfg = role ? roleConfig[role] : undefined;
+                  const expired = invitation.status === 'expired';
+                  return (
+                    <TableRow key={invitation.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{invitation.name || invitation.email}</p>
+                          {invitation.name && <p className="text-sm text-muted-foreground">{invitation.email}</p>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {cfg ? (
+                          <Badge variant="outline" className={`${cfg.color} gap-1`}>
+                            {cfg.icon}
+                            {cfg.label}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">No role</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(invitation.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(invitation.expires_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={expired ? 'secondary' : 'default'}>{invitation.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleResend(invitation)} disabled={createInvitation.isPending}>
+                              <Send className="h-4 w-4 mr-2" />
+                              {expired ? 'Send new invitation' : 'Resend invitation'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive" onClick={() => setRevokeTarget(invitation)}>
+                              <Ban className="h-4 w-4 mr-2" />
+                              Revoke
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+          <CursorPager
+            page={pager.page}
+            hasPrevious={pager.hasPrevious}
+            nextCursor={data?.next_cursor}
+            onPrevious={pager.previous}
+            onNext={pager.next}
+            isFetching={isFetching}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Invite by email */}
+      <Dialog open={inviteOpen} onOpenChange={closeInvite}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite by Email</DialogTitle>
+            <DialogDescription>
+              We email them a link to join this tenant and choose their own password. Re-inviting an address replaces its
+              earlier invitation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                placeholder="teammate@company.com"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                maxLength={255}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Name <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} maxLength={255} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v as RoleKey }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNABLE_ROLES.map(r => (
+                    <SelectItem key={r} value={r}>
+                      {roleConfig[r].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{roleConfig[form.role].description}</p>
+            </div>
+            {formError && <p className="text-sm text-destructive whitespace-pre-line">{formError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => closeInvite(false)}>
+              Cancel
+            </Button>
+            <Button variant="glow" onClick={handleInvite} disabled={createInvitation.isPending}>
+              {createInvitation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Send Invitation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revoke */}
+      <AlertDialog open={!!revokeTarget} onOpenChange={o => !o && setRevokeTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke invitation for {revokeTarget?.email}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The emailed link stops working immediately. You can invite them again later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevoke}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Revoke
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function TeamSettings() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -255,6 +529,7 @@ function TeamSettings() {
   const deleteUser = useDeleteUserMutation();
 
   const [addOpen, setAddOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'developer' as RoleKey });
   const [addError, setAddError] = useState<string | null>(null);
   const [editMember, setEditMember] = useState<User | null>(null);
@@ -338,10 +613,16 @@ function TeamSettings() {
             <CardTitle>Team Members</CardTitle>
             <CardDescription>Manage who has access to this tenant.</CardDescription>
           </div>
-          <Button variant="glow" size="sm" onClick={() => setAddOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Add Member
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setInviteOpen(true)}>
+              <Mail className="h-4 w-4 mr-2" />
+              Invite by Email
+            </Button>
+            <Button variant="glow" size="sm" onClick={() => setAddOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Member
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -461,6 +742,8 @@ function TeamSettings() {
           />
         </CardContent>
       </Card>
+
+      <TeamInvitations inviteOpen={inviteOpen} setInviteOpen={setInviteOpen} />
 
       <Card>
         <CardHeader>

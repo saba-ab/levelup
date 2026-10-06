@@ -30,12 +30,14 @@ var now = time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 type server struct {
 	router http.Handler
 	ob     *testfakes.Outbox
+	repo   *testfakes.Repo
 }
 
 func newServer(t *testing.T) *server {
 	t.Helper()
 	ob := &testfakes.Outbox{}
-	svc := app.NewService(testfakes.NewRepo(),
+	repo := testfakes.NewRepo()
+	svc := app.NewService(repo,
 		&testfakes.Players{ByExt: map[string]ports.PlayerSnapshot{}},
 		&testfakes.EventTypes{Types: map[string]ports.EventTypeSnapshot{
 			"purchase_completed": {Slug: "purchase_completed", Active: true},
@@ -52,7 +54,7 @@ func newServer(t *testing.T) *server {
 		nil, app.WithTx(testfakes.PassThroughTx))
 	r := chi.NewRouter()
 	NewHandler(svc, validate.New()).Mount(r)
-	return &server{router: r, ob: ob}
+	return &server{router: r, ob: ob, repo: repo}
 }
 
 func (s *server) do(t *testing.T, method, path string, body any, authed bool) *httptest.ResponseRecorder {
@@ -202,4 +204,34 @@ func TestGetAndList(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	rec = s.do(t, http.MethodGet, "/activities?status=nope", nil, true)
 	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func TestLastSeenEndpoint(t *testing.T) {
+	s := newServer(t)
+	const p1 = "0198d000-0000-7000-8000-0000000000a1"
+	const p2 = "0198d000-0000-7000-8000-0000000000a2"
+	s.repo.Rows["0198d000-0000-7000-8000-0000000000f1"] = domain.Activity{
+		ID: "0198d000-0000-7000-8000-0000000000f1", TenantID: tenantA, EventID: "e1", EventType: "login",
+		PlayerID: p1, OccurredAt: now, ReceivedAt: now, CreatedAt: now, Status: domain.StatusPending,
+	}
+
+	rec := s.do(t, http.MethodGet, "/activities/last-seen?player_ids="+p1+","+p2, nil, true)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var out LastSeenListResp
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.Equal(t, []LastSeenResp{{PlayerID: p1, LastActivityAt: now, LastEventType: "login"}}, out.Data)
+
+	rec = s.do(t, http.MethodGet, "/activities/last-seen?player_ids="+p2, nil, true)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"data":[]}`, rec.Body.String(), "never seen: empty array, not null")
+
+	rec = s.do(t, http.MethodGet, "/activities/last-seen", nil, true)
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	require.Contains(t, rec.Body.String(), "invalid_player_ids")
+
+	rec = s.do(t, http.MethodGet, "/activities/last-seen?player_ids=x", nil, true)
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+
+	rec = s.do(t, http.MethodGet, "/activities/last-seen?player_ids="+p1, nil, false)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }

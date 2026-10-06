@@ -16,6 +16,8 @@ import {
   Gauge,
   History,
   Braces,
+  CalendarClock,
+  OctagonX,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,27 +49,42 @@ import type {
   ConditionOperator,
   ConditionSource,
   CursorPage,
-  Rule,
   RuleAction,
   RuleActionType,
   RuleConditions,
   RuleLimits,
-  UpdateRuleData,
 } from '@/services/api/types';
+import type {
+  DraftRuleDefinition,
+  HistoryLeaf,
+  HistoryWindow,
+  RuleSchedule,
+  RuleV2,
+  RuleWeekday,
+  UpdateRuleDataV2,
+} from '@/services/api/models/rules';
 import RuleSimulator from '@/components/RuleSimulator';
 
 // ==================== builder model ====================
 
 type ValueKind = 'text' | 'number' | 'boolean' | 'list';
 
+/** Grammar v2 adds "history" (aggregates over the player's past activity). */
+type BuilderSource = ConditionSource | 'history';
+
 interface ConditionRow {
   id: string;
-  source: ConditionSource;
+  source: BuilderSource;
+  /** For history: first_time | count. */
   field: string;
   operator: ConditionOperator;
   value: string;
   kind: ValueKind;
   negate: boolean;
+  /** history.count only: blank = the trigger event. */
+  eventType: string;
+  /** history.count only. */
+  window: HistoryWindow;
 }
 
 interface ActionRow {
@@ -104,11 +121,33 @@ const OPERATORS = Object.keys(operatorLabels) as ConditionOperator[];
 const NO_VALUE: ConditionOperator[] = ['exists', 'not_exists'];
 const LIST_OPS: ConditionOperator[] = ['in', 'not_in'];
 
-const sourceLabels: Record<ConditionSource, string> = {
+const sourceLabels: Record<BuilderSource, string> = {
   trigger: 'Event property',
   player: 'Player',
   activity: 'Activity',
+  history: 'Player history',
 };
+
+const HISTORY_OPS: ConditionOperator[] = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'not_in'];
+const windowLabels: Record<HistoryWindow, string> = {
+  '1d': 'today (UTC day)',
+  '7d': 'last 7 days',
+  '30d': 'last 30 days',
+  '90d': 'last 90 days',
+  all: 'all time',
+};
+const HISTORY_WINDOWS = Object.keys(windowLabels) as HistoryWindow[];
+const EVENT_SLUG_RE = /^[a-z0-9_.:-]+$/;
+
+const WEEKDAYS: { day: RuleWeekday; label: string }[] = [
+  { day: 1, label: 'Mon' },
+  { day: 2, label: 'Tue' },
+  { day: 3, label: 'Wed' },
+  { day: 4, label: 'Thu' },
+  { day: 5, label: 'Fri' },
+  { day: 6, label: 'Sat' },
+  { day: 0, label: 'Sun' },
+];
 
 const PLAYER_FIELDS = ['level', 'xp', 'points', 'is_active', 'external_id', 'display_name', 'email', 'id', 'attributes.'];
 const ACTIVITY_FIELDS = ['event_type', 'event_id', 'causation_depth', 'properties.', 'context.'];
@@ -179,7 +218,26 @@ function rowValue(row: ConditionRow): unknown {
   return parseScalar(row.value, row.kind);
 }
 
+/** The v1 ConditionNode type predates history leaves; the server grammar accepts both. */
+function historyNode(leaf: HistoryLeaf): ConditionNode {
+  return leaf as unknown as ConditionNode;
+}
+
 function rowToLeaf(row: ConditionRow): ConditionNode {
+  if (row.source === 'history') {
+    const leaf: HistoryLeaf =
+      row.field === 'first_time'
+        ? { source: 'history', field: 'first_time', operator: row.operator === 'neq' ? 'neq' : 'eq', value: row.value !== 'false' }
+        : {
+            source: 'history',
+            field: 'count',
+            window: row.window,
+            operator: row.operator as Exclude<HistoryLeaf['operator'], undefined>,
+            value: rowValue(row) as number | number[],
+            ...(row.eventType.trim() ? { event_type: row.eventType.trim() } : {}),
+          };
+    return row.negate ? { not: historyNode(leaf) } : historyNode(leaf);
+  }
   const leaf: ConditionLeaf = { source: row.source, field: row.field.trim(), operator: row.operator };
   const value = rowValue(row);
   if (value !== undefined) leaf.value = value;
@@ -211,17 +269,51 @@ function leafToRow(n: unknown): ConditionRow | null {
     node = (node as { not: unknown }).not;
   }
   if (!isLeaf(node)) return null;
-  const leaf = node as ConditionLeaf & { type?: ConditionSource };
+  const leaf = node as Omit<ConditionLeaf, 'source'> & {
+    source?: string;
+    type?: string;
+    event_type?: string;
+    window?: string;
+  };
+  const source = leaf.source ?? leaf.type ?? 'trigger';
+  if (!(source in sourceLabels)) return null;
+  if (source === 'history') {
+    if (leaf.field === 'first_time') {
+      return {
+        ...emptyCondition('history'),
+        operator: leaf.operator === 'neq' ? 'neq' : 'eq',
+        value: leaf.value === false ? 'false' : 'true',
+        negate,
+      };
+    }
+    if (leaf.field !== 'count' || !HISTORY_OPS.includes(leaf.operator)) return null;
+    return {
+      ...emptyCondition('history'),
+      field: 'count',
+      operator: leaf.operator,
+      value: valueToString(leaf.value),
+      kind: Array.isArray(leaf.value) ? 'list' : 'number',
+      eventType: leaf.event_type ?? '',
+      window: (HISTORY_WINDOWS as string[]).includes(leaf.window ?? '') ? (leaf.window as HistoryWindow) : '7d',
+      negate,
+    };
+  }
   const operator = (OPERATORS.includes(leaf.operator) ? leaf.operator : 'eq') as ConditionOperator;
   return {
-    id: newId(),
-    source: leaf.source ?? leaf.type ?? 'trigger',
+    ...emptyCondition(source as ConditionSource),
     field: leaf.field,
     operator,
     value: valueToString(leaf.value),
     kind: kindOf(leaf.value),
     negate,
   };
+}
+
+/** A fresh row for a source; history starts as "first time". */
+function emptyCondition(source: BuilderSource): ConditionRow {
+  const base = { id: newId(), source, negate: false, eventType: '', window: '7d' as HistoryWindow };
+  if (source === 'history') return { ...base, field: 'first_time', operator: 'eq', value: 'true', kind: 'boolean' };
+  return { ...base, field: '', operator: 'eq', value: '', kind: 'text' };
 }
 
 /** Stored conditions -> builder rows, or null when the tree is too complex for the form. */
@@ -289,6 +381,14 @@ function actionProblem(r: ActionRow): string | null {
 }
 
 function conditionProblem(r: ConditionRow): string | null {
+  if (r.source === 'history') {
+    if (r.field === 'first_time') return null;
+    if (r.eventType.trim() && !EVENT_SLUG_RE.test(r.eventType.trim())) return 'Event type must be an event slug.';
+    const items = LIST_OPS.includes(r.operator) ? r.value.split(',').map(v => v.trim()).filter(Boolean) : [r.value.trim()];
+    if (items.length === 0 || items.some(v => !v)) return 'Value is required.';
+    if (items.some(v => Number.isNaN(Number(v)))) return 'Count must be a number.';
+    return null;
+  }
   if (!r.field.trim()) return 'Field is required.';
   if (NO_VALUE.includes(r.operator)) return null;
   if (!r.value.trim()) return 'Value is required.';
@@ -311,6 +411,94 @@ function canonical(value: unknown): string {
     return v;
   };
   return JSON.stringify(sort(value));
+}
+
+// ==================== schedule ====================
+
+interface ScheduleForm {
+  enabled: boolean;
+  /** datetime-local values, in the browser's time zone. */
+  startsAt: string;
+  endsAt: string;
+  days: RuleWeekday[];
+  hoursEnabled: boolean;
+  from: string;
+  to: string;
+  timezone: string;
+}
+
+const browserTimeZone = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+})();
+
+const TIME_ZONES: string[] = (() => {
+  const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
+  try {
+    const zones = intl.supportedValuesOf?.('timeZone') ?? [];
+    return zones.includes('UTC') ? zones : ['UTC', ...zones];
+  } catch {
+    return ['UTC'];
+  }
+})();
+
+const emptySchedule = (): ScheduleForm => ({
+  enabled: false,
+  startsAt: '',
+  endsAt: '',
+  days: [],
+  hoursEnabled: false,
+  from: '09:00',
+  to: '17:00',
+  timezone: browserTimeZone,
+});
+
+/** RFC 3339 -> "YYYY-MM-DDTHH:mm" in local time (datetime-local). */
+function isoToLocalInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function scheduleToForm(s: RuleSchedule | null | undefined): ScheduleForm {
+  if (!s) return emptySchedule();
+  return {
+    enabled: true,
+    startsAt: isoToLocalInput(s.starts_at),
+    endsAt: isoToLocalInput(s.ends_at),
+    days: s.days_of_week ?? [],
+    hoursEnabled: !!s.hours,
+    from: s.hours?.from ?? '09:00',
+    to: s.hours?.to ?? '17:00',
+    timezone: s.timezone || 'UTC',
+  };
+}
+
+/** The form -> the grammar's schedule (null = always), or an error message. */
+function formToSchedule(f: ScheduleForm): { schedule: RuleSchedule | null } | { error: string } {
+  if (!f.enabled) return { schedule: null };
+  const s: RuleSchedule = { timezone: f.timezone.trim() || 'UTC' };
+  const starts = f.startsAt ? new Date(f.startsAt) : null;
+  const ends = f.endsAt ? new Date(f.endsAt) : null;
+  if (starts && Number.isNaN(starts.getTime())) return { error: 'Schedule start is not a valid date.' };
+  if (ends && Number.isNaN(ends.getTime())) return { error: 'Schedule end is not a valid date.' };
+  if (starts && ends && ends <= starts) return { error: 'Schedule end must be after its start.' };
+  if (starts) s.starts_at = starts.toISOString();
+  if (ends) s.ends_at = ends.toISOString();
+  if (f.days.length > 0 && f.days.length < 7) s.days_of_week = [...f.days].sort((a, b) => a - b);
+  if (f.hoursEnabled) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(f.from) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(f.to)) {
+      return { error: 'Schedule hours must be times HH:MM.' };
+    }
+    if (f.from === f.to) return { error: 'Schedule hours: "from" and "to" must differ.' };
+    s.hours = { from: f.from, to: f.to };
+  }
+  return { schedule: s };
 }
 
 // ==================== catalogue selects ====================
@@ -366,6 +554,221 @@ function CatalogueSelect({
   );
 }
 
+// ==================== history condition fields ====================
+
+function HistoryConditionFields({
+  row,
+  eventSlugs,
+  onChange,
+}: {
+  row: ConditionRow;
+  eventSlugs: string[];
+  onChange: (patch: Partial<ConditionRow>) => void;
+}) {
+  const listId = `history-events-${row.id}`;
+  return (
+    <>
+      <Select
+        value={row.field}
+        onValueChange={v =>
+          onChange(
+            v === 'first_time'
+              ? { field: 'first_time', operator: 'eq', value: 'true', kind: 'boolean' }
+              : { field: 'count', operator: 'gte', value: '', kind: 'number' },
+          )
+        }
+      >
+        <SelectTrigger className="w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="first_time">First time</SelectItem>
+          <SelectItem value="count">Activity count</SelectItem>
+        </SelectContent>
+      </Select>
+      {row.field === 'first_time' ? (
+        <Select value={row.value === 'false' ? 'false' : 'true'} onValueChange={v => onChange({ value: v, operator: 'eq' })}>
+          <SelectTrigger className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="true">is the player's first of this event</SelectItem>
+            <SelectItem value="false">is not the player's first</SelectItem>
+          </SelectContent>
+        </Select>
+      ) : (
+        <>
+          <Input
+            list={listId}
+            placeholder="event (blank = trigger)"
+            value={row.eventType}
+            onChange={e => onChange({ eventType: e.target.value })}
+            className="w-44 font-mono text-xs"
+          />
+          <datalist id={listId}>
+            {eventSlugs.map(slug => (
+              <option key={slug} value={slug} />
+            ))}
+          </datalist>
+          <Select value={row.window} onValueChange={v => onChange({ window: v as HistoryWindow })}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HISTORY_WINDOWS.map(w => (
+                <SelectItem key={w} value={w}>
+                  {windowLabels[w]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={row.operator}
+            onValueChange={v =>
+              onChange({ operator: v as ConditionOperator, kind: LIST_OPS.includes(v as ConditionOperator) ? 'list' : 'number' })
+            }
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HISTORY_OPS.map(op => (
+                <SelectItem key={op} value={op}>
+                  {operatorLabels[op]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder={row.kind === 'list' ? '1, 2, 3' : 'count'}
+            type={row.kind === 'list' ? 'text' : 'number'}
+            min={0}
+            step={1}
+            value={row.value}
+            onChange={e => onChange({ value: e.target.value })}
+            className="w-28"
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+// ==================== schedule card ====================
+
+function ScheduleCard({
+  value,
+  onChange,
+  errors,
+}: {
+  value: ScheduleForm;
+  onChange: (next: ScheduleForm) => void;
+  errors: string[];
+}) {
+  const set = (patch: Partial<ScheduleForm>) => onChange({ ...value, ...patch });
+  const toggleDay = (day: RuleWeekday) =>
+    set({ days: value.days.includes(day) ? value.days.filter(d => d !== day) : [...value.days, day] });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <CalendarClock className="w-5 h-5 text-sky-500" />
+            Schedule
+          </span>
+          <label className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
+            {value.enabled ? 'Only at these times' : 'Always'}
+            <Switch checked={value.enabled} onCheckedChange={enabled => set({ enabled })} />
+          </label>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!value.enabled ? (
+          <p className="text-sm text-muted-foreground">
+            The rule can fire at any time. Turn the schedule on to limit it to a date range, days of the week or hours.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Starts (optional)</label>
+                <Input type="datetime-local" value={value.startsAt} onChange={e => set({ startsAt: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Ends (optional, exclusive)</label>
+                <Input type="datetime-local" value={value.endsAt} onChange={e => set({ endsAt: e.target.value })} />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-2">Start and end are entered in your browser's time zone.</p>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Days of the week</label>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAYS.map(({ day, label }) => {
+                  const on = value.days.includes(day);
+                  return (
+                    <Button
+                      key={day}
+                      type="button"
+                      size="sm"
+                      variant={on ? 'default' : 'outline'}
+                      aria-pressed={on}
+                      onClick={() => toggleDay(day)}
+                    >
+                      {label}
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">None selected = every day.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <Checkbox checked={value.hoursEnabled} onCheckedChange={c => set({ hoursEnabled: c === true })} />
+                Only between these hours
+              </label>
+              {value.hoursEnabled && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input type="time" value={value.from} onChange={e => set({ from: e.target.value })} className="w-32" />
+                  <span className="text-sm text-muted-foreground">to</span>
+                  <Input type="time" value={value.to} onChange={e => set({ to: e.target.value })} className="w-32" />
+                  <span className="text-xs text-muted-foreground">
+                    "to" is exclusive; a window like 22:00 to 02:00 wraps midnight.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Time zone</label>
+              <Input
+                list="rule-schedule-timezones"
+                value={value.timezone}
+                onChange={e => set({ timezone: e.target.value })}
+                placeholder="UTC"
+                className="font-mono text-xs"
+              />
+              <datalist id="rule-schedule-timezones">
+                {TIME_ZONES.map(tz => (
+                  <option key={tz} value={tz} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">Days and hours are judged in this IANA time zone.</p>
+            </div>
+          </>
+        )}
+        {errors.map(e => (
+          <p key={e} className="text-xs text-destructive">
+            {e}
+          </p>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ==================== page ====================
 
 const NO_PROGRAM = 'none';
@@ -394,6 +797,8 @@ export default function RuleBuilder() {
     max_per_player_per_week: '',
     cooldown_seconds: '',
   });
+  const [schedule, setSchedule] = useState<ScheduleForm>(emptySchedule);
+  const [stopProcessing, setStopProcessing] = useState(false);
   const [serverErrors, setServerErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
@@ -441,6 +846,8 @@ export default function RuleBuilder() {
       max_per_player_per_week: l.max_per_player_per_week ? String(l.max_per_player_per_week) : '',
       cooldown_seconds: l.cooldown_seconds ? String(l.cooldown_seconds) : '',
     });
+    setSchedule(scheduleToForm(version?.schedule));
+    setStopProcessing(!!version?.stop_processing);
   }, [rule, loadedRuleId]);
 
   const selectedEvent = useMemo(() => events.find(e => e.slug === triggerEvent), [events, triggerEvent]);
@@ -449,25 +856,38 @@ export default function RuleBuilder() {
     [selectedEvent],
   );
 
-  const fieldSuggestions = (source: ConditionSource) =>
-    source === 'trigger' ? eventProperties.map(p => p.name) : source === 'player' ? PLAYER_FIELDS : ACTIVITY_FIELDS;
+  const fieldSuggestions = (source: BuilderSource) =>
+    source === 'trigger'
+      ? eventProperties.map(p => p.name)
+      : source === 'player'
+        ? PLAYER_FIELDS
+        : source === 'activity'
+          ? ACTIVITY_FIELDS
+          : [];
 
   // ----- conditions -----
-  const addCondition = (source: ConditionSource) => {
+  /** A new row with sensible defaults for its source. */
+  const conditionFor = (source: BuilderSource): ConditionRow => {
+    if (source === 'history') return emptyCondition('history');
     const firstProp = eventProperties[0];
-    setConditions(rows => [
-      ...rows,
-      {
-        id: newId(),
-        source,
-        field: source === 'trigger' ? (firstProp?.name ?? '') : source === 'player' ? 'level' : 'event_type',
-        operator: source === 'trigger' && firstProp?.type === 'number' ? 'gte' : 'eq',
-        value: '',
-        kind: source === 'player' || firstProp?.type === 'number' || firstProp?.type === 'integer' ? 'number' : 'text',
-        negate: false,
-      },
-    ]);
+    return {
+      ...emptyCondition(source),
+      field: source === 'trigger' ? (firstProp?.name ?? '') : source === 'player' ? 'level' : 'event_type',
+      operator: source === 'trigger' && firstProp?.type === 'number' ? 'gte' : 'eq',
+      kind: source === 'player' || firstProp?.type === 'number' || firstProp?.type === 'integer' ? 'number' : 'text',
+    };
   };
+  const addCondition = (source: BuilderSource) => setConditions(rows => [...rows, conditionFor(source)]);
+  const changeSource = (id: string, source: BuilderSource) =>
+    setConditions(rows =>
+      rows.map(r =>
+        r.id !== id
+          ? r
+          : source === 'history' || r.source === 'history'
+            ? { ...conditionFor(source), id: r.id, negate: r.negate }
+            : { ...r, source, field: '' },
+      ),
+    );
   const updateCondition = (id: string, patch: Partial<ConditionRow>) =>
     setConditions(rows => rows.map(r => (r.id === id ? { ...r, ...patch } : r)));
   const removeCondition = (id: string) => setConditions(rows => rows.filter(r => r.id !== id));
@@ -508,7 +928,13 @@ export default function RuleBuilder() {
       .flatMap(([k, msgs]) => msgs.map(m => `${k.slice(prefix.length).replace(/^\./, '') || prefix}: ${m}`));
 
   // ----- build + save -----
-  const buildDefinition = (): { conditions: RuleConditions; actions: RuleAction[]; limits: RuleLimits } | null => {
+  const buildDefinition = (): {
+    conditions: RuleConditions;
+    actions: RuleAction[];
+    limits: RuleLimits;
+    schedule: RuleSchedule | null;
+    stop_processing: boolean;
+  } | null => {
     let conds: RuleConditions;
     if (jsonMode) {
       try {
@@ -542,7 +968,39 @@ export default function RuleBuilder() {
       }
       lim[key] = Number(v);
     }
-    return { conditions: conds, actions: actions.map(rowToAction), limits: lim };
+    const sched = formToSchedule(schedule);
+    if ('error' in sched) {
+      setFormError(sched.error);
+      return null;
+    }
+    return {
+      conditions: conds,
+      actions: actions.map(rowToAction),
+      limits: lim,
+      schedule: sched.schedule,
+      stop_processing: stopProcessing,
+    };
+  };
+
+  /** The unsaved form as a draft for POST /rules/simulate (null + a form error when incomplete). */
+  const buildDraft = (): DraftRuleDefinition | null => {
+    setFormError(null);
+    setServerErrors({});
+    setShowValidation(true);
+    if (!triggerEvent) {
+      setFormError('Select a trigger event to simulate the rule.');
+      return null;
+    }
+    const def = buildDefinition();
+    if (!def) return null;
+    return {
+      trigger_event: triggerEvent,
+      conditions: def.conditions,
+      actions: def.actions,
+      limits: Object.keys(def.limits).length ? def.limits : undefined,
+      schedule: def.schedule,
+      stop_processing: def.stop_processing,
+    };
   };
 
   const handleError = (err: unknown) => {
@@ -578,7 +1036,7 @@ export default function RuleBuilder() {
     const limitsOrUndefined = Object.keys(def.limits).length ? def.limits : undefined;
 
     try {
-      let saved: Rule;
+      let saved: RuleV2;
       if (!isEditing || !rule) {
         saved = await createRule.mutateAsync({
           name: ruleName.trim(),
@@ -589,9 +1047,11 @@ export default function RuleBuilder() {
           conditions: def.conditions,
           actions: def.actions,
           limits: limitsOrUndefined,
+          schedule: def.schedule ?? undefined,
+          stop_processing: def.stop_processing || undefined,
         });
       } else {
-        const patch: UpdateRuleData = {};
+        const patch: UpdateRuleDataV2 = {};
         if (ruleName.trim() !== rule.name) patch.name = ruleName.trim();
         if (description.trim() !== (rule.description ?? '')) patch.description = description.trim() || null;
         if (triggerEvent !== rule.trigger_event) patch.trigger_event = triggerEvent;
@@ -604,13 +1064,17 @@ export default function RuleBuilder() {
           !latest ||
           canonical(def.conditions ?? []) !== canonical(latest.conditions ?? []) ||
           canonical(def.actions) !== canonical(latest.actions) ||
-          canonical(def.limits) !== canonical(latest.limits ?? {});
+          canonical(def.limits) !== canonical(latest.limits ?? {}) ||
+          canonical(def.schedule) !== canonical(latest.schedule ?? null) ||
+          def.stop_processing !== !!latest.stop_processing;
 
         if (definitionChanged && latest && !latest.published) {
           // The latest version is still a draft: edit it in place.
           patch.conditions = def.conditions;
           patch.actions = def.actions;
           patch.limits = limitsOrUndefined ?? null;
+          patch.schedule = def.schedule;
+          patch.stop_processing = def.stop_processing;
         }
         saved = rule;
         if (Object.keys(patch).length > 0) {
@@ -620,7 +1084,14 @@ export default function RuleBuilder() {
           // Published versions are immutable: create a new draft version.
           const version = await createVersion.mutateAsync({
             ruleId: rule.id,
-            data: { conditions: def.conditions, actions: def.actions, limits: limitsOrUndefined },
+            data: {
+              conditions: def.conditions,
+              actions: def.actions,
+              // Omitted parts are copied from the latest version: send null to clear.
+              limits: limitsOrUndefined ?? null,
+              schedule: def.schedule,
+              stop_processing: def.stop_processing,
+            },
           });
           saved = { ...saved, latest_version: version };
         }
@@ -670,7 +1141,8 @@ export default function RuleBuilder() {
   }
 
   const generalErrors = Object.entries(serverErrors).filter(
-    ([k]) => !k.startsWith('conditions') && !k.startsWith('actions') && !k.startsWith('limits'),
+    ([k]) =>
+      !k.startsWith('conditions') && !k.startsWith('actions') && !k.startsWith('limits') && !k.startsWith('schedule'),
   );
 
   return (
@@ -799,7 +1271,9 @@ export default function RuleBuilder() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Grammar: a list (AND) of nodes; a node is {'{"all": [...]}'}, {'{"any": [...]}'}, {'{"not": node}'} or{' '}
-                    {'{"source", "field", "operator", "value"}'}.
+                    {'{"source", "field", "operator", "value"}'}. History leaves:{' '}
+                    {'{"source": "history", "field": "first_time"}'} or{' '}
+                    {'{"source": "history", "field": "count", "event_type"?, "window": "1d|7d|30d|90d|all", "operator", "value"}'}.
                   </p>
                   {errorsAt('conditions').map(e => (
                     <p key={e} className="text-xs text-destructive">
@@ -842,97 +1316,104 @@ export default function RuleBuilder() {
                         )}
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <Select
-                            value={row.source}
-                            onValueChange={v => updateCondition(row.id, { source: v as ConditionSource, field: '' })}
-                          >
+                          <Select value={row.source} onValueChange={v => changeSource(row.id, v as BuilderSource)}>
                             <SelectTrigger className="w-36">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {(Object.keys(sourceLabels) as ConditionSource[]).map(s => (
+                              {(Object.keys(sourceLabels) as BuilderSource[]).map(s => (
                                 <SelectItem key={s} value={s}>
                                   {sourceLabels[s]}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <Input
-                            list={listId}
-                            placeholder={row.source === 'trigger' ? 'property (dot.path)' : 'field'}
-                            value={row.field}
-                            onChange={e => updateCondition(row.id, { field: e.target.value })}
-                            className="w-40 font-mono text-xs"
-                          />
-                          <datalist id={listId}>
-                            {fieldSuggestions(row.source).map(f => (
-                              <option key={f} value={f} />
-                            ))}
-                          </datalist>
-                          <Select
-                            value={row.operator}
-                            onValueChange={v =>
-                              updateCondition(row.id, {
-                                operator: v as ConditionOperator,
-                                kind: LIST_OPS.includes(v as ConditionOperator)
-                                  ? 'list'
-                                  : row.kind === 'list'
-                                    ? 'text'
-                                    : row.kind,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {OPERATORS.map(op => (
-                                <SelectItem key={op} value={op}>
-                                  {operatorLabels[op]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {!NO_VALUE.includes(row.operator) && (
+                          {row.source === 'history' ? (
+                            <HistoryConditionFields
+                              row={row}
+                              eventSlugs={events.map(e => e.slug)}
+                              onChange={patch => updateCondition(row.id, patch)}
+                            />
+                          ) : (
                             <>
-                              {row.kind === 'boolean' ? (
-                                <Select value={row.value || 'true'} onValueChange={v => updateCondition(row.id, { value: v })}>
-                                  <SelectTrigger className="w-28">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="true">true</SelectItem>
-                                    <SelectItem value="false">false</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <Input
-                                  placeholder={row.kind === 'list' ? 'a, b, c' : 'value'}
-                                  type={row.kind === 'number' ? 'number' : 'text'}
-                                  value={row.value}
-                                  onChange={e => updateCondition(row.id, { value: e.target.value })}
-                                  className="flex-1 min-w-[100px]"
-                                />
-                              )}
-                              {!LIST_OPS.includes(row.operator) && (
-                                <Select
-                                  value={row.kind}
-                                  onValueChange={v =>
-                                    updateCondition(row.id, {
-                                      kind: v as ValueKind,
-                                      value: v === 'boolean' ? 'true' : row.value,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger className="w-28">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="text">text</SelectItem>
-                                    <SelectItem value="number">number</SelectItem>
-                                    <SelectItem value="boolean">boolean</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                              <Input
+                                list={listId}
+                                placeholder={row.source === 'trigger' ? 'property (dot.path)' : 'field'}
+                                value={row.field}
+                                onChange={e => updateCondition(row.id, { field: e.target.value })}
+                                className="w-40 font-mono text-xs"
+                              />
+                              <datalist id={listId}>
+                                {fieldSuggestions(row.source).map(f => (
+                                  <option key={f} value={f} />
+                                ))}
+                              </datalist>
+                              <Select
+                                value={row.operator}
+                                onValueChange={v =>
+                                  updateCondition(row.id, {
+                                    operator: v as ConditionOperator,
+                                    kind: LIST_OPS.includes(v as ConditionOperator)
+                                      ? 'list'
+                                      : row.kind === 'list'
+                                        ? 'text'
+                                        : row.kind,
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {OPERATORS.map(op => (
+                                    <SelectItem key={op} value={op}>
+                                      {operatorLabels[op]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {!NO_VALUE.includes(row.operator) && (
+                                <>
+                                  {row.kind === 'boolean' ? (
+                                    <Select value={row.value || 'true'} onValueChange={v => updateCondition(row.id, { value: v })}>
+                                      <SelectTrigger className="w-28">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="true">true</SelectItem>
+                                        <SelectItem value="false">false</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <Input
+                                      placeholder={row.kind === 'list' ? 'a, b, c' : 'value'}
+                                      type={row.kind === 'number' ? 'number' : 'text'}
+                                      value={row.value}
+                                      onChange={e => updateCondition(row.id, { value: e.target.value })}
+                                      className="flex-1 min-w-[100px]"
+                                    />
+                                  )}
+                                  {!LIST_OPS.includes(row.operator) && (
+                                    <Select
+                                      value={row.kind}
+                                      onValueChange={v =>
+                                        updateCondition(row.id, {
+                                          kind: v as ValueKind,
+                                          value: v === 'boolean' ? 'true' : row.value,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="w-28">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="text">text</SelectItem>
+                                        <SelectItem value="number">number</SelectItem>
+                                        <SelectItem value="boolean">boolean</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </>
                               )}
                             </>
                           )}
@@ -968,6 +1449,10 @@ export default function RuleBuilder() {
                     <Button variant="outline" size="sm" onClick={() => addCondition('activity')}>
                       <Plus className="w-4 h-4 mr-1" />
                       Activity field
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => addCondition('history')}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Player history
                     </Button>
                   </div>
                 </>
@@ -1132,6 +1617,9 @@ export default function RuleBuilder() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Schedule */}
+          <ScheduleCard value={schedule} onChange={setSchedule} errors={errorsAt('schedule')} />
         </div>
 
         {/* Sidebar */}
@@ -1182,6 +1670,19 @@ export default function RuleBuilder() {
                 <label className="text-sm font-medium">Priority</label>
                 <Input type="number" min={0} step={1} value={priority} onChange={e => setPriority(e.target.value)} />
                 <p className="text-xs text-muted-foreground">Higher priority rules are evaluated first.</p>
+              </div>
+              <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                <div className="space-y-1">
+                  <label htmlFor="stop-processing" className="text-sm font-medium flex items-center gap-1.5">
+                    <OctagonX className="w-4 h-4 text-destructive" />
+                    Stop processing
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    When this rule fires, lower-priority rules are skipped for the same activity. A rule refused by a
+                    limit does not stop anything.
+                  </p>
+                </div>
+                <Switch id="stop-processing" checked={stopProcessing} onCheckedChange={setStopProcessing} />
               </div>
             </CardContent>
           </Card>
@@ -1241,10 +1742,9 @@ export default function RuleBuilder() {
                 defaultEventType={triggerEvent || undefined}
                 focusRuleId={editId}
                 canSendActivity
+                getDraft={buildDraft}
+                onDraftErrors={setServerErrors}
               />
-              <p className="text-xs text-muted-foreground mt-2">
-                Unsaved and draft changes are not simulated: publish first to see this rule's effects.
-              </p>
             </CardContent>
           </Card>
 

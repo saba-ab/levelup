@@ -11,11 +11,11 @@ import (
 	"levelup/internal/shared/id"
 )
 
-// Mission is a tenant-defined goal: reach Target units of progress. Criteria
-// is opaque to this module: it documents WHICH activities count (for
-// example {"event_type": "purchase_completed", "min_amount": 100}) and is
-// evaluated by the rules module, which sends job.missions.progress commands.
-// Missions only counts.
+// Mission is a tenant-defined goal: reach Target units of progress.
+// Criteria (grammar in criteria.go) says WHICH activities count: with an
+// event_type, missions evaluates every activity.received.v1 itself and
+// progresses matching players; without one ({}), progress comes only from
+// rules (job.missions.progress) and the HTTP API.
 type Mission struct {
 	ID            string
 	TenantID      string
@@ -77,6 +77,9 @@ func NewMission(p NewMissionParams, now time.Time) (Mission, error) {
 	}
 	if p.Criteria == nil {
 		p.Criteria = map[string]any{}
+	}
+	if _, err := ParseCriteria(p.Criteria); err != nil {
+		return Mission{}, err
 	}
 	m := Mission{
 		ID:                      id.NewID(),

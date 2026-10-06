@@ -5,10 +5,8 @@ import type {
   RuleFilters,
   CreateRuleData,
   UpdateRuleData,
-  RuleVersion,
   CreateRuleVersionData,
   SimulateRulesData,
-  SimulationResult,
   RuleDecision,
   RuleDecisionDetail,
   RuleDecisionFilters,
@@ -16,7 +14,24 @@ import type {
   CursorParams,
   ID,
 } from './types';
-import { RULE_ENDPOINTS, toQuery } from '@/lib/api-routes';
+import type {
+  CreateRuleDataV2,
+  CreateRuleVersionDataV2,
+  RuleStats,
+  RuleStatsParams,
+  RuleV2,
+  RuleVersionV2,
+  SimulateRulesDataV2,
+  SimulationResultV2,
+  UpdateRuleDataV2,
+} from './models/rules';
+import { API_VERSION, RULE_ENDPOINTS, toQuery } from '@/lib/api-routes';
+
+/** Rules endpoints added after the shared RULE_ENDPOINTS. */
+export const RULE_V2_ENDPOINTS = {
+  /** GET ?from&to: per-rule firing counts (permission rules.view_decisions). */
+  STATS: `${API_VERSION}/rules/stats`,
+} as const;
 
 /** Writes report errors to the caller (field errors render inline), not as toasts. */
 const QUIET = { showErrorToast: false } as const;
@@ -35,12 +50,20 @@ export function useRulesService() {
   );
 
   /** Includes current_version and latest_version with their definitions. */
-  const getRule = useCallback((ruleId: ID) => api.get<Rule>(RULE_ENDPOINTS.SHOW(ruleId)), [api]);
+  const getRule = useCallback(
+    (ruleId: ID) => api.get<RuleV2>(RULE_ENDPOINTS.SHOW(ruleId)),
+    [api],
+  );
 
-  const createRule = useCallback((data: CreateRuleData) => api.post<Rule>(RULE_ENDPOINTS.CREATE, data, QUIET), [api]);
+  /** Accepts the v2 parts (schedule, stop_processing). */
+  const createRule = useCallback(
+    (data: CreateRuleData | CreateRuleDataV2) => api.post<RuleV2>(RULE_ENDPOINTS.CREATE, data, QUIET),
+    [api],
+  );
 
   const updateRule = useCallback(
-    (ruleId: ID, data: UpdateRuleData) => api.patch<Rule>(RULE_ENDPOINTS.UPDATE(ruleId), data, QUIET),
+    (ruleId: ID, data: UpdateRuleData | UpdateRuleDataV2) =>
+      api.patch<RuleV2>(RULE_ENDPOINTS.UPDATE(ruleId), data, QUIET),
     [api],
   );
 
@@ -48,12 +71,13 @@ export function useRulesService() {
 
   const listRuleVersions = useCallback(
     (ruleId: ID, params?: CursorParams) =>
-      api.get<CursorPage<RuleVersion>>(`${RULE_ENDPOINTS.VERSIONS(ruleId)}${toQuery(params)}`),
+      api.get<CursorPage<RuleVersionV2>>(`${RULE_ENDPOINTS.VERSIONS(ruleId)}${toQuery(params)}`),
     [api],
   );
 
   const createRuleVersion = useCallback(
-    (ruleId: ID, data: CreateRuleVersionData) => api.post<RuleVersion>(RULE_ENDPOINTS.VERSIONS(ruleId), data, QUIET),
+    (ruleId: ID, data: CreateRuleVersionData | CreateRuleVersionDataV2) =>
+      api.post<RuleVersionV2>(RULE_ENDPOINTS.VERSIONS(ruleId), data, QUIET),
     [api],
   );
 
@@ -63,8 +87,16 @@ export function useRulesService() {
     [api],
   );
 
+  /** Live ruleset, or only data.definition (a draft) when given. */
   const simulateRules = useCallback(
-    (data: SimulateRulesData) => api.post<SimulationResult>(RULE_ENDPOINTS.SIMULATE, data, QUIET),
+    (data: SimulateRulesData | SimulateRulesDataV2) =>
+      api.post<SimulationResultV2>(RULE_ENDPOINTS.SIMULATE, data, QUIET),
+    [api],
+  );
+
+  const getRuleStats = useCallback(
+    (params?: RuleStatsParams) =>
+      api.get<RuleStats>(`${RULE_V2_ENDPOINTS.STATS}${toQuery(params)}`, { showErrorToast: false }),
     [api],
   );
 
@@ -92,7 +124,21 @@ export function useRulesService() {
       simulateRules,
       listDecisions,
       getDecision,
+      getRuleStats,
     }),
-    [listRules, getRule, createRule, updateRule, deleteRule, listRuleVersions, createRuleVersion, publishRule, simulateRules, listDecisions, getDecision],
+    [
+      listRules,
+      getRule,
+      createRule,
+      updateRule,
+      deleteRule,
+      listRuleVersions,
+      createRuleVersion,
+      publishRule,
+      simulateRules,
+      listDecisions,
+      getDecision,
+      getRuleStats,
+    ],
   );
 }

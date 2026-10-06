@@ -137,3 +137,71 @@ export interface CreatedApiKey {
   api_key: ApiKey;
   secret: string;
 }
+
+// ==================== ACCOUNT FLOWS ====================
+// Emailed links land on the portal: /reset-password, /verify-email and
+// /accept-invite, each with ?token=… (43-char base64url).
+
+export interface ForgotPasswordData {
+  email: string;
+}
+
+/** Single use; revokes every session of the user. 422 invalid_reset_token otherwise. */
+export interface ResetPasswordData {
+  token: string;
+  /** 8 to 72 characters. */
+  password: string;
+  password_confirmation?: string;
+}
+
+/** 422 invalid_verification_token for unknown, expired or used tokens. */
+export interface VerifyEmailData {
+  token: string;
+}
+
+// ==================== INVITATIONS ====================
+
+export type InvitationStatus = 'pending' | 'expired';
+
+/** Never contains the token (only its hash is stored). */
+export interface Invitation {
+  id: ID;
+  email: string;
+  name: string;
+  role_ids: number[];
+  roles: Role[];
+  /** Lists show open invitations only: pending, or expired (not accepted, not revoked). */
+  status: InvitationStatus;
+  invited_by: ID | null;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface CreateInvitationData {
+  email: string;
+  name?: string;
+  /** 1 to 10 role ids; same rules as creating a user. */
+  role_ids: number[];
+}
+
+export type InvitationFilters = CursorParams;
+
+/** GET /auth/invitations/{token}: anonymous preview for the accept page (404 invitation_not_found). */
+export interface InvitationPreview {
+  email: string;
+  name: string;
+  tenant_name: string;
+  inviter_name: string;
+  role_ids: number[];
+  roles: Role[];
+  expires_at: string;
+}
+
+/** POST /auth/accept-invite returns 201 with a session (AuthResponse). */
+export interface AcceptInviteData {
+  token: string;
+  name?: string;
+  /** 8 to 72 characters. */
+  password: string;
+  password_confirmation?: string;
+}

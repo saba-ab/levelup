@@ -9,6 +9,7 @@ import (
 	"levelup/internal/modules/progression/contracts"
 	"levelup/internal/modules/progression/internal/domain"
 	"levelup/internal/platform/authz"
+	"levelup/internal/shared/errs"
 	"levelup/internal/shared/pagination"
 )
 
@@ -124,4 +125,62 @@ func (s *Service) PurgeTenant(ctx context.Context, tenantID string) error {
 	return s.tx(ctx, func(tx *gorm.DB) error {
 		return s.repo.PurgeTenant(ctx, tx, tenantID)
 	})
+}
+
+// MaxBatchPlayers caps GET /progress?player_ids=.
+const MaxBatchPlayers = 100
+
+// BatchProgress is GET /progress?player_ids=: one view per known player of
+// the caller's tenant, in request order (duplicates collapsed), each shaped
+// like GetProgress. Unknown and foreign players are omitted, never an
+// error. Three reads whatever the batch size: players, progress, ladder.
+func (s *Service) BatchProgress(ctx context.Context, playerIDs []string) ([]domain.View, error) {
+	p, err := authz.RequireTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Authorize(ctx, p, contracts.PermView, nil); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(playerIDs))
+	seen := make(map[string]bool, len(playerIDs))
+	for _, pid := range playerIDs {
+		if pid != "" && !seen[pid] {
+			seen[pid] = true
+			ids = append(ids, pid)
+		}
+	}
+	if len(ids) > MaxBatchPlayers {
+		return nil, errs.WithFields(errs.WithCode(errs.New(errs.Invalid, "too many player ids"), "too_many_ids"),
+			map[string]string{"player_ids": "at most 100 ids"})
+	}
+	if len(ids) == 0 {
+		return []domain.View{}, nil
+	}
+	known, err := s.players.ByIDs(ctx, p.TenantID, ids)
+	if err != nil {
+		return nil, err
+	}
+	present := ids[:0]
+	for _, pid := range ids {
+		if pl, ok := known[pid]; ok && pl.TenantID == p.TenantID {
+			present = append(present, pid)
+		}
+	}
+	if len(present) == 0 {
+		return []domain.View{}, nil
+	}
+	rows, err := s.repo.ProgressByPlayers(ctx, p.TenantID, present)
+	if err != nil {
+		return nil, err
+	}
+	ladder, err := s.repo.Ladder(ctx, nil, p.TenantID, false)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.View, len(present))
+	for i, pid := range present {
+		out[i] = domain.ViewOf(pid, rows[pid].TotalXP, ladder)
+	}
+	return out, nil
 }

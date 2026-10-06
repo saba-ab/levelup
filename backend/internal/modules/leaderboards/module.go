@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/pressly/goose/v3"
 
+	activitycontracts "levelup/internal/modules/activity/contracts"
 	badgescontracts "levelup/internal/modules/badges/contracts"
 	identitycontracts "levelup/internal/modules/identity/contracts"
 	"levelup/internal/modules/leaderboards/contracts"
@@ -80,6 +81,7 @@ func (m *Module) Subscriptions() []bus.Subscription {
 		sub(badgescontracts.TopicAwarded, m.onBadgeAwarded),
 		sub(missionscontracts.TopicCompleted, m.onMissionCompleted),
 		sub(progressioncontracts.TopicXPGained, m.onXPGained),
+		sub(activitycontracts.TopicReceived, m.onActivity),
 		sub(playercontracts.TopicPlayerActivated, m.onPlayerStatus),
 		sub(playercontracts.TopicPlayerDeactivated, m.onPlayerStatus),
 		sub(playercontracts.TopicPlayerDeleted, m.onPlayerDeleted),
@@ -152,6 +154,18 @@ func (m *Module) onXPGained(ctx context.Context, e bus.Envelope) error {
 	})
 }
 
+// onActivity feeds activity boards. The applied_events key derives from the
+// tenant-unique activity event_id, so a redelivery (or a re-published copy
+// with a new envelope id) applies once. An activity whose player was not
+// resolved at ingest cannot be attributed and is acked without effect.
+func (m *Module) onActivity(ctx context.Context, e bus.Envelope) error {
+	var ev activitycontracts.ReceivedV1
+	if err := decode(e, &ev); err != nil {
+		return err
+	}
+	return m.svc.ApplyActivity(ctx, activityFact(e, ev))
+}
+
 func (m *Module) onPlayerStatus(ctx context.Context, e bus.Envelope) error {
 	var ev playercontracts.PlayerStatusV1
 	if err := decode(e, &ev); err != nil {
@@ -180,6 +194,21 @@ func (m *Module) onEnrollment(enrolled bool) bus.Handler {
 			return err
 		}
 		return m.svc.SetMembership(ctx, ev.TenantID, ev.ProgramID, ev.PlayerID, enrolled, firstTime(e, ev.At))
+	}
+}
+
+// activityFact maps one activity onto leaderboards' fact. An unresolved
+// player yields a fact with no player: ApplyActivity acks it, or waits for
+// the player when the activity is flagged auto_create_player.
+func activityFact(e bus.Envelope, ev activitycontracts.ReceivedV1) domain.Fact {
+	key := e.EventID
+	if ev.EventID != "" {
+		key = "activity:" + ev.TenantID + ":" + ev.EventID
+	}
+	return domain.Fact{
+		EventID: key, TenantID: ev.TenantID, PlayerID: ev.PlayerID, Kind: domain.FactActivity,
+		EventType: ev.EventType, Properties: ev.Properties, At: firstTime(e, ev.OccurredAt, ev.ReceivedAt),
+		PlayerExternalID: ev.PlayerExternalID, AutoCreatePlayer: ev.AutoCreatePlayer,
 	}
 }
 

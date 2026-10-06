@@ -409,6 +409,16 @@ func (f *fakePlayers) PlayersByIDs(_ context.Context, tenantID string, ids []str
 	return out, nil
 }
 
+func (f *fakePlayers) PlayersByExternalIDs(_ context.Context, tenantID string, ext []string) (map[string]ports.PlayerSnapshot, error) {
+	out := map[string]ports.PlayerSnapshot{}
+	for _, p := range f.players {
+		if p.TenantID == tenantID && p.ExternalID != "" && slices.Contains(ext, p.ExternalID) {
+			out[p.ExternalID] = p
+		}
+	}
+	return out, nil
+}
+
 type fakeTenants struct{ tz map[string]string }
 
 func (f *fakeTenants) TenantsByIDs(_ context.Context, ids []string) (map[string]ports.TenantSnapshot, error) {

@@ -186,3 +186,49 @@ func TestListEnvelopeAndQueryValidation(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, h.do(t, http.MethodGet, "/players?limit=-1", "").Code)
 	require.Equal(t, http.StatusOK, h.do(t, http.MethodGet, "/players?is_active=false&search=a", "").Code)
 }
+
+func TestListSortAndCreatedRangeParams(t *testing.T) {
+	h := newHarness(t)
+	for _, b := range []string{
+		`{"external_id":"e1","display_name":"bravo"}`,
+		`{"external_id":"e2","display_name":"alpha"}`,
+	} {
+		require.Equal(t, http.StatusCreated, h.do(t, http.MethodPost, "/players", b).Code)
+	}
+
+	rec := h.do(t, http.MethodGet, "/players?sort=display_name&limit=1", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	page := decode[transport.ListResp](t, rec)
+	require.Len(t, page.Data, 1)
+	require.Equal(t, "alpha", *page.Data[0].DisplayName)
+	require.NotEmpty(t, page.NextCursor)
+
+	rec = h.do(t, http.MethodGet, "/players?sort=display_name&limit=1&cursor="+page.NextCursor, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "bravo", *decode[transport.ListResp](t, rec).Data[0].DisplayName)
+
+	// The fake clock created both at 2026-10-05T00:00:00Z.
+	for query, want := range map[string]int{
+		"created_from=2026-10-05":         2,
+		"created_from=2026-10-06":         0,
+		"created_to=2026-10-05T00:00:00Z": 0,
+		"created_from=2026-10-04T23:59:59.5Z&created_to=2026-10-05T00:00:01Z": 2,
+	} {
+		rec = h.do(t, http.MethodGet, "/players?"+query, "")
+		require.Equal(t, http.StatusOK, rec.Code, query)
+		require.Len(t, decode[transport.ListResp](t, rec).Data, want, query)
+	}
+
+	for query, code := range map[string]string{
+		"sort=email": contracts.CodeInvalidSort,
+		"created_from=2026-10-06&created_to=2026-10-05": contracts.CodeInvalidCreatedRange,
+	} {
+		rec = h.do(t, http.MethodGet, "/players?"+query, "")
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code, query)
+		require.Contains(t, rec.Body.String(), code, query)
+	}
+
+	rec = h.do(t, http.MethodGet, "/players?created_from=yesterday", "")
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	require.Contains(t, rec.Body.String(), "created_from")
+}

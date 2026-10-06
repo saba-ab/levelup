@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -33,6 +34,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/", h.ingest)
 		r.Post("/batch", h.ingestBatch)
 		r.Get("/", h.list)
+		r.Get("/last-seen", h.lastSeen)
 		r.Get("/{id}", h.get)
 	})
 }
@@ -271,6 +273,49 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	out := ListResp{Data: make([]ActivityResp, len(page.Items)), NextCursor: page.NextCursor}
 	for i, a := range page.Items {
 		out.Data[i] = toActivityResp(a)
+	}
+	httpx.JSON(w, http.StatusOK, out)
+}
+
+// LastSeenResp is one player's most recent activity.
+type LastSeenResp struct {
+	PlayerID       string    `json:"player_id"`
+	LastActivityAt time.Time `json:"last_activity_at"`
+	LastEventType  string    `json:"last_event_type"`
+}
+
+type LastSeenListResp struct {
+	Data []LastSeenResp `json:"data"`
+}
+
+// @Summary      Last activity per player
+// @Description  For up to 100 player ids, the occurred_at and event_type of each player's most recent activity. Players with no activity resolved to them are absent. Order follows player_ids.
+// @Tags         activity
+// @Produce      json
+// @Security     BearerAuth
+// @Param        player_ids query string true "Comma-separated player ids (uuid), at most 100"
+// @Success      200 {object} LastSeenListResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "code invalid_player_ids"
+// @Router       /activities/last-seen [get]
+func (h *Handler) lastSeen(w http.ResponseWriter, r *http.Request) {
+	var ids []string
+	for _, raw := range r.URL.Query()["player_ids"] {
+		for _, part := range strings.Split(raw, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				ids = append(ids, part)
+			}
+		}
+	}
+	rows, err := h.svc.ListLastSeen(r.Context(), ids)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	out := LastSeenListResp{Data: make([]LastSeenResp, len(rows))}
+	for i, row := range rows {
+		out.Data[i] = LastSeenResp{PlayerID: row.PlayerID, LastActivityAt: row.At.UTC(), LastEventType: row.EventType}
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }

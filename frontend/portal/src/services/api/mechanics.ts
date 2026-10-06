@@ -8,6 +8,7 @@ import {
   LEADERBOARD_ENDPOINTS,
   REWARD_ENDPOINTS,
   PLAYER_ENDPOINTS,
+  API_VERSION,
   toQuery,
 } from '@/lib/api-routes';
 import type {
@@ -56,7 +57,30 @@ import type {
   UpdateRewardData,
   RewardClaim,
   ClaimRewardData,
+  BadgeStats,
+  MissionStats,
+  MissionStatsFilters,
+  RewardClaimFilters,
+  RewardStats,
+  WalletSummary,
+  WalletBalanceBucket,
+  WalletDailyTotals,
+  WalletDailyParams,
+  PlayerProgressList,
 } from './types';
+
+/** Analytics and history endpoints of the mechanics modules (not in the shared api-routes). */
+export const MECHANICS_ENDPOINTS = {
+  BADGE_STATS: `${API_VERSION}/badges/stats`,
+  MISSION_STATS: `${API_VERSION}/missions/stats`,
+  MISSION_STATS_SHOW: (id: ID) => `${API_VERSION}/missions/${id}/stats`,
+  REWARD_CLAIMS: `${API_VERSION}/rewards/claims`,
+  REWARD_STATS: `${API_VERSION}/rewards/stats`,
+  WALLET_SUMMARY: `${API_VERSION}/wallets/summary`,
+  WALLET_DISTRIBUTION: `${API_VERSION}/wallets/distribution`,
+  WALLET_DAILY: `${API_VERSION}/wallets/daily`,
+  PROGRESS_BATCH: `${API_VERSION}/progress`,
+} as const;
 
 export function useMechanicsService() {
   const api = useApi();
@@ -90,6 +114,8 @@ export function useMechanicsService() {
     [api],
   );
 
+  const getBadgeStats = useCallback(() => api.get<BadgeStats>(MECHANICS_ENDPOINTS.BADGE_STATS), [api]);
+
   // ==================== LEVELS ====================
 
   const listLevels = useCallback(
@@ -104,6 +130,13 @@ export function useMechanicsService() {
     [api],
   );
   const deleteLevel = useCallback((levelId: ID) => api.delete<void>(LEVEL_ENDPOINTS.DELETE(levelId)), [api]);
+
+  /** GET /progress?player_ids=a,b (at most 100; unknown players are omitted). */
+  const getPlayersProgress = useCallback(
+    (playerIds: ID[]) =>
+      api.get<PlayerProgressList>(`${MECHANICS_ENDPOINTS.PROGRESS_BATCH}${toQuery({ player_ids: playerIds.join(',') })}`),
+    [api],
+  );
 
   // ==================== MISSIONS ====================
 
@@ -148,6 +181,16 @@ export function useMechanicsService() {
   const getPlayerMissions = useCallback(
     (playerId: ID, params?: CursorParams) =>
       api.get<CursorPage<MissionAttempt>>(`${PLAYER_ENDPOINTS.MISSIONS(playerId)}${toQuery(params)}`),
+    [api],
+  );
+
+  const listMissionStats = useCallback(
+    (filters?: MissionStatsFilters) =>
+      api.get<CursorPage<MissionStats>>(`${MECHANICS_ENDPOINTS.MISSION_STATS}${toQuery(filters)}`),
+    [api],
+  );
+  const getMissionStats = useCallback(
+    (missionId: ID) => api.get<MissionStats>(MECHANICS_ENDPOINTS.MISSION_STATS_SHOW(missionId)),
     [api],
   );
 
@@ -268,6 +311,28 @@ export function useMechanicsService() {
     [api],
   );
 
+  /** Tenant-wide redemption history, newest first (?status&reward_id&player_id&from&to). */
+  const listRewardClaims = useCallback(
+    (filters?: RewardClaimFilters) =>
+      api.get<CursorPage<RewardClaim>>(`${MECHANICS_ENDPOINTS.REWARD_CLAIMS}${toQuery(filters)}`),
+    [api],
+  );
+  const getRewardStats = useCallback(() => api.get<RewardStats>(MECHANICS_ENDPOINTS.REWARD_STATS), [api]);
+
+  // ==================== WALLET ANALYTICS ====================
+
+  const getWalletSummary = useCallback(() => api.get<WalletSummary>(MECHANICS_ENDPOINTS.WALLET_SUMMARY), [api]);
+  const getWalletDistribution = useCallback(
+    () => api.get<{ data: WalletBalanceBucket[] }>(MECHANICS_ENDPOINTS.WALLET_DISTRIBUTION),
+    [api],
+  );
+  /** 422 invalid_range when from > to or the range exceeds 366 days. */
+  const getWalletDaily = useCallback(
+    (params?: WalletDailyParams) =>
+      api.get<{ data: WalletDailyTotals[] }>(`${MECHANICS_ENDPOINTS.WALLET_DAILY}${toQuery(params)}`),
+    [api],
+  );
+
   return useMemo(
     () => ({
       // Badges
@@ -279,12 +344,14 @@ export function useMechanicsService() {
       awardBadge,
       revokeBadge,
       getPlayerBadges,
+      getBadgeStats,
       // Levels
       listLevels,
       getLevel,
       createLevel,
       updateLevel,
       deleteLevel,
+      getPlayersProgress,
       // Missions
       listMissions,
       getMission,
@@ -296,6 +363,8 @@ export function useMechanicsService() {
       updateMissionProgress,
       completeMission,
       getPlayerMissions,
+      listMissionStats,
+      getMissionStats,
       // Streaks
       listStreaks,
       getStreak,
@@ -328,18 +397,26 @@ export function useMechanicsService() {
       /** @deprecated redeem works on a claim id: use redeemRewardClaim. */
       redeemReward: redeemRewardClaim,
       getPlayerRewards,
+      listRewardClaims,
+      getRewardStats,
+      // Wallet analytics
+      getWalletSummary,
+      getWalletDistribution,
+      getWalletDaily,
     }),
     [
       listBadges, getBadge, createBadge, updateBadge, deleteBadge, awardBadge, revokeBadge, getPlayerBadges,
-      listLevels, getLevel, createLevel, updateLevel, deleteLevel,
+      getBadgeStats,
+      listLevels, getLevel, createLevel, updateLevel, deleteLevel, getPlayersProgress,
       listMissions, getMission, createMission, updateMission, deleteMission, listMissionAttempts, startMission,
-      updateMissionProgress, completeMission, getPlayerMissions,
+      updateMissionProgress, completeMission, getPlayerMissions, listMissionStats, getMissionStats,
       listStreaks, getStreak, createStreak, updateStreak, deleteStreak, recordStreakActivity, getPlayerStreak,
       getPlayerStreaks, resetStreak,
       listLeaderboards, getLeaderboard, createLeaderboard, updateLeaderboard, deleteLeaderboard,
       getLeaderboardEntries, getPlayerRank, rebuildLeaderboard,
       listRewards, getReward, createReward, updateReward, deleteReward, claimReward, getRewardClaim,
-      redeemRewardClaim, cancelRewardClaim, getPlayerRewards,
+      redeemRewardClaim, cancelRewardClaim, getPlayerRewards, listRewardClaims, getRewardStats,
+      getWalletSummary, getWalletDistribution, getWalletDaily,
     ],
   );
 }

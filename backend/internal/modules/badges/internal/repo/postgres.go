@@ -333,7 +333,10 @@ func (r *Postgres) InsertRevocation(ctx context.Context, tx *gorm.DB, rev domain
 // is player_badges.badge_id → badges.id). Running it twice deletes nothing
 // the second time.
 func (r *Postgres) PurgeTenant(ctx context.Context, tx *gorm.DB, tenantID string) error {
-	for _, model := range []any{&badgeAward{}, &badgeRevocation{}, &playerBadge{}, &badge{}} {
+	for _, model := range []any{
+		&badgeAward{}, &badgeRevocation{}, &playerBadge{}, &badge{},
+		&badgePlayerStat{}, &badgePlayerActivityCount{}, &appliedEvent{},
+	} {
 		if err := tx.WithContext(ctx).Where("tenant_id = ?", tenantID).Delete(model).Error; err != nil {
 			return errs.Wrap(errs.Internal, "purge tenant", err)
 		}

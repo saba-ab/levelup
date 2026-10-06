@@ -172,6 +172,31 @@ func (r *Repo) DeleteTenant(_ context.Context, _ *gorm.DB, tenantID string) (int
 	return n, nil
 }
 
+func (r *Repo) LastSeen(_ context.Context, tenantID string, playerIDs []string) ([]domain.LastSeen, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	want := map[string]bool{}
+	for _, p := range playerIDs {
+		want[p] = true
+	}
+	best := map[string]domain.Activity{}
+	for _, row := range r.Rows {
+		if row.TenantID != tenantID || row.PlayerID == "" || !want[row.PlayerID] {
+			continue
+		}
+		cur, ok := best[row.PlayerID]
+		if !ok || row.OccurredAt.After(cur.OccurredAt) || (row.OccurredAt.Equal(cur.OccurredAt) && row.ID > cur.ID) {
+			best[row.PlayerID] = row
+		}
+	}
+	out := make([]domain.LastSeen, 0, len(best))
+	for pid, a := range best {
+		out = append(out, domain.LastSeen{PlayerID: pid, At: a.OccurredAt, EventType: a.EventType})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].PlayerID < out[j].PlayerID })
+	return out, nil
+}
+
 func (r *Repo) LastRun(_ context.Context, name string) (time.Time, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

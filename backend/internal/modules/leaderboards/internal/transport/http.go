@@ -43,12 +43,30 @@ type CreateReq struct {
 	Name           string `json:"name" validate:"required,max=255"`
 	Slug           string `json:"slug" validate:"omitempty,max=120"`
 	Description    string `json:"description" validate:"max=2000"`
-	Type           string `json:"type" validate:"required,oneof=points badges missions xp"`
+	Type           string `json:"type" validate:"required,oneof=points badges missions xp activity"`
 	Metric         string `json:"metric" validate:"omitempty,oneof=earned net balance count"`
 	ResetFrequency string `json:"reset_frequency" validate:"omitempty,oneof=never daily weekly monthly"`
 	ProgramID      string `json:"program_id" validate:"omitempty,uuid"`
 	MaxEntries     int    `json:"max_entries" validate:"omitempty,min=1,max=1000"`
 	IsActive       *bool  `json:"is_active"`
+	// Config is required for type activity and refused for every other.
+	Config *ConfigReq `json:"config"`
+}
+
+// ConfigReq configures an activity board: count matching events (value
+// count, metric count) or sum a numeric property of them (value property,
+// metric earned; property e.g. "amount").
+type ConfigReq struct {
+	EventType string `json:"event_type" validate:"required,max=100"`
+	Value     string `json:"value" validate:"required,oneof=count property"`
+	Property  string `json:"property" validate:"omitempty,max=100"`
+}
+
+// ConfigResp is an activity board's config; null for other types.
+type ConfigResp struct {
+	EventType string `json:"event_type"`
+	Value     string `json:"value"`
+	Property  string `json:"property,omitempty"`
 }
 
 // UpdateReq is a partial update: omitted fields stay untouched. Type,
@@ -62,19 +80,20 @@ type UpdateReq struct {
 }
 
 type LeaderboardResp struct {
-	ID             string    `json:"id"`
-	TenantID       string    `json:"tenant_id"`
-	Slug           string    `json:"slug"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	Type           string    `json:"type"`
-	Metric         string    `json:"metric"`
-	ResetFrequency string    `json:"reset_frequency"`
-	ProgramID      *string   `json:"program_id"`
-	MaxEntries     int       `json:"max_entries"`
-	IsActive       bool      `json:"is_active"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string      `json:"id"`
+	TenantID       string      `json:"tenant_id"`
+	Slug           string      `json:"slug"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
+	Type           string      `json:"type"`
+	Metric         string      `json:"metric"`
+	ResetFrequency string      `json:"reset_frequency"`
+	ProgramID      *string     `json:"program_id"`
+	Config         *ConfigResp `json:"config"`
+	MaxEntries     int         `json:"max_entries"`
+	IsActive       bool        `json:"is_active"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
 type ListResp struct {
@@ -118,6 +137,9 @@ func toResp(lb domain.Leaderboard) LeaderboardResp {
 	if lb.ProgramID != "" {
 		p := lb.ProgramID
 		out.ProgramID = &p
+	}
+	if lb.Activity != nil {
+		out.Config = &ConfigResp{EventType: lb.Activity.EventType, Value: lb.Activity.Value, Property: lb.Activity.Property}
 	}
 	return out
 }
@@ -195,7 +217,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 // @Failure      401 {object} httpx.Problem
 // @Failure      403 {object} httpx.Problem
 // @Failure      409 {object} httpx.Problem
-// @Failure      422 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "leaderboard_invalid_type, leaderboard_invalid_metric, leaderboard_invalid_config"
 // @Router       /leaderboards [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req CreateReq
@@ -207,10 +229,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if req.IsActive != nil {
 		active = *req.IsActive
 	}
-	lb, err := h.svc.Create(r.Context(), app.CreateInput{
+	in := app.CreateInput{
 		Name: req.Name, Slug: req.Slug, Description: req.Description, Type: req.Type, Metric: req.Metric,
 		ResetFrequency: req.ResetFrequency, ProgramID: req.ProgramID, MaxEntries: req.MaxEntries, Active: active,
-	})
+	}
+	if req.Config != nil {
+		in.Activity = &domain.ActivityConfig{EventType: req.Config.EventType, Value: req.Config.Value, Property: req.Config.Property}
+	}
+	lb, err := h.svc.Create(r.Context(), in)
 	if err != nil {
 		httpx.Error(w, r, err)
 		return

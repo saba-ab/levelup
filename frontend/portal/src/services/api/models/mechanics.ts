@@ -359,6 +359,8 @@ export interface Streak {
   grace_periods: number;
   points_per_period: number;
   milestones: StreakMilestone[];
+  /** true: activities whose event_type equals activity_key record a period automatically. */
+  auto_record: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -374,6 +376,8 @@ export interface CreateStreakData {
   grace_periods?: number;
   points_per_period?: number;
   milestones?: StreakMilestone[];
+  /** Defaults to true. */
+  auto_record?: boolean;
   is_active?: boolean;
 }
 
@@ -386,6 +390,7 @@ export interface UpdateStreakData {
   grace_periods?: number;
   points_per_period?: number;
   milestones?: StreakMilestone[];
+  auto_record?: boolean;
   is_active?: boolean;
 }
 
@@ -436,8 +441,8 @@ export interface ResetStreakData {
 
 // ==================== LEADERBOARDS ====================
 
-export type LeaderboardType = 'points' | 'badges' | 'missions' | 'xp';
-/** points: earned|net|balance; xp: earned|balance; badges/missions: count. */
+export type LeaderboardType = 'points' | 'badges' | 'missions' | 'xp' | 'activity';
+/** points: earned|net|balance; xp: earned|balance; badges/missions: count; activity: count (value count) | earned (value property). */
 export type LeaderboardMetric = 'earned' | 'net' | 'balance' | 'count';
 export type ResetFrequency = 'never' | 'daily' | 'weekly' | 'monthly';
 
@@ -454,8 +459,22 @@ export interface Leaderboard {
   program_id: ID | null;
   max_entries: number;
   is_active: boolean;
+  /** Activity boards only; null (or absent) for every other type. Immutable. */
+  config?: LeaderboardActivityConfig | null;
   created_at: string;
   updated_at: string;
+}
+
+/** count: one per matching activity; property: sum of a numeric property. */
+export type LeaderboardActivityValue = 'count' | 'property';
+
+/** ConfigReq / ConfigResp of a type "activity" board. */
+export interface LeaderboardActivityConfig {
+  /** Event type slug of the activities ranked. */
+  event_type: string;
+  value: LeaderboardActivityValue;
+  /** Dot path of the numeric property summed (value property only). */
+  property?: string;
 }
 
 /** CreateReq (leaderboards). balance requires reset_frequency never. */
@@ -469,6 +488,8 @@ export interface CreateLeaderboardData {
   program_id?: ID;
   max_entries?: number;
   is_active?: boolean;
+  /** Required for type activity, refused for every other type (422 leaderboard_invalid_config). */
+  config?: LeaderboardActivityConfig;
 }
 
 /** UpdateReq (leaderboards, PATCH): type/metric/reset_frequency are immutable. */
@@ -613,6 +634,8 @@ export interface RewardClaim {
   redeemed_at: string | null;
   expires_at: string | null;
   cancelled_at: string | null;
+  /** When the reward was delivered (points credited, badge awarded, XP granted, or the voucher issued); null until then. */
+  fulfilled_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -626,4 +649,189 @@ export type PlayerRewardStatus = RewardClaimStatus;
 export interface ClaimRewardData {
   reward_id: ID;
   player_id: ID;
+}
+
+// ==================== BADGE REQUIREMENTS & STATS ====================
+
+/**
+ * Per-player facts a badge requirement can test (badges/internal/domain/requirements.go).
+ * activity_count may be narrowed to one event_type; without it every activity counts.
+ */
+export type BadgeRequirementMetric =
+  | 'lifetime_points'
+  | 'missions_completed'
+  | 'streak_days'
+  | 'level'
+  | 'badges_earned'
+  | 'activity_count';
+
+/** One threshold: the metric's value must be >= gte (an integer >= 1). */
+export interface BadgeRequirementCondition {
+  metric: BadgeRequirementMetric;
+  /** activity_count only. */
+  event_type?: string;
+  gte: number;
+}
+
+/**
+ * Badge.requirements grammar: every `all` condition holds and, when `any` is
+ * present, at least one of it. At least one list is non-empty; at most 20
+ * conditions each. An empty object / null means "awarded explicitly only".
+ * 422 invalid_badge_requirements otherwise.
+ */
+export interface BadgeRequirements {
+  all?: BadgeRequirementCondition[];
+  any?: BadgeRequirementCondition[];
+}
+
+/** BadgeStatResp: per badge, from the award ledger (revokes do not subtract). */
+export interface BadgeStat {
+  badge_id: ID;
+  slug: string;
+  name: string;
+  tier: BadgeTier;
+  deleted: boolean;
+  awarded_count: number;
+  unique_players: number;
+  last_awarded_at: string | null;
+}
+
+/** DayCountResp: applied awards of one UTC day. */
+export interface BadgeDayCount {
+  /** YYYY-MM-DD */
+  date: string;
+  count: number;
+}
+
+/** StatsResp: GET /badges/stats. awards_per_day covers the last 30 UTC days, oldest first. */
+export interface BadgeStats {
+  badges: BadgeStat[];
+  awards_per_day: BadgeDayCount[];
+  total_awarded: number;
+  unique_players: number;
+}
+
+// ==================== MISSION CRITERIA & STATS ====================
+
+/** Where-clause operators (missions/internal/domain/criteria.go). */
+export type MissionCriteriaOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains' | 'exists';
+
+export type MissionCriteriaScalar = string | number | boolean;
+
+/**
+ * One where clause. field is a dot path into the activity's properties.
+ * value: scalar for eq/neq/contains, number for gt/gte/lt/lte, non-empty
+ * scalar array for in, boolean (default true) for exists.
+ */
+export interface MissionCriteriaCondition {
+  field: string;
+  operator: MissionCriteriaOperator;
+  value?: MissionCriteriaScalar | MissionCriteriaScalar[];
+}
+
+export type MissionCriteriaIncrement = { by: 'count' } | { by: 'property'; field: string };
+
+/**
+ * Mission.criteria grammar. With event_type, matching activities progress
+ * the mission automatically; {} keeps it manual / rule-driven. Problems are
+ * 422 invalid_mission_criteria with field errors under "criteria.*".
+ */
+export interface MissionCriteria {
+  event_type?: string;
+  where?: MissionCriteriaCondition[];
+  increment?: MissionCriteriaIncrement;
+}
+
+/** MissionStatsResp: completion analytics of one mission. */
+export interface MissionStats {
+  mission_id: ID;
+  name: string;
+  slug: string;
+  status: MissionStatus;
+  started: number;
+  in_progress: number;
+  completed: number;
+  /** completed / started, 0..1. */
+  completion_rate: number;
+  avg_hours_to_complete: number | null;
+}
+
+/** GET /missions/stats query. */
+export interface MissionStatsFilters extends CursorParams {
+  status?: MissionStatus;
+  type?: MissionType;
+}
+
+// ==================== REWARD CLAIM HISTORY & STATS ====================
+
+/** GET /rewards/claims query (tenant-wide redemption history, newest first). */
+export interface RewardClaimFilters extends CursorParams {
+  status?: RewardClaimStatus;
+  reward_id?: ID;
+  player_id?: ID;
+  /** created_at >= from (RFC 3339). */
+  from?: string;
+  /** created_at < to (RFC 3339). */
+  to?: string;
+}
+
+/** RewardStatsResp */
+export interface RewardStat {
+  reward_id: ID;
+  name: string;
+  slug: string;
+  type: RewardType;
+  deleted: boolean;
+  claimed: number;
+  redeemed: number;
+  expired: number;
+  cancelled: number;
+  points_spent: number;
+}
+
+/** StatsTotalsResp */
+export interface RewardStatsTotals {
+  claimed: number;
+  redeemed: number;
+  expired: number;
+  cancelled: number;
+  points_spent: number;
+}
+
+/** StatsResp: GET /rewards/stats. */
+export interface RewardStats {
+  rewards: RewardStat[];
+  totals: RewardStatsTotals;
+}
+
+// ==================== WALLET ANALYTICS (points) ====================
+
+// WalletSummary (GET /wallets/summary) lives in ./players.
+
+/** BucketResp: wallets whose balance lies in [from, to] (inclusive). */
+export interface WalletBalanceBucket {
+  from: number;
+  to: number;
+  players: number;
+}
+
+/** DailyResp: one UTC day of ledger movement. */
+export interface WalletDailyTotals {
+  /** YYYY-MM-DD */
+  day: string;
+  credited: number;
+  debited: number;
+}
+
+/** GET /wallets/daily query: YYYY-MM-DD, inclusive, at most 366 days (422 invalid_range). */
+export interface WalletDailyParams {
+  from?: string;
+  to?: string;
+}
+
+// ==================== PROGRESSION (batch) ====================
+
+/** GET /progress?player_ids= (at most 100; unknown players are omitted). */
+export interface PlayerProgressList {
+  data: PlayerProgress[];
 }

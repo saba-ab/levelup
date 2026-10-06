@@ -1,69 +1,63 @@
 import React, { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Sparkles, Loader2, Copy, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { AI_DEFAULT_COUNT, type AIDraftKind } from '@/services/api/models/ai';
+import type { CreatedFromDraft } from '@/services/queries/ai';
+import { AIDraftWorkspace } from './AIDraftWorkspace';
+import { AI_KIND_META, inferAIKind } from './kinds';
 
 interface AIGenerateDialogProps {
   trigger?: React.ReactNode;
   title?: string;
   placeholder?: string;
+  /** Short hint shown above the prompt. */
   context?: string;
+  /**
+   * What to draft (POST /ai/drafts kind). When omitted it is inferred from
+   * `title` ("Generate Badge Ideas" → badge); with no match the dialog is not
+   * rendered, since only these kinds can be drafted.
+   */
+  kind?: AIDraftKind;
+  /** Drafts per request, 1..5 (default 3). */
+  defaultCount?: number;
+  /** Called after a draft was created through its module's endpoint. */
+  onCreated?: (kind: AIDraftKind, created: CreatedFromDraft) => void;
+  /**
+   * @deprecated Ignored: drafts come from POST /ai/drafts. Kept so existing
+   * call sites compile.
+   */
   onGenerate?: (prompt: string) => Promise<string>;
+  /** @deprecated Ignored, see onGenerate. */
   onUseResult?: (result: string) => void;
 }
 
+/** "Generate with AI" for one entity kind: drafts from the AI module, each creatable in place. */
 export function AIGenerateDialog({
   trigger,
-  title = "Generate with AI",
-  placeholder = "Describe what you want to generate...",
+  title,
+  placeholder,
   context,
-  onGenerate,
-  onUseResult,
+  kind: kindProp,
+  defaultCount = AI_DEFAULT_COUNT,
+  onCreated,
 }: AIGenerateDialogProps) {
+  const { hasPermission } = useAuth();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
-  const [result, setResult] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [count, setCount] = useState(defaultCount);
+  const kind = kindProp ?? inferAIKind(title);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() || !onGenerate) return;
-
-    setIsLoading(true);
-    setResult('');
-
-    try {
-      setResult(await onGenerate(prompt));
-    } catch {
-      setResult('Error generating content. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleUse = () => {
-    if (onUseResult && result) {
-      onUseResult(result);
-      setOpen(false);
-      setPrompt('');
-      setResult('');
-    }
-  };
+  if (!kind || !hasPermission('view:ai-hub')) return null;
+  const meta = AI_KIND_META[kind];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -75,100 +69,25 @@ export function AIGenerateDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            {title}
+            {title ?? `Generate ${meta.label.toLowerCase()} drafts`}
           </DialogTitle>
+          <DialogDescription>
+            {context ?? 'Drafts are checked against your existing data and can be created directly.'}
+          </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-4 py-4">
-          {!onGenerate && (
-            <div role="status" className="p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm text-amber-600 dark:text-amber-400">
-              AI generation is coming soon: it is not available in this API version.
-            </div>
-          )}
-
-          {context && (
-            <div className="p-3 bg-secondary/50 rounded-lg text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Context:</span> {context}
-            </div>
-          )}
-          
-          <div className="space-y-2">
-            <Label htmlFor="prompt">Your Prompt</Label>
-            <Textarea
-              id="prompt"
-              placeholder={placeholder}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="min-h-[100px] resize-none"
-            />
-          </div>
-          
-          <Button 
-            onClick={handleGenerate} 
-            disabled={isLoading || !prompt.trim() || !onGenerate}
-            className="w-full gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Generate
-              </>
-            )}
-          </Button>
-          
-          {result && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Generated Result</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleCopy}
-                  className="gap-1 h-7"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3 h-3" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      Copy
-                    </>
-                  )}
-                </Button>
-              </div>
-              <div 
-                className={cn(
-                  "p-4 rounded-lg border bg-card min-h-[120px] max-h-[200px] overflow-y-auto",
-                  "whitespace-pre-wrap text-sm"
-                )}
-              >
-                {result}
-              </div>
-              
-              {onUseResult && (
-                <Button 
-                  onClick={handleUse}
-                  variant="secondary"
-                  className="w-full"
-                >
-                  Use This Result
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+        <AIDraftWorkspace
+          kind={kind}
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          count={count}
+          onCountChange={setCount}
+          placeholder={placeholder}
+          onCreated={onCreated}
+        />
       </DialogContent>
     </Dialog>
   );

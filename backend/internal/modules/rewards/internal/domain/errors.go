@@ -18,6 +18,7 @@ var (
 	ErrBadStatus       = errs.WithCode(errs.New(errs.Invalid, "unknown reward status"), "invalid_status")
 	ErrBadPointsCost   = errs.WithCode(errs.New(errs.Invalid, "points_cost must be zero or positive"), "invalid_points_cost")
 	ErrBadValue        = errs.WithCode(errs.New(errs.Invalid, "value must be a decimal number with at most 2 decimals and 8 integer digits"), "invalid_value")
+	ErrBadRewardValue  = errs.WithCode(errs.New(errs.Invalid, "value of a points or level reward must be a positive whole number (the points credited or the XP granted)"), "invalid_reward_value")
 	ErrBadValueType    = errs.WithCode(errs.New(errs.Invalid, "value_type must be percentage or fixed"), "invalid_value_type")
 	ErrBadLimit        = errs.WithCode(errs.New(errs.Invalid, "limits, claim_ttl_days and level_requirement must be at least 1"), "invalid_limit")
 	ErrBadWindow       = errs.WithCode(errs.New(errs.Invalid, "end_at must not be before start_at"), "invalid_reward_window")

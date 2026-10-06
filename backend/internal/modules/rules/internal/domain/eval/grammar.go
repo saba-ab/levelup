@@ -13,7 +13,7 @@
 //	            | node
 //	node       := {"all": [node, ...]} | {"any": [node, ...]} | {"not": node} | leaf
 //	leaf       := {"source": src, "field": path, "operator": op, "value": v}
-//	src        := "trigger" | "player" | "activity"  // "type" is accepted as an alias of "source"
+//	src        := "trigger" | "player" | "activity" | "history"  // "type" is accepted as an alias of "source"
 //	op         := eq | neq | gt | gte | lt | lte | in | not_in | contains | exists | not_exists
 //	              (Laravel names equals, not_equals, greater_than, less_than,
 //	               greater_than_or_equal, less_than_or_equal are aliases)
@@ -51,6 +51,63 @@
 // Limits: {max_per_player, max_per_player_per_day, max_per_player_per_week,
 // cooldown_seconds}, each a positive integer. The evaluator only carries them;
 // the service enforces them against counters in the decision transaction.
+//
+// # stop_processing
+//
+// A version flag. Rules run in (priority DESC, rule id ASC) order; once a
+// stop_processing rule FIRES, every later rule of the same activity is
+// recorded as skipped_by_stop and neither evaluated for limits nor allowed
+// to emit effects. "Fires" means matched and not refused by a limit, so a
+// limited stop rule does not stop anything. Evaluate itself never cuts the
+// list (it cannot see limits); StopGate applies the cut in order, and
+// Result.ApplyStop applies it with "matched = fired" (simulation, where
+// limits are reported but not enforced).
+//
+// # Schedule
+//
+//	schedule := null | {"starts_at"?: RFC3339, "ends_at"?: RFC3339,
+//	                    "days_of_week"?: [0-6, ...],          // 0 = Sunday
+//	                    "hours"?: {"from": "HH:MM", "to": "HH:MM"},
+//	                    "timezone"?: IANA name}               // default UTC
+//
+// Evaluated against activity.occurred_at (never the clock). starts_at is
+// inclusive, ends_at exclusive; hours is [from, to) in the schedule's
+// timezone and wraps midnight when from > to (22:00-02:00); days_of_week is
+// the local weekday of the activity instant. Outside the schedule the rule is
+// recorded as out_of_schedule (it is not evaluated and does not stop
+// processing). Everything is validated at compile time: unknown keys, a
+// malformed time, ends_at <= starts_at, a day outside 0-6, from == to and an
+// unknown timezone are errors.
+//
+// # Grammar v2: history leaves (aggregates over the player's past)
+//
+//	leaf := ... | {"source": "history", "field": "first_time",
+//	               "operator"?: eq | neq, "value"?: bool}   // default: eq true
+//	            | {"source": "history", "field": "count",
+//	               "event_type"?: slug,                       // default: the trigger
+//	               "window": "1d" | "7d" | "30d" | "90d" | "all",
+//	               "operator": eq | neq | gt | gte | lt | lte | in | not_in,
+//	               "value": number | [number, ...]}
+//
+// History is read from rules' own projection (rule_player_event_days: one
+// counter per tenant, player, event type and UTC day of occurred_at, bumped
+// in the decision transaction of every evaluated activity). The values are
+// loaded by the service in one query and handed in as Facts.History, so the
+// evaluator stays pure.
+//
+//   - count is the number of PRIOR activities: the current activity is never
+//     counted (the projection is bumped after evaluation, in the same tx).
+//   - Windows are UTC calendar days ending on the activity's day: "1d" is
+//     the activity's UTC day, "7d" that day and the 6 before it, ..., "all"
+//     every day up to and including it. Activities recorded for later days
+//     (out-of-order delivery) are not counted; activities of the same day are
+//     counted when they were decided before this one (day granularity).
+//   - first_time is true when the player has no prior activity of the
+//     trigger event type, i.e. count(trigger, all) == 0. Like conditions on
+//     player state it is read from a snapshot, so two concurrent first
+//     activities can both see it true: pair it with limits.max_per_player = 1
+//     when it must fire exactly once (counters are concurrency-safe).
+//   - Facts.History == nil (not loaded) makes every history fact missing.
 package eval
 
 // Condition sources.
@@ -58,7 +115,26 @@ const (
 	SourceTrigger  = "trigger"
 	SourcePlayer   = "player"
 	SourceActivity = "activity"
+	SourceHistory  = "history"
 )
+
+// History fields and windows (grammar v2).
+const (
+	HistoryFirstTime = "first_time"
+	HistoryCount     = "count"
+
+	Window1d  = "1d"
+	Window7d  = "7d"
+	Window30d = "30d"
+	Window90d = "90d"
+	WindowAll = "all"
+)
+
+// HistoryWindows lists every window; WindowDays gives each one's length in
+// days (0 = unbounded).
+var HistoryWindows = []string{Window1d, Window7d, Window30d, Window90d, WindowAll}
+
+var WindowDays = map[string]int{Window1d: 1, Window7d: 7, Window30d: 30, Window90d: 90, WindowAll: 0}
 
 // Operators.
 const (
@@ -91,6 +167,11 @@ const (
 	StatusNotMatched = "not_matched"
 	StatusOutOfScope = "out_of_scope" // program-scoped rule, player not enrolled
 	StatusInvalid    = "invalid"      // stored definition no longer compiles
+	// StatusOutOfSchedule: the activity's occurred_at is outside the
+	// rule's schedule; the conditions were not evaluated.
+	StatusOutOfSchedule = "out_of_schedule"
+	// StatusSkippedByStop: an earlier stop_processing rule fired.
+	StatusSkippedByStop = "skipped_by_stop"
 )
 
 // Compile-time caps. They bound evaluation cost (doc 06 §11.10: < 1 ms for
@@ -107,6 +188,8 @@ const (
 	MaxCooldownSeconds   = 10 * 365 * 24 * 3600
 	MaxDescription       = 255
 	MaxActivityKey       = 100
+	MaxEventType         = 100
+	MaxTimezone          = 64
 )
 
 var operatorAliases = map[string]string{

@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"levelup/internal/modules/player/contracts"
 	"levelup/internal/modules/player/internal/app"
 	"levelup/internal/modules/player/internal/domain"
 	"levelup/internal/shared/errs"
@@ -110,6 +111,18 @@ func (r *Postgres) Create(ctx context.Context, tx *gorm.DB, p domain.Player) err
 	return nil
 }
 
+// CreateIfAbsent is the system (auto-create) insert: ON CONFLICT DO NOTHING
+// without a target covers the primary key and the partial live index alike,
+// so a collision is a clean no-op inside the caller's transaction.
+func (r *Postgres) CreateIfAbsent(ctx context.Context, tx *gorm.DB, p domain.Player) (bool, error) {
+	m := fromDomain(p)
+	res := tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&m)
+	if res.Error != nil {
+		return false, errs.Wrap(errs.Internal, "insert player if absent", res.Error)
+	}
+	return res.RowsAffected == 1, nil
+}
+
 func (r *Postgres) live(ctx context.Context, db *gorm.DB, tenantID string) *gorm.DB {
 	return db.WithContext(ctx).Where("tenant_id = ? AND deleted_at IS NULL", tenantID)
 }
@@ -168,8 +181,35 @@ func (r *Postgres) Save(ctx context.Context, tx *gorm.DB, p domain.Player) error
 	return nil
 }
 
+// sortNameExpr must match ix_players_tenant_sort_name and
+// domain.Player.SortName.
+const sortNameExpr = "lower(COALESCE(display_name, external_id))"
+
 func (r *Postgres) List(ctx context.Context, tenantID string, f app.ListFilter) ([]domain.Player, error) {
-	q := r.live(ctx, r.db, tenantID).Order("created_at DESC, id DESC").Limit(f.Limit)
+	q := r.live(ctx, r.db, tenantID).Limit(f.Limit)
+	switch f.Sort {
+	case contracts.SortCreatedAsc:
+		q = q.Order("created_at ASC, id ASC")
+		if f.HasAfter {
+			q = q.Where("(created_at, id) > (?, ?)", f.After, f.AfterID)
+		}
+	case contracts.SortDisplayName:
+		q = q.Order(sortNameExpr + " ASC, id ASC")
+		if f.HasAfter {
+			q = q.Where("("+sortNameExpr+", id) > (?, ?::uuid)", f.AfterKey, f.AfterID)
+		}
+	default:
+		q = q.Order("created_at DESC, id DESC")
+		if f.HasAfter {
+			q = q.Where("(created_at, id) < (?, ?)", f.After, f.AfterID)
+		}
+	}
+	if f.CreatedFrom != nil {
+		q = q.Where("created_at >= ?", *f.CreatedFrom)
+	}
+	if f.CreatedTo != nil {
+		q = q.Where("created_at < ?", *f.CreatedTo)
+	}
 	if f.Active != nil {
 		q = q.Where("is_active = ?", *f.Active)
 	}
@@ -177,9 +217,6 @@ func (r *Postgres) List(ctx context.Context, tenantID string, f app.ListFilter) 
 		pattern := escapeLike(strings.ToLower(f.Search)) + "%"
 		q = q.Where(`(lower(external_id) LIKE ? ESCAPE '\' OR lower(display_name) LIKE ? ESCAPE '\' OR lower(email) LIKE ? ESCAPE '\')`,
 			pattern, pattern, pattern)
-	}
-	if f.HasAfter {
-		q = q.Where("(created_at, id) < (?, ?)", f.After, f.AfterID)
 	}
 	var ms []player
 	if err := q.Find(&ms).Error; err != nil {
@@ -208,6 +245,20 @@ func (r *Postgres) ByExternalIDs(ctx context.Context, tenantID string, externalI
 		return nil, errs.Wrap(errs.Internal, "load players by external ids", err)
 	}
 	return toDomainAll(ms), nil
+}
+
+// IDsAfter pages live player ids in ascending id order (keyset on the
+// primary key).
+func (r *Postgres) IDsAfter(ctx context.Context, tenantID, afterID string, limit int) ([]string, error) {
+	q := r.live(ctx, r.db, tenantID).Model(&player{})
+	if afterID != "" {
+		q = q.Where("id > ?", afterID)
+	}
+	ids := make([]string, 0, limit)
+	if err := q.Order("id").Limit(limit).Pluck("id", &ids).Error; err != nil {
+		return nil, errs.Wrap(errs.Internal, "list player ids", err)
+	}
+	return ids, nil
 }
 
 // PurgeTenantBatch hard-deletes up to limit rows of the tenant, live or

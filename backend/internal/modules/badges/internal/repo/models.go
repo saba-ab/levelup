@@ -231,3 +231,32 @@ func deref(s *string) string {
 	}
 	return *s
 }
+
+// badgePlayerStat → badges_svc.badge_player_stats (requirements projection).
+type badgePlayerStat struct {
+	TenantID          string `gorm:"primaryKey;type:uuid"`
+	PlayerID          string `gorm:"primaryKey;type:uuid"`
+	LifetimePoints    int64
+	LifetimePointsAt  *time.Time
+	MissionsCompleted int64
+	MaxStreak         int64
+	Level             int64
+	BadgesEarned      int64
+	UpdatedAt         time.Time
+}
+
+// badgePlayerActivityCount → badges_svc.badge_player_activity_counts.
+type badgePlayerActivityCount struct {
+	TenantID  string `gorm:"primaryKey;type:uuid"`
+	PlayerID  string `gorm:"primaryKey;type:uuid"`
+	EventType string `gorm:"primaryKey"`
+	Count     int64
+	UpdatedAt time.Time
+}
+
+// appliedEvent → badges_svc.applied_events (projection dedupe keys).
+type appliedEvent struct {
+	TenantID  string `gorm:"primaryKey;type:uuid"`
+	EventKey  string `gorm:"primaryKey"`
+	AppliedAt time.Time
+}

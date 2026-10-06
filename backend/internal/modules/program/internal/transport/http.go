@@ -48,6 +48,7 @@ func (h *Handler) Mount(r chi.Router) {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        status query string false "Filter by status" Enums(draft, active, paused, ended)
+// @Param        search query string false "Case-insensitive substring of name or slug (max 100 chars)"
 // @Param        limit  query int    false "Page size (default 25, max 100)"
 // @Param        cursor query string false "Opaque cursor from next_cursor"
 // @Success      200 {object} ProgramListResp
@@ -62,16 +63,35 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	items, next, err := h.svc.List(r.Context(), q.Get("status"), q.Get("cursor"), limit)
+	items, next, err := h.svc.List(r.Context(), q.Get("status"), q.Get("search"), q.Get("cursor"), limit)
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	ids := make([]string, len(items))
+	for i, p := range items {
+		ids[i] = p.ID
+	}
+	counts, err := h.svc.MemberCounts(r.Context(), ids)
 	if err != nil {
 		httpx.Error(w, r, err)
 		return
 	}
 	out := ProgramListResp{Data: make([]ProgramResp, len(items)), NextCursor: next}
 	for i, p := range items {
-		out.Data[i] = toProgramResp(p)
+		out.Data[i] = toProgramResp(p, counts[p.ID])
 	}
 	httpx.JSON(w, http.StatusOK, out)
+}
+
+// writeProgram renders one program with its member count (one count query).
+func (h *Handler) writeProgram(w http.ResponseWriter, r *http.Request, p domain.Program) {
+	counts, err := h.svc.MemberCounts(r.Context(), []string{p.ID})
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toProgramResp(p, counts[p.ID]))
 }
 
 // @Summary      Create a program (always starts as draft)
@@ -105,7 +125,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, toProgramResp(p))
+	httpx.JSON(w, http.StatusCreated, toProgramResp(p, 0)) // a new program has no members
 }
 
 // @Summary      Get a program
@@ -129,7 +149,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toProgramResp(p))
+	h.writeProgram(w, r, p)
 }
 
 // @Summary      Partially update a program (status is not editable here)
@@ -162,7 +182,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toProgramResp(p))
+	h.writeProgram(w, r, p)
 }
 
 // @Summary      Delete a program (soft delete)
@@ -244,7 +264,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request,
 		httpx.Error(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toProgramResp(p))
+	h.writeProgram(w, r, p)
 }
 
 // @Summary      List a program's enrolled players

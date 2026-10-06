@@ -46,6 +46,16 @@ type Repository interface {
 	WalletByPlayer(ctx context.Context, tenantID, playerID string) (domain.Wallet, bool, error)
 	WalletsByPlayers(ctx context.Context, tenantID string, playerIDs []string) ([]domain.Wallet, error)
 	ListEntries(ctx context.Context, tenantID, playerID string, f LedgerFilter) ([]domain.LedgerEntry, error)
+
+	// Summary aggregates every wallet of the tenant and the ledger moves
+	// created at or after since.
+	Summary(ctx context.Context, tenantID string, since time.Time) (WalletSummary, error)
+	// BalanceDistribution buckets current balances into n equal-width,
+	// integer bounded buckets (SQL width_bucket). No wallets → nil.
+	BalanceDistribution(ctx context.Context, tenantID string, n int) ([]BalanceBucket, error)
+	// DailyTotals sums credited and debited amounts per UTC day of
+	// created_at in [from, to). Days without moves are absent.
+	DailyTotals(ctx context.Context, tenantID string, from, to time.Time) ([]DailyTotal, error)
 }
 
 // LedgerFilter pages a player's ledger newest first by (created_at, id).

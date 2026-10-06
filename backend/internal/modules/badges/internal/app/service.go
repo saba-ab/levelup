@@ -68,6 +68,27 @@ type Repository interface {
 	InsertRevocation(ctx context.Context, tx *gorm.DB, r domain.Revocation) error
 
 	PurgeTenant(ctx context.Context, tx *gorm.DB, tenantID string) error
+
+	// ---- requirements engine ----
+
+	// MarkEventApplied records a projection dedupe key; fresh=false means
+	// it was applied before (INSERT ... ON CONFLICT DO NOTHING).
+	MarkEventApplied(ctx context.Context, tx *gorm.DB, tenantID, key string, at time.Time) (fresh bool, err error)
+	// ApplyPlayerStats upserts the player's projection row (and activity
+	// count) with u's semantics.
+	ApplyPlayerStats(ctx context.Context, tx *gorm.DB, tenantID, playerID string, u StatsUpdate) error
+	// PlayerStats returns the projection; a player never seen is all zero.
+	PlayerStats(ctx context.Context, tenantID, playerID string) (domain.PlayerStats, error)
+	// AutoAwardBadges returns the tenant's live, active badges that carry
+	// requirements, oldest first.
+	AutoAwardBadges(ctx context.Context, tenantID string) ([]domain.Badge, error)
+	// PruneAppliedEvents deletes up to limit dedupe keys applied before
+	// before, across tenants, and returns how many it deleted.
+	PruneAppliedEvents(ctx context.Context, before time.Time, limit int) (int, error)
+
+	// AwardStats aggregates the applied awards of the tenant; PerDay
+	// covers days on or after since (UTC).
+	AwardStats(ctx context.Context, tenantID string, since time.Time) (AwardStats, error)
 }
 
 // Reconciler is the sweep side of the repository (R47).

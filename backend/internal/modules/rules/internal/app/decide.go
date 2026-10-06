@@ -35,6 +35,14 @@ import (
 //     recorded decisions, never errors. Only transient failures return an
 //     error (retry ladder); an undecodable or incomplete payload is
 //     errs.Invalid (immediate DLQ).
+//   - Exception: an unknown player on an activity flagged AutoCreatePlayer
+//     returns errs.Unavailable, because the player module is creating that
+//     player from the same activity.received.v1 concurrently. The broker
+//     retry ladder (5s, 30s, 2m) re-delivers until the player exists; if it
+//     still does not after the last tier the delivery is parked in the DLQ
+//     (and the outbox dead-letter table) instead of being decided, so a
+//     replay after the player exists decides it normally. No rejected
+//     decision is recorded for it, which keeps the activity replayable.
 func (s *Service) Decide(ctx context.Context, ev activitycontracts.ReceivedV1) error {
 	if err := validateActivity(ev); err != nil {
 		return err
@@ -86,6 +94,9 @@ func (s *Service) Decide(ctx context.Context, ev activitycontracts.ReceivedV1) e
 	if err != nil {
 		return err
 	}
+	if facts.History, err = s.history(ctx, prog, ev.TenantID, player.ID, ev.EventType, d.OccurredAt); err != nil {
+		return err
+	}
 	res := eval.Evaluate(prog, facts)
 	return s.record(ctx, d, start, ev, res)
 }
@@ -128,6 +139,10 @@ func (s *Service) resolvePlayer(ctx context.Context, ev activitycontracts.Receiv
 	}
 	// A provider must never hand back another tenant's player; treat it as unknown.
 	if !found || (snap.TenantID != "" && snap.TenantID != ev.TenantID) {
+		if ev.AutoCreatePlayer {
+			return eval.Player{}, "", errs.New(errs.Unavailable,
+				"player not created yet for auto-create activity "+ev.ActivityID+"; retrying")
+		}
 		return eval.Player{}, effect.ReasonPlayerNotFound, nil
 	}
 	if !snap.Active {
@@ -149,6 +164,7 @@ func (s *Service) facts(ctx context.Context, prog *eval.Program, ev activitycont
 		Activity: eval.Activity{
 			EventID: ev.EventID, EventType: ev.EventType,
 			Properties: ev.Properties, Context: ev.Context, CausationDepth: ev.CausationDepth,
+			OccurredAt: ev.OccurredAt.UTC(),
 		},
 		Player: &player,
 	}
@@ -181,6 +197,23 @@ func (s *Service) enrich(ctx context.Context, prog *eval.Program, tenantID strin
 	return nil
 }
 
+// history loads the player's prior activity counts for the event types the
+// program reads, in one query, and only when some rule reads history.
+func (s *Service) history(ctx context.Context, prog *eval.Program, tenantID, playerID, trigger string,
+	at time.Time) (*eval.History, error) {
+
+	types := prog.HistoryEventTypes(trigger)
+	if len(types) == 0 || playerID == "" {
+		return nil, nil
+	}
+	counts, err := s.repo.PlayerHistory(ctx, HistoryQuery{TenantID: tenantID, PlayerID: playerID,
+		EventTypes: types, At: at})
+	if err != nil {
+		return nil, err
+	}
+	return &eval.History{Counts: counts}, nil
+}
+
 // record writes the decision, its executions, limit counters and effects,
 // and publishes one job command per effect plus rules.decision_made.v1 — all
 // in one transaction.
@@ -202,6 +235,14 @@ func (s *Service) record(ctx context.Context, d domain.Decision, start time.Time
 		if !inserted {
 			return nil // another delivery decided this activity first
 		}
+		// The history projection counts every evaluated activity exactly
+		// once: only the delivery that inserted the decision gets here.
+		if pendingOutcome && d.PlayerID != "" {
+			if err := s.repo.RecordPlayerEvent(ctx, tx, PlayerEvent{TenantID: d.TenantID, PlayerID: d.PlayerID,
+				EventType: d.EventType, At: d.OccurredAt}); err != nil {
+				return err
+			}
+		}
 
 		var (
 			execs        []domain.Execution
@@ -210,8 +251,10 @@ func (s *Service) record(ctx context.Context, d domain.Decision, start time.Time
 			published    = []contracts.EffectV1{}
 			fired        int
 			limited      int
+			gate         eval.StopGate
 		)
 		for _, rr := range res.Rules {
+			gate.Admit(&rr) // after a fired stop_processing rule: skipped_by_stop
 			ex := domain.Execution{
 				ID:               domain.ExecutionID(d.ID, rr.RuleVersionID),
 				TenantID:         d.TenantID,
@@ -230,6 +273,10 @@ func (s *Service) record(ctx context.Context, d domain.Decision, start time.Time
 					zap.String("rule_version_id", rr.RuleVersionID), zap.String("error", rr.Error))
 			case eval.StatusOutOfScope:
 				ex.Status = domain.ExecOutOfScope
+			case eval.StatusOutOfSchedule:
+				ex.Status = domain.ExecOutOfSchedule
+			case eval.StatusSkippedByStop:
+				ex.Status = domain.ExecSkippedByStop
 			case eval.StatusNotMatched:
 				ex.Status = domain.ExecNotMatched
 			default:
@@ -251,6 +298,7 @@ func (s *Service) record(ctx context.Context, d domain.Decision, start time.Time
 				limited++
 			}
 			if ex.Status == domain.ExecFired {
+				gate.Fired(rr)
 				fired++
 				matchedRules = append(matchedRules, rr.RuleID)
 				for i, a := range rr.Actions {

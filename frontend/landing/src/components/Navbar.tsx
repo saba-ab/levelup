@@ -9,10 +9,11 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   const navLinks = [
-    { name: "Features", href: "#features" },
-    { name: "How It Works", href: "#how-it-works" },
-    { name: "Use Cases", href: "#use-cases" },
-    { name: "Documentation", href: "#docs" },
+    { name: "Features", href: "/#features" },
+    { name: "How It Works", href: "/#how-it-works" },
+    { name: "SDKs", href: "/#sdks" },
+    { name: "Pricing", href: "/#pricing" },
+    { name: "Documentation", href: "/docs" },
   ];
 
   return (
@@ -55,6 +56,7 @@ const Navbar = () => {
           {/* Mobile Menu Button */}
           <button
             className="md:hidden text-foreground p-2"
+            aria-label={isOpen ? "Close menu" : "Open menu"}
             onClick={() => setIsOpen(!isOpen)}
           >
             {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

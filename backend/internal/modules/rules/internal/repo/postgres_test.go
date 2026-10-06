@@ -56,9 +56,11 @@ func seedLiveRule(t *testing.T, r *Postgres, db *gorm.DB, tenantID, trigger stri
 	inTx(t, db, func(tx *gorm.DB) error {
 		require.NoError(t, r.CreateRule(ctx, tx, rule))
 		for i := 1; i <= n; i++ {
-			v, err := domain.NewVersion(rule, i, json.RawMessage(`[{"source":"trigger","field":"amount","operator":"gte","value":1}]`),
-				json.RawMessage(fmt.Sprintf(`[{"type":"credit_points","amount":%d}]`, i)), json.RawMessage(`{"max_per_player":2}`),
-				"u", eval.Options{}, t0.Add(time.Duration(i)*time.Second))
+			v, err := domain.NewVersion(rule, i, domain.Definition{
+				Conditions: json.RawMessage(`[{"source":"trigger","field":"amount","operator":"gte","value":1}]`),
+				Actions:    json.RawMessage(fmt.Sprintf(`[{"type":"credit_points","amount":%d}]`, i)),
+				Limits:     json.RawMessage(`{"max_per_player":2}`),
+			}, "u", eval.Options{}, t0.Add(time.Duration(i)*time.Second))
 			require.NoError(t, err)
 			require.NoError(t, r.CreateVersion(ctx, tx, v))
 			vs = append(vs, v)
@@ -101,7 +103,7 @@ func TestRuleSlugUniquePerTenantAndVersionsUnique(t *testing.T) {
 	other.TenantID = id.NewID()
 	inTx(t, db, func(tx *gorm.DB) error { return r.CreateRule(ctx, tx, other) })
 
-	v, err := domain.NewVersion(rule, 1, nil, json.RawMessage(`[{"type":"grant_xp","amount":1}]`), nil, "u", eval.Options{}, t0)
+	v, err := domain.NewVersion(rule, 1, domain.Definition{Actions: json.RawMessage(`[{"type":"grant_xp","amount":1}]`)}, "u", eval.Options{}, t0)
 	require.NoError(t, err)
 	err = postgres.InTx(ctx, db, func(tx *gorm.DB) error { return r.CreateVersion(ctx, tx, v) })
 	require.ErrorIs(t, err, domain.ErrVersionConflict)

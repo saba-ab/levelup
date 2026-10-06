@@ -36,10 +36,20 @@ export interface UpdatePlayerData {
   is_active?: boolean;
 }
 
+/** Server sort of GET /players: newest first (default), oldest first, or by name. */
+export type PlayerSort = '-created_at' | 'created_at' | 'display_name';
+
 /** GET /players query. */
 export interface PlayerFilters extends CursorParams {
+  /** Case-insensitive prefix of external_id, display_name or email. */
   search?: string;
   is_active?: boolean;
+  /** display_name is case-insensitive and falls back to external_id. */
+  sort?: PlayerSort;
+  /** Created at or after (RFC 3339, or YYYY-MM-DD = UTC midnight), inclusive. */
+  created_from?: string;
+  /** Created before (RFC 3339, or YYYY-MM-DD = UTC midnight), exclusive. */
+  created_to?: string;
 }
 
 // ==================== PROGRESSION (per player) ====================
@@ -186,3 +196,25 @@ export interface WalletTransactionFilters extends CursorParams {
   kind?: WalletTransactionType;
   direction?: WalletDirection;
 }
+
+// ==================== BATCH READS (one call per page) ====================
+
+/** SummaryResp (GET /wallets/summary): tenant-wide points figures. */
+export interface WalletSummary {
+  total_balance: number;
+  open_wallets: number;
+  lifetime_earned: number;
+  lifetime_spent: number;
+  credited_last_30d: number;
+  debited_last_30d: number;
+}
+
+/** LastSeenResp (GET /activities/last-seen): absent for players with no activity. */
+export interface PlayerLastSeen {
+  player_id: ID;
+  last_activity_at: string;
+  last_event_type: string;
+}
+
+/** At most this many ids per batch call (GET /progress, /wallets, /activities/last-seen). */
+export const PLAYER_BATCH_MAX = 100;

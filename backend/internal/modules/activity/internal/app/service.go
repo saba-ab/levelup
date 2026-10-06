@@ -55,6 +55,9 @@ type Repository interface {
 	MarkRepublished(ctx context.Context, tx *gorm.DB, ids []string, at time.Time) error
 	CountExhausted(ctx context.Context, receivedBefore time.Time, maxRepublishes int) (int64, error)
 	DeleteTenant(ctx context.Context, tx *gorm.DB, tenantID string) (int64, error)
+	// LastSeen returns, per player id with at least one activity, its most
+	// recent activity by (occurred_at, id). One grouped query.
+	LastSeen(ctx context.Context, tenantID string, playerIDs []string) ([]domain.LastSeen, error)
 	LastRun(ctx context.Context, name string) (time.Time, error)
 	MarkRun(ctx context.Context, name string, at time.Time) error
 }

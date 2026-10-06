@@ -59,6 +59,8 @@ type Repository interface {
 	Save(ctx context.Context, tx *gorm.DB, lb domain.Leaderboard) error
 	SoftDelete(ctx context.Context, tx *gorm.DB, lb domain.Leaderboard, at time.Time) error
 	ActiveByType(ctx context.Context, tenantID, typ string) ([]domain.Leaderboard, error)
+	// ActiveForActivity returns the active activity boards of one event type.
+	ActiveForActivity(ctx context.Context, tenantID, eventType string) ([]domain.Leaderboard, error)
 	// ActiveBoards pages every live active board across tenants by id (jobs).
 	ActiveBoards(ctx context.Context, afterID string, limit int) ([]domain.Leaderboard, error)
 

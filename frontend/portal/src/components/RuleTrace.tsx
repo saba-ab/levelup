@@ -19,6 +19,43 @@ function effectLabel(type: string): string {
   return effectLabels[type] ?? type;
 }
 
+const ruleStatusLabels: Record<string, string> = {
+  fired: 'fired',
+  matched: 'matched',
+  not_matched: 'not matched',
+  limited: 'limited',
+  out_of_scope: 'out of scope',
+  invalid: 'invalid',
+  out_of_schedule: 'out of schedule',
+  skipped_by_stop: 'skipped (stop)',
+};
+
+const ruleStatusClasses: Record<string, string> = {
+  fired: 'border-green-500/50 text-green-500 bg-green-500/10',
+  matched: 'border-green-500/50 text-green-500 bg-green-500/10',
+  limited: 'border-amber-500/50 text-amber-500 bg-amber-500/10',
+  out_of_schedule: 'border-blue-500/50 text-blue-500 bg-blue-500/10',
+  skipped_by_stop: 'border-purple-500/50 text-purple-500 bg-purple-500/10',
+  invalid: 'border-destructive/50 text-destructive bg-destructive/10',
+};
+
+const ruleStatusHints: Record<string, string> = {
+  out_of_schedule: "The activity's time is outside the rule's schedule; conditions were not evaluated.",
+  skipped_by_stop: 'An earlier stop-processing rule fired, so this rule was not evaluated.',
+  out_of_scope: 'The rule is scoped to a program the player is not enrolled in.',
+  limited: 'The conditions matched but a limit refused it.',
+  invalid: 'The stored definition no longer compiles.',
+};
+
+/** A rule execution / simulation status (matched, fired, out_of_schedule, skipped_by_stop, ...). */
+export function RuleStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant="outline" className={cn('font-normal', ruleStatusClasses[status])} title={ruleStatusHints[status]}>
+      {ruleStatusLabels[status] ?? status}
+    </Badge>
+  );
+}
+
 /** Per-condition evaluation trace (simulation or a recorded execution). */
 export function ConditionTraceList({ traces }: { traces: ConditionTrace[] }) {
   if (traces.length === 0) {
@@ -91,7 +128,7 @@ export function DecisionDetail({ decisionId }: { decisionId: ID }) {
           <div key={ex.id} className="rounded-lg border p-3 space-y-2">
             <div className="flex items-center gap-2 text-sm">
               <code className="text-xs">{ex.rule_id}</code>
-              <Badge variant={ex.matched ? 'default' : 'secondary'}>{ex.status}</Badge>
+              <RuleStatusBadge status={ex.status} />
             </div>
             <ConditionTraceList traces={ex.condition_results} />
             <EffectList effects={data.effects.filter(e => e.execution_id === ex.id)} />

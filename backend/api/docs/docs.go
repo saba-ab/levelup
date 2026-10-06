@@ -207,6 +207,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/activities/last-seen": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "For up to 100 player ids, the occurred_at and event_type of each player's most recent activity. Players with no activity resolved to them are absent. Order follows player_ids.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "activity"
+                ],
+                "summary": "Last activity per player",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Comma-separated player ids (uuid), at most 100",
+                        "name": "player_ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_activity_internal_transport.LastSeenListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "code invalid_player_ids",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/activities/{id}": {
             "get": {
                 "security": [
@@ -251,6 +303,396 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/drafts": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns up to count validated drafts shaped exactly like the owning module's create request. Drafts are not persisted. Counts against the tenant's daily AI request limit.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "Draft gamification entities with AI",
+                "parameters": [
+                    {
+                        "description": "Draft request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_ai_internal_transport.DraftReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_ai_internal_transport.DraftResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "invalid input, ai_refused, ai_output_truncated, invalid_context",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "429": {
+                        "description": "ai_quota_exceeded",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "503": {
+                        "description": "ai_not_configured, ai_unavailable, ai_bad_output",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/templates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "List AI Hub prompt templates",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_ai_internal_transport.TemplateListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/ai/usage": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ai"
+                ],
+                "summary": "AI usage and daily quota of the current tenant",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "History window in days, today included (default 30, max 90)",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_ai_internal_transport.UsageResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/engagement": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Badges per day, missions started/completed, levels reached, rewards claimed and top event types over an inclusive UTC day range (max 366 days).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Analytics engagement",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "First day (YYYY-MM-DD or RFC 3339)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Last day (YYYY-MM-DD or RFC 3339), default today",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.EngagementResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/funnel": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Players who did each event type in order within an inclusive UTC day range (max 366 days). Approximation: order is resolved per UTC day from daily activity, so steps on the same day count as in order.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Funnel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "2-10 comma-separated event types, e.g. signup,first_purchase,repeat_purchase",
+                        "name": "steps",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "First day (YYYY-MM-DD or RFC 3339)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Last day (YYYY-MM-DD or RFC 3339), default today",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.FunnelResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Daily activity, active players, points and new players over an inclusive UTC day range (max 366 days; default the 30 days ending today), plus DAU/WAU/MAU ending at \"to\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Analytics overview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "First day (YYYY-MM-DD or RFC 3339)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Last day (YYYY-MM-DD or RFC 3339), default today",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.OverviewResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/retention": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Weekly cohorts (ISO weeks starting Monday, UTC) by each player's first activity day, for the last N weeks including the current one. retained[k] is the percentage of the cohort active k weeks later; curve is the size-weighted average per week offset.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Retention cohorts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cohort granularity: week (default)",
+                        "name": "cohort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of cohorts, 1-52 (default 8)",
+                        "name": "weeks",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_analytics_internal_transport.RetentionResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -397,6 +839,121 @@ const docTemplate = `{
                         "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/accept-invite": {
+            "post": {
+                "description": "Creates the user in the invitation's tenant with its roles (email verified) and returns a session like login.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Accept an invitation and sign in",
+                "parameters": [
+                    {
+                        "description": "Token, name and password",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.AcceptInvitationReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.SessionResp"
+                        }
+                    },
+                    "409": {
+                        "description": "email_taken",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "invalid_invitation_token",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/forgot-password": {
+            "post": {
+                "description": "Always 202, whether or not the address has an account (no enumeration). At most 3 emails per address per hour.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Request a password reset email",
+                "parameters": [
+                    {
+                        "description": "Email",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.ForgotPasswordReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/invitations/{token}": {
+            "get": {
+                "description": "Anonymous; the token is the credential. Anything but a pending invitation of an active tenant is 404 invitation_not_found.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Describe an invitation for the accept page",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invitation token from the email link",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.InvitationPreviewResp"
                         }
                     },
                     "404": {
@@ -612,6 +1169,111 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/resend-verification": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Earlier links stop working. Throttled requests are accepted silently.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Email a fresh verification link to the caller",
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "email_already_verified",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/reset-password": {
+            "post": {
+                "description": "Single use. Revokes every session of the user. Unknown, expired, used or superseded tokens are 422 invalid_reset_token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Set a new password with a reset token",
+                "parameters": [
+                    {
+                        "description": "Token and new password",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.ResetPasswordReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/verify-email": {
+            "post": {
+                "description": "Unknown, expired or used tokens, or a token for an address the user no longer has, are 422 invalid_verification_token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Verify an email address with a token",
+                "parameters": [
+                    {
+                        "description": "Token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.VerifyEmailReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/badges": {
             "get": {
                 "security": [
@@ -699,6 +1361,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "requirements, when set, is evaluated automatically: {\"all\":[cond],\"any\":[cond]} with cond {\"metric\": lifetime_points|missions_completed|streak_days|level|badges_earned|activity_count, \"event_type\": \"\u003ctype\u003e\" (activity_count only), \"gte\": int \u003e= 1}. A player meeting it is awarded the badge once. {} or null means no requirements.",
                 "consumes": [
                     "application/json"
                 ],
@@ -746,7 +1409,44 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "invalid_badge_requirements",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/badges/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Per badge (live badges, plus deleted ones that were awarded): applied awards, distinct players and the last award time, from the award ledger (revokes do not subtract). awards_per_day covers the last 30 UTC days, oldest first, zero-filled.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "badges"
+                ],
+                "summary": "Badge award statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_badges_internal_transport.StatsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -915,7 +1615,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "invalid_badge_requirements",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -1518,7 +2218,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "leaderboard_invalid_type, leaderboard_invalid_metric, leaderboard_invalid_config",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -2292,6 +2992,75 @@ const docTemplate = `{
                         }
                     },
                     "422": {
+                        "description": "invalid_mission_criteria (fields keyed criteria.*)",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/missions/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "One page of missions (newest first) with started / in_progress / completed attempt counts, completion_rate and avg_hours_to_complete. Missions without attempts report zeros.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "missions"
+                ],
+                "summary": "Completion analytics of every mission",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by mission status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by mission type",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_missions_internal_transport.MissionStatsListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
                         "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
@@ -2459,7 +3228,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "invalid_mission_criteria (fields keyed criteria.*)",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -2768,6 +3537,670 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "mission_already_started, mission_not_available, mission_limit_reached, player_inactive",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/missions/{id}/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "missions"
+                ],
+                "summary": "Completion analytics of one mission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Mission id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_missions_internal_transport.MissionStatsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "mission_not_found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/channels": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "in_app is always enabled; email is opt-in per tenant.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Get channel settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.ChannelsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Update channel settings (partial)",
+                "parameters": [
+                    {
+                        "description": "Email channel fields to change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.UpdateChannelsReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.ChannelsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Notification history",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by template (uuid)",
+                        "name": "template_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "delivered",
+                            "failed",
+                            "skipped"
+                        ],
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "in_app",
+                            "email"
+                        ],
+                        "type": "string",
+                        "description": "Filter by channel",
+                        "name": "channel",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by player (uuid)",
+                        "name": "player_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.HistoryListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "sent = every non-skipped notification; open_rate = in_app read / in_app delivered (0..1). from/to bound created_at (RFC 3339, to exclusive).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Notification stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Created at or after (RFC 3339)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created before (RFC 3339)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.StatsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/templates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "List notification templates",
+                "parameters": [
+                    {
+                        "enum": [
+                            "badges.awarded",
+                            "progression.level_reached",
+                            "missions.completed",
+                            "streaks.milestone_reached",
+                            "streaks.broken",
+                            "rewards.claimed",
+                            "points.credited"
+                        ],
+                        "type": "string",
+                        "description": "Filter by trigger",
+                        "name": "trigger",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by is_active",
+                        "name": "is_active",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.TemplateListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "title_template/body_template are Go text/template sources over the documented fields ({{.Player.DisplayName}}, {{.Badge.Name}}, {{.Level.Number}}, {{.Points.Amount}}, {{.Mission.Name}}, {{.Streak.Milestone}}, {{.Reward.Name}}, ...). They must parse and dry-run; range/define/template/printf are refused.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Create a notification template",
+                "parameters": [
+                    {
+                        "description": "Template",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.CreateTemplateReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.TemplateResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "notification_template_name_taken",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "notification_template_invalid",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/templates/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Get a notification template",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Template id (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.TemplateResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "notification_template_not_found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Its notification history stays.",
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Delete a notification template (soft)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Template id (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "notification_template_not_found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Update a notification template (partial)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Template id (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.UpdateTemplateReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.TemplateResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "notification_template_not_found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "notification_template_name_taken, version_conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "notification_template_invalid",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/templates/{id}/preview": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Renders title/body against sample data; with player_id the player fields are that player's. The body may be empty.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Preview a notification template",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Template id (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional player",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.PreviewReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.PreviewResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "notification_template_not_found, player_not_found",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -3448,6 +4881,29 @@ const docTemplate = `{
                         "description": "Case-insensitive prefix of external_id, display_name or email",
                         "name": "search",
                         "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "-created_at",
+                            "created_at",
+                            "display_name"
+                        ],
+                        "type": "string",
+                        "description": "-created_at (default), created_at, or display_name (case-insensitive, falls back to external_id)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created at or after (RFC 3339, or YYYY-MM-DD = UTC midnight), inclusive",
+                        "name": "created_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created before (RFC 3339, or YYYY-MM-DD = UTC midnight), exclusive",
+                        "name": "created_to",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3470,7 +4926,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity",
+                        "description": "validation, invalid_sort, invalid_created_range",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -4002,6 +5458,192 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/players/{playerID}/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "For tenant backends and apps. Newest first; unread_count is the player's total unread.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "A player's in-app notifications",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player id (uuid)",
+                        "name": "playerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only unread",
+                        "name": "unread",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.FeedResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "player_not_found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/players/{playerID}/notifications/read-all": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark all of a player's notifications read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player id (uuid)",
+                        "name": "playerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.ReadAllResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "player_not_found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/players/{playerID}/notifications/{id}/read": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Idempotent: read_at keeps the first read time.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark a notification read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Player id (uuid)",
+                        "name": "playerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Notification id (uuid)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_notifications_internal_transport.FeedItemResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "player_not_found, notification_not_found",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -4716,6 +6358,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Case-insensitive substring of name or slug (max 100 chars)",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "Page size (default 25, max 100)",
                         "name": "limit",
@@ -5354,6 +7002,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/progress": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Same shape as GET /players/{playerID}/progress per player. Unknown or foreign players are omitted. At most 100 ids.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "progression"
+                ],
+                "summary": "Batch-read players' XP and level",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Comma-separated player ids (uuid), max 100",
+                        "name": "player_ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_progression_internal_transport.ProgressListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "too_many_ids",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/rewards": {
             "get": {
                 "security": [
@@ -5475,6 +7175,103 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/rewards/claims": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Newest first, keyset paginated. from (inclusive) and to (exclusive) bound created_at, RFC 3339.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rewards"
+                ],
+                "summary": "List the tenant's reward claims (redemption history)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "pending_payment",
+                            "claimed",
+                            "rejected",
+                            "redeemed",
+                            "expired",
+                            "cancelled",
+                            "refund_pending",
+                            "refunded"
+                        ],
+                        "type": "string",
+                        "description": "Claim status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reward id (uuid)",
+                        "name": "reward_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Player id (uuid)",
+                        "name": "player_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created at or after (RFC 3339)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Created before (RFC 3339)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_rewards_internal_transport.ClaimListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -5646,6 +7443,43 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/rewards/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Every live reward (and deleted rewards that have claims) with claimed, redeemed, expired, cancelled and points_spent, plus tenant totals.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rewards"
+                ],
+                "summary": "Claim statistics per reward",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_rewards_internal_transport.StatsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -6184,7 +8018,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Synchronous evaluation with no writes: no decision, no counters, no effects. Limits are reported, not enforced.",
+                "description": "Synchronous evaluation with no writes: no decision, no counters, no history, no effects. Limits are reported, not enforced (stop_processing treats every match as a firing). With definition, only that unpublished body is evaluated (event_type defaults to definition.trigger_event); compile errors are 422 invalid_rule_definition with field errors under definition.*. occurred_at (default now) drives schedules and history windows; history facts are loaded for stored players only.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6194,7 +8028,7 @@ const docTemplate = `{
                 "tags": [
                     "rules"
                 ],
-                "summary": "Simulate an activity against the live ruleset",
+                "summary": "Simulate an activity against the live ruleset or a draft definition",
                 "parameters": [
                     {
                         "description": "Hypothetical activity",
@@ -6227,6 +8061,63 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/rules/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Per rule over [from, to): executions by status (fired, not_matched, limited, out_of_schedule, skipped_by_stop), effects applied/rejected, and points_awarded / xp_awarded (sums of credit_points / grant_xp amounts of fired executions, whatever their settlement), plus totals. Rules are ordered by fired DESC. Defaults: to = now, from = to - 30 days; the range is at most 366 days.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rules"
+                ],
+                "summary": "Rule statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC 3339 timestamp or YYYY-MM-DD (UTC midnight)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC 3339 timestamp or YYYY-MM-DD (UTC midnight), exclusive",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_rules_internal_transport.RuleStatsResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -6339,7 +8230,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Partial update. conditions/actions/limits edit the latest version only while it is a draft (409 no_draft_version otherwise: published versions are immutable). status may be active (needs a published version), inactive or archived.",
+                "description": "Partial update. conditions/actions/limits/schedule/stop_processing edit the latest version only while it is a draft (409 no_draft_version otherwise: published versions are immutable). status may be active (needs a published version), inactive or archived.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6613,6 +8504,471 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/segments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "List segments",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Stores the definition and queues its first membership refresh.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "Create a segment",
+                "parameters": [
+                    {
+                        "description": "Segment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.CreateReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/segments/preview": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Evaluates unsaved conditions over the tenant's first 1000 players (ascending id) without changing any membership.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "Preview segment conditions",
+                "parameters": [
+                    {
+                        "description": "Conditions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.PreviewReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.PreviewResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/segments/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "Get a segment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Segment id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Drops its membership and publishes segments.deleted.v1.",
+                "tags": [
+                    "segments"
+                ],
+                "summary": "Delete a segment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Segment id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changing conditions queues a membership refresh.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "Update a segment (partial)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Segment id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.UpdateReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/segments/{id}/players": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Materialized members as of the last refresh, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "List a segment's players",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Segment id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.MemberListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/segments/{id}/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Queues a recomputation over every player (asynchronous). Poll GET /segments/{id} for last_refreshed_at and member_count.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "segments"
+                ],
+                "summary": "Refresh a segment's membership",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Segment id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_segments_internal_transport.RefreshResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -7296,6 +9652,176 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/invitations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Not accepted and not revoked, newest first; expired ones are included with status \"expired\".",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "List the tenant's open invitations",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.InvitationListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Emails an accept link (valid 7 days). Same role rules as creating a user. Re-inviting an address revokes its earlier open invitation. Requires a signed-in user (not an API key).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Invite a person to the caller's tenant",
+                "parameters": [
+                    {
+                        "description": "Invitation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.CreateInvitationReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_identity_internal_transport.InvitationResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "email_taken",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/invitations/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Idempotent. An accepted invitation is 409 invitation_already_accepted.",
+                "tags": [
+                    "users"
+                ],
+                "summary": "Revoke an invitation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invitation id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/users/{id}": {
             "get": {
                 "security": [
@@ -7545,6 +10071,186 @@ const docTemplate = `{
                 }
             }
         },
+        "/wallets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unknown or foreign players are omitted. At most 100 ids.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "points"
+                ],
+                "summary": "Batch-read wallets (zero views for never-opened wallets)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Comma-separated player ids (uuid), max 100",
+                        "name": "player_ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_points_internal_transport.WalletListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "too_many_ids",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallets/daily": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "points"
+                ],
+                "summary": "Daily credited/debited totals from the ledger (UTC days)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "First day, YYYY-MM-DD (default: to - 29 days)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Last day inclusive, YYYY-MM-DD (default: today)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_points_internal_transport.DailyListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "invalid_range",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallets/distribution": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "points"
+                ],
+                "summary": "Balance distribution histogram (10 buckets)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_points_internal_transport.DistributionResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/wallets/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "points"
+                ],
+                "summary": "Tenant-wide wallet summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_points_internal_transport.SummaryResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/wallets/transfer": {
             "post": {
                 "security": [
@@ -7613,6 +10319,620 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "insufficient_balance, wallet_inactive, self_transfer",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "List webhook endpoints",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EndpointListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The URL must be https (http://localhost only when WEBHOOKS_ALLOW_INSECURE) and must not\npoint at private, loopback, link-local or reserved addresses. The response carries the\nsigning secret; it is never shown again (rotate it to get a new one).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Register a webhook endpoint",
+                "parameters": [
+                    {
+                        "description": "Endpoint",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.CreateEndpointReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EndpointWithSecretResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "List webhook deliveries",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by endpoint id",
+                        "name": "endpoint_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status (pending|succeeded|failed)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by event name, e.g. badges.awarded",
+                        "name": "event",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 25, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Opaque cursor from next_cursor",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.DeliveryListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/{deliveryID}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Get a webhook delivery",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery id",
+                        "name": "deliveryID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/{deliveryID}/redeliver": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Re-queues the same payload for a fresh retry cycle (signed with the current secret).\nResponds 202 with the delivery in status pending.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Redeliver a webhook delivery",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery id",
+                        "name": "deliveryID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/event-types": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "List the subscribable webhook event types",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EventTypeListResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Get a webhook endpoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Endpoint id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EndpointResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Pending deliveries to it are failed when their job runs.",
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Delete a webhook endpoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Endpoint id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Update a webhook endpoint (partial)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Endpoint id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.UpdateEndpointReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EndpointResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/{id}/rotate-secret": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the new secret once. Deliveries sent from now on are signed with it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Rotate a webhook endpoint's signing secret",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Endpoint id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EndpointWithSecretResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/{id}/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Synchronously POSTs a \"webhook.test\" event and returns the recorded delivery (status\nsucceeded or failed, response status, latency, response snippet). Not retried.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "webhooks"
+                ],
+                "summary": "Send a test event to a webhook endpoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Endpoint id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/levelup_internal_platform_httpx.Problem"
                         }
@@ -7809,6 +11129,31 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_activity_internal_transport.LastSeenListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_activity_internal_transport.LastSeenResp"
+                    }
+                }
+            }
+        },
+        "internal_modules_activity_internal_transport.LastSeenResp": {
+            "type": "object",
+            "properties": {
+                "last_activity_at": {
+                    "type": "string"
+                },
+                "last_event_type": {
+                    "type": "string"
+                },
+                "player_id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_modules_activity_internal_transport.ListResp": {
             "type": "object",
             "properties": {
@@ -7820,6 +11165,613 @@ const docTemplate = `{
                 },
                 "next_cursor": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.ContextDTO": {
+            "type": "object",
+            "properties": {
+                "badges": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.RefDTO"
+                    }
+                },
+                "event_types": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.EventTypeDTO"
+                    }
+                },
+                "levels": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.LevelDTO"
+                    }
+                },
+                "missions": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.RefDTO"
+                    }
+                },
+                "rewards": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.RefDTO"
+                    }
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.DraftReq": {
+            "type": "object",
+            "required": [
+                "kind",
+                "prompt"
+            ],
+            "properties": {
+                "context": {
+                    "$ref": "#/definitions/internal_modules_ai_internal_transport.ContextDTO"
+                },
+                "count": {
+                    "description": "default 3",
+                    "type": "integer",
+                    "maximum": 5,
+                    "minimum": 1
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "badge",
+                        "level",
+                        "mission",
+                        "reward",
+                        "rule",
+                        "segment"
+                    ]
+                },
+                "prompt": {
+                    "type": "string",
+                    "maxLength": 2000
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.DraftResp": {
+            "type": "object",
+            "properties": {
+                "drafts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "quota": {
+                    "$ref": "#/definitions/internal_modules_ai_internal_transport.QuotaResp"
+                },
+                "rejected": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.RejectionResp"
+                    }
+                },
+                "usage": {
+                    "$ref": "#/definitions/internal_modules_ai_internal_transport.TokenUsageResp"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.EventTypeDTO": {
+            "type": "object",
+            "required": [
+                "slug"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "slug": {
+                    "type": "string",
+                    "maxLength": 100
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.LevelDTO": {
+            "type": "object",
+            "required": [
+                "level_number"
+            ],
+            "properties": {
+                "level_number": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "xp_required": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.QuotaResp": {
+            "type": "object",
+            "properties": {
+                "daily_limit": {
+                    "description": "0 = unlimited",
+                    "type": "integer"
+                },
+                "remaining": {
+                    "description": "-1 = unlimited",
+                    "type": "integer"
+                },
+                "used": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.RefDTO": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.RejectionResp": {
+            "type": "object",
+            "properties": {
+                "index": {
+                    "type": "integer"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.TemplateListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.TemplateResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.TemplateResp": {
+            "type": "object",
+            "properties": {
+                "default_count": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "example_prompt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.TokenUsageResp": {
+            "type": "object",
+            "properties": {
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.UsageDayResp": {
+            "type": "object",
+            "properties": {
+                "day": {
+                    "description": "YYYY-MM-DD (UTC)",
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_ai_internal_transport.UsageResp": {
+            "type": "object",
+            "properties": {
+                "daily_limit": {
+                    "description": "0 = unlimited",
+                    "type": "integer"
+                },
+                "data": {
+                    "description": "newest first; days without usage omitted",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_ai_internal_transport.UsageDayResp"
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "remaining": {
+                    "description": "-1 = unlimited",
+                    "type": "integer"
+                },
+                "today": {
+                    "$ref": "#/definitions/internal_modules_ai_internal_transport.UsageDayResp"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.BadgeCount": {
+            "type": "object",
+            "properties": {
+                "badge_id": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.CohortResp": {
+            "type": "object",
+            "properties": {
+                "cohort_start": {
+                    "type": "string"
+                },
+                "retained": {
+                    "description": "Retained[k] is the percentage (0-100, 2 decimals) of the cohort active\nk weeks after its first week; only weeks that have started are listed.",
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.CurvePointResp": {
+            "type": "object",
+            "properties": {
+                "cohorts": {
+                    "type": "integer"
+                },
+                "pct": {
+                    "type": "number"
+                },
+                "week": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.DayCountResp": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "day": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.EngagementDay": {
+            "type": "object",
+            "properties": {
+                "badges_awarded": {
+                    "type": "integer"
+                },
+                "day": {
+                    "type": "string"
+                },
+                "levels_reached": {
+                    "type": "integer"
+                },
+                "missions_completed": {
+                    "type": "integer"
+                },
+                "missions_started": {
+                    "type": "integer"
+                },
+                "rewards_claimed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.EngagementResp": {
+            "type": "object",
+            "properties": {
+                "badges_per_day": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.DayCountResp"
+                    }
+                },
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.EngagementDay"
+                    }
+                },
+                "from": {
+                    "type": "string"
+                },
+                "levels_by_number": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.LevelCount"
+                    }
+                },
+                "levels_reached": {
+                    "type": "integer"
+                },
+                "missions": {
+                    "$ref": "#/definitions/internal_modules_analytics_internal_transport.MissionsResp"
+                },
+                "rewards_claimed": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "top_badges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.BadgeCount"
+                    }
+                },
+                "top_event_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.EventTypeCount"
+                    }
+                },
+                "top_missions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.MissionCount"
+                    }
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.EventTypeCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "event_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.FunnelResp": {
+            "type": "object",
+            "properties": {
+                "approximation": {
+                    "description": "Approximation is \"day\": step order is resolved per UTC day, so steps\ndone on the same day count as in order.",
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.FunnelStepResp"
+                    }
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.FunnelStepResp": {
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                },
+                "pct_of_first_step": {
+                    "type": "number"
+                },
+                "pct_of_previous": {
+                    "type": "number"
+                },
+                "players": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.LevelCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "level_number": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.MissionCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "mission_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.MissionsResp": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "integer"
+                },
+                "started": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.OverviewDay": {
+            "type": "object",
+            "properties": {
+                "active_players": {
+                    "type": "integer"
+                },
+                "activities": {
+                    "type": "integer"
+                },
+                "day": {
+                    "type": "string"
+                },
+                "new_players": {
+                    "type": "integer"
+                },
+                "points_credited": {
+                    "type": "integer"
+                },
+                "points_debited": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.OverviewResp": {
+            "type": "object",
+            "properties": {
+                "daily": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.OverviewDay"
+                    }
+                },
+                "dau": {
+                    "type": "integer"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "mau": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "totals": {
+                    "$ref": "#/definitions/internal_modules_analytics_internal_transport.OverviewTotals"
+                },
+                "wau": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.OverviewTotals": {
+            "type": "object",
+            "properties": {
+                "active_players": {
+                    "type": "integer"
+                },
+                "activities": {
+                    "type": "integer"
+                },
+                "badges_awarded": {
+                    "type": "integer"
+                },
+                "levels_reached": {
+                    "type": "integer"
+                },
+                "missions_completed": {
+                    "type": "integer"
+                },
+                "missions_started": {
+                    "type": "integer"
+                },
+                "new_players": {
+                    "type": "integer"
+                },
+                "points_credited": {
+                    "type": "integer"
+                },
+                "points_debited": {
+                    "type": "integer"
+                },
+                "rewards_claimed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_analytics_internal_transport.RetentionResp": {
+            "type": "object",
+            "properties": {
+                "cohort": {
+                    "type": "string"
+                },
+                "cohorts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.CohortResp"
+                    }
+                },
+                "curve": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_analytics_internal_transport.CurvePointResp"
+                    }
+                },
+                "weeks": {
+                    "type": "integer"
                 }
             }
         },
@@ -7931,6 +11883,35 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_badges_internal_transport.BadgeStatResp": {
+            "type": "object",
+            "properties": {
+                "awarded_count": {
+                    "type": "integer"
+                },
+                "badge_id": {
+                    "type": "string"
+                },
+                "deleted": {
+                    "type": "boolean"
+                },
+                "last_awarded_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "tier": {
+                    "type": "string"
+                },
+                "unique_players": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_badges_internal_transport.CreateBadgeReq": {
             "type": "object",
             "required": [
@@ -8004,6 +11985,18 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_badges_internal_transport.DayCountResp": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                }
+            }
+        },
         "internal_modules_badges_internal_transport.PlayerBadgeListResp": {
             "type": "object",
             "properties": {
@@ -8046,6 +12039,29 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_badges_internal_transport.StatsResp": {
+            "type": "object",
+            "properties": {
+                "awards_per_day": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_badges_internal_transport.DayCountResp"
+                    }
+                },
+                "badges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_badges_internal_transport.BadgeStatResp"
+                    }
+                },
+                "total_awarded": {
+                    "type": "integer"
+                },
+                "unique_players": {
                     "type": "integer"
                 }
             }
@@ -8384,6 +12400,31 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_identity_internal_transport.AcceptInvitationReq": {
+            "type": "object",
+            "required": [
+                "password",
+                "token"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 72,
+                    "minLength": 8
+                },
+                "password_confirmation": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string",
+                    "maxLength": 128
+                }
+            }
+        },
         "internal_modules_identity_internal_transport.AssignRolesReq": {
             "type": "object",
             "required": [
@@ -8416,6 +12457,31 @@ const docTemplate = `{
                 "role_ids": {
                     "type": "array",
                     "maxItems": 3,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.CreateInvitationReq": {
+            "type": "object",
+            "required": [
+                "email",
+                "role_ids"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "role_ids": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "minItems": 1,
                     "items": {
                         "type": "integer"
                     }
@@ -8463,6 +12529,103 @@ const docTemplate = `{
                 },
                 "secret": {
                     "description": "Secret is shown once; LevelUp stores only its hash.",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.ForgotPasswordReq": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.InvitationListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_identity_internal_transport.InvitationResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.InvitationPreviewResp": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "inviter_name": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_identity_internal_transport.RoleResp"
+                    }
+                },
+                "tenant_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.InvitationResp": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "invited_by": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_identity_internal_transport.RoleResp"
+                    }
+                },
+                "status": {
+                    "description": "pending | expired (lists show open invitations only)",
                     "type": "string"
                 }
             }
@@ -8550,6 +12713,27 @@ const docTemplate = `{
                 "timezone": {
                     "type": "string",
                     "maxLength": 64
+                }
+            }
+        },
+        "internal_modules_identity_internal_transport.ResetPasswordReq": {
+            "type": "object",
+            "required": [
+                "password",
+                "token"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 72,
+                    "minLength": 8
+                },
+                "password_confirmation": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
@@ -8738,6 +12922,56 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_identity_internal_transport.VerifyEmailReq": {
+            "type": "object",
+            "required": [
+                "token"
+            ],
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "maxLength": 128
+                }
+            }
+        },
+        "internal_modules_leaderboards_internal_transport.ConfigReq": {
+            "type": "object",
+            "required": [
+                "event_type",
+                "value"
+            ],
+            "properties": {
+                "event_type": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "property": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "count",
+                        "property"
+                    ]
+                }
+            }
+        },
+        "internal_modules_leaderboards_internal_transport.ConfigResp": {
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                },
+                "property": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_modules_leaderboards_internal_transport.CreateReq": {
             "type": "object",
             "required": [
@@ -8745,6 +12979,14 @@ const docTemplate = `{
                 "type"
             ],
             "properties": {
+                "config": {
+                    "description": "Config is required for type activity and refused for every other.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_modules_leaderboards_internal_transport.ConfigReq"
+                        }
+                    ]
+                },
                 "description": {
                     "type": "string",
                     "maxLength": 2000
@@ -8792,7 +13034,8 @@ const docTemplate = `{
                         "points",
                         "badges",
                         "missions",
-                        "xp"
+                        "xp",
+                        "activity"
                     ]
                 }
             }
@@ -8840,6 +13083,9 @@ const docTemplate = `{
         "internal_modules_leaderboards_internal_transport.LeaderboardResp": {
             "type": "object",
             "properties": {
+                "config": {
+                    "$ref": "#/definitions/internal_modules_leaderboards_internal_transport.ConfigResp"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -9014,6 +13260,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "criteria": {
+                    "description": "Criteria grammar: {\"event_type\": \"...\", \"where\": [{\"field\", \"operator\", \"value\"}],\n\"increment\": {\"by\": \"count\"} | {\"by\": \"property\", \"field\": \"...\"}}.\nWith event_type, matching activities progress the mission automatically.",
                     "type": "object",
                     "additionalProperties": {}
                 },
@@ -9136,6 +13383,52 @@ const docTemplate = `{
                 },
                 "xp_reward": {
                     "type": "integer"
+                }
+            }
+        },
+        "internal_modules_missions_internal_transport.MissionStatsListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_missions_internal_transport.MissionStatsResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_missions_internal_transport.MissionStatsResp": {
+            "type": "object",
+            "properties": {
+                "avg_hours_to_complete": {
+                    "type": "number"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "completion_rate": {
+                    "type": "number"
+                },
+                "in_progress": {
+                    "type": "integer"
+                },
+                "mission_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "started": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -9268,6 +13561,443 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_notifications_internal_transport.ChannelsResp": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "$ref": "#/definitions/internal_modules_notifications_internal_transport.EmailChannelResp"
+                },
+                "in_app": {
+                    "$ref": "#/definitions/internal_modules_notifications_internal_transport.InAppChannelResp"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.CountsResp": {
+            "type": "object",
+            "properties": {
+                "delivered": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "read": {
+                    "type": "integer"
+                },
+                "sent": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.CreateTemplateReq": {
+            "type": "object",
+            "required": [
+                "channels",
+                "name",
+                "title_template",
+                "trigger"
+            ],
+            "properties": {
+                "body_template": {
+                    "type": "string",
+                    "maxLength": 10000
+                },
+                "channels": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "title_template": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "trigger": {
+                    "type": "string",
+                    "enum": [
+                        "badges.awarded",
+                        "progression.level_reached",
+                        "missions.completed",
+                        "streaks.milestone_reached",
+                        "streaks.broken",
+                        "rewards.claimed",
+                        "points.credited"
+                    ]
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.EmailChannelPatch": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "from_name": {
+                    "type": "string",
+                    "maxLength": 100
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.EmailChannelResp": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "from_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.FeedItemResp": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "read": {
+                    "type": "boolean"
+                },
+                "read_at": {
+                    "type": "string"
+                },
+                "template_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "trigger": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.FeedResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_notifications_internal_transport.FeedItemResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                },
+                "unread_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.HistoryListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_notifications_internal_transport.NotificationResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.InAppChannelResp": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "always true",
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.NotificationResp": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "delivered_at": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "player_id": {
+                    "type": "string"
+                },
+                "read_at": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "template_id": {
+                    "type": "string"
+                },
+                "template_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "trigger": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.PreviewReq": {
+            "type": "object",
+            "properties": {
+                "player_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.PreviewResp": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "html": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.ReadAllResp": {
+            "type": "object",
+            "properties": {
+                "updated": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.StatsResp": {
+            "type": "object",
+            "properties": {
+                "by_channel": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/internal_modules_notifications_internal_transport.CountsResp"
+                    }
+                },
+                "by_template": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_notifications_internal_transport.TemplateCountsResp"
+                    }
+                },
+                "delivered": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "open_rate": {
+                    "type": "number"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "read": {
+                    "type": "integer"
+                },
+                "sent": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.TemplateCountsResp": {
+            "type": "object",
+            "properties": {
+                "delivered": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "read": {
+                    "type": "integer"
+                },
+                "sent": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "integer"
+                },
+                "template_id": {
+                    "type": "string"
+                },
+                "trigger": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.TemplateListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_notifications_internal_transport.TemplateResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.TemplateResp": {
+            "type": "object",
+            "properties": {
+                "body_template": {
+                    "type": "string"
+                },
+                "channels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "title_template": {
+                    "type": "string"
+                },
+                "trigger": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.UpdateChannelsReq": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "$ref": "#/definitions/internal_modules_notifications_internal_transport.EmailChannelPatch"
+                }
+            }
+        },
+        "internal_modules_notifications_internal_transport.UpdateTemplateReq": {
+            "type": "object",
+            "properties": {
+                "body_template": {
+                    "type": "string",
+                    "maxLength": 10000
+                },
+                "channels": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "title_template": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "trigger": {
+                    "type": "string",
+                    "enum": [
+                        "badges.awarded",
+                        "progression.level_reached",
+                        "missions.completed",
+                        "streaks.milestone_reached",
+                        "streaks.broken",
+                        "rewards.claimed",
+                        "points.credited"
+                    ]
+                }
+            }
+        },
         "internal_modules_player_internal_transport.CreateReq": {
             "type": "object",
             "required": [
@@ -9365,6 +14095,20 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_points_internal_transport.BucketResp": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "integer"
+                },
+                "players": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_points_internal_transport.CreditReq": {
             "type": "object",
             "required": [
@@ -9390,6 +14134,32 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_points_internal_transport.DailyListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_points_internal_transport.DailyResp"
+                    }
+                }
+            }
+        },
+        "internal_modules_points_internal_transport.DailyResp": {
+            "type": "object",
+            "properties": {
+                "credited": {
+                    "type": "integer"
+                },
+                "day": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                },
+                "debited": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_points_internal_transport.DebitReq": {
             "type": "object",
             "required": [
@@ -9412,6 +14182,17 @@ const docTemplate = `{
                         "penalty",
                         "expire"
                     ]
+                }
+            }
+        },
+        "internal_modules_points_internal_transport.DistributionResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_points_internal_transport.BucketResp"
+                    }
                 }
             }
         },
@@ -9497,6 +14278,29 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_points_internal_transport.SummaryResp": {
+            "type": "object",
+            "properties": {
+                "credited_last_30d": {
+                    "type": "integer"
+                },
+                "debited_last_30d": {
+                    "type": "integer"
+                },
+                "lifetime_earned": {
+                    "type": "integer"
+                },
+                "lifetime_spent": {
+                    "type": "integer"
+                },
+                "open_wallets": {
+                    "type": "integer"
+                },
+                "total_balance": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_points_internal_transport.TransferReq": {
             "type": "object",
             "required": [
@@ -9531,6 +14335,17 @@ const docTemplate = `{
                 },
                 "transfer_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_points_internal_transport.WalletListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_points_internal_transport.WalletResp"
+                    }
                 }
             }
         },
@@ -9736,6 +14551,9 @@ const docTemplate = `{
                 "mechanics": {
                     "type": "object",
                     "additionalProperties": {}
+                },
+                "member_count": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -9969,6 +14787,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_progression_internal_transport.ProgressListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_progression_internal_transport.ProgressResp"
+                    }
+                }
+            }
+        },
         "internal_modules_progression_internal_transport.ProgressResp": {
             "type": "object",
             "properties": {
@@ -10073,6 +14902,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "expires_at": {
+                    "type": "string"
+                },
+                "fulfilled_at": {
                     "type": "string"
                 },
                 "hold_expires_at": {
@@ -10293,6 +15125,75 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_rewards_internal_transport.RewardStatsResp": {
+            "type": "object",
+            "properties": {
+                "cancelled": {
+                    "type": "integer"
+                },
+                "claimed": {
+                    "type": "integer"
+                },
+                "deleted": {
+                    "type": "boolean"
+                },
+                "expired": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "points_spent": {
+                    "type": "integer"
+                },
+                "redeemed": {
+                    "type": "integer"
+                },
+                "reward_id": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_rewards_internal_transport.StatsResp": {
+            "type": "object",
+            "properties": {
+                "rewards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_rewards_internal_transport.RewardStatsResp"
+                    }
+                },
+                "totals": {
+                    "$ref": "#/definitions/internal_modules_rewards_internal_transport.StatsTotalsResp"
+                }
+            }
+        },
+        "internal_modules_rewards_internal_transport.StatsTotalsResp": {
+            "type": "object",
+            "properties": {
+                "cancelled": {
+                    "type": "integer"
+                },
+                "claimed": {
+                    "type": "integer"
+                },
+                "expired": {
+                    "type": "integer"
+                },
+                "points_spent": {
+                    "type": "integer"
+                },
+                "redeemed": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_rewards_internal_transport.UpdateRewardReq": {
             "type": "object",
             "properties": {
@@ -10416,9 +15317,16 @@ const docTemplate = `{
                 "program_id": {
                     "type": "string"
                 },
+                "schedule": {
+                    "description": "Schedule: {starts_at?, ends_at?, days_of_week?: [0-6], hours?: {from: \"HH:MM\", to: \"HH:MM\"}, timezone?: IANA}.",
+                    "type": "object"
+                },
                 "slug": {
                     "type": "string",
                     "maxLength": 120
+                },
+                "stop_processing": {
+                    "type": "boolean"
                 },
                 "trigger_event": {
                     "type": "string",
@@ -10444,6 +15352,12 @@ const docTemplate = `{
                 },
                 "limits": {
                     "type": "object"
+                },
+                "schedule": {
+                    "type": "object"
+                },
+                "stop_processing": {
+                    "type": "boolean"
                 }
             }
         },
@@ -10564,6 +15478,37 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_modules_rules_internal_transport.DraftDefinitionReq": {
+            "type": "object",
+            "required": [
+                "actions",
+                "trigger_event"
+            ],
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "conditions": {
+                    "type": "object"
+                },
+                "limits": {
+                    "type": "object"
+                },
+                "schedule": {
+                    "type": "object"
+                },
+                "stop_processing": {
+                    "type": "boolean"
+                },
+                "trigger_event": {
+                    "type": "string",
+                    "maxLength": 100
                 }
             }
         },
@@ -10720,6 +15665,96 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_modules_rules_internal_transport.RuleStatResp": {
+            "type": "object",
+            "properties": {
+                "effects_applied": {
+                    "type": "integer"
+                },
+                "effects_rejected": {
+                    "type": "integer"
+                },
+                "fired": {
+                    "type": "integer"
+                },
+                "limited": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "not_matched": {
+                    "type": "integer"
+                },
+                "out_of_schedule": {
+                    "type": "integer"
+                },
+                "points_awarded": {
+                    "type": "integer"
+                },
+                "rule_id": {
+                    "type": "string"
+                },
+                "skipped_by_stop": {
+                    "type": "integer"
+                },
+                "xp_awarded": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_rules_internal_transport.RuleStatsResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_rules_internal_transport.RuleStatResp"
+                    }
+                },
+                "from": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "totals": {
+                    "$ref": "#/definitions/internal_modules_rules_internal_transport.RuleStatsTotalsResp"
+                }
+            }
+        },
+        "internal_modules_rules_internal_transport.RuleStatsTotalsResp": {
+            "type": "object",
+            "properties": {
+                "effects_applied": {
+                    "type": "integer"
+                },
+                "effects_rejected": {
+                    "type": "integer"
+                },
+                "fired": {
+                    "type": "integer"
+                },
+                "limited": {
+                    "type": "integer"
+                },
+                "not_matched": {
+                    "type": "integer"
+                },
+                "out_of_schedule": {
+                    "type": "integer"
+                },
+                "points_awarded": {
+                    "type": "integer"
+                },
+                "skipped_by_stop": {
+                    "type": "integer"
+                },
+                "xp_awarded": {
+                    "type": "integer"
+                }
+            }
+        },
         "internal_modules_rules_internal_transport.SimEffectResp": {
             "type": "object",
             "properties": {
@@ -10817,14 +15852,18 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "stop_processing": {
+                    "type": "boolean"
+                },
+                "stopped_by": {
+                    "description": "StoppedBy is the rule whose firing skipped this one (status skipped_by_stop).",
+                    "type": "string"
                 }
             }
         },
         "internal_modules_rules_internal_transport.SimulateReq": {
             "type": "object",
-            "required": [
-                "event_type"
-            ],
             "properties": {
                 "causation_depth": {
                     "type": "integer",
@@ -10833,9 +15872,15 @@ const docTemplate = `{
                 "context": {
                     "type": "object"
                 },
+                "definition": {
+                    "$ref": "#/definitions/internal_modules_rules_internal_transport.DraftDefinitionReq"
+                },
                 "event_type": {
                     "type": "string",
                     "maxLength": 100
+                },
+                "occurred_at": {
+                    "type": "string"
                 },
                 "player": {
                     "$ref": "#/definitions/internal_modules_rules_internal_transport.SimPlayerReq"
@@ -10855,8 +15900,19 @@ const docTemplate = `{
         "internal_modules_rules_internal_transport.SimulateResp": {
             "type": "object",
             "properties": {
+                "draft": {
+                    "description": "Draft is true when definition was simulated instead of the live ruleset.",
+                    "type": "boolean"
+                },
+                "history_loaded": {
+                    "description": "HistoryLoaded is true when history.* facts came from the player's\nrecorded activity (stored players only; inline players have none).",
+                    "type": "boolean"
+                },
                 "limits_enforced": {
                     "type": "boolean"
+                },
+                "occurred_at": {
+                    "type": "string"
                 },
                 "outcome": {
                     "type": "string"
@@ -10933,6 +15989,9 @@ const docTemplate = `{
                 "program_id": {
                     "type": "string"
                 },
+                "schedule": {
+                    "type": "object"
+                },
                 "status": {
                     "type": "string",
                     "enum": [
@@ -10940,6 +15999,9 @@ const docTemplate = `{
                         "inactive",
                         "archived"
                     ]
+                },
+                "stop_processing": {
+                    "type": "boolean"
                 },
                 "trigger_event": {
                     "type": "string",
@@ -10994,8 +16056,193 @@ const docTemplate = `{
                 "rule_id": {
                     "type": "string"
                 },
+                "schedule": {
+                    "type": "object"
+                },
+                "stop_processing": {
+                    "type": "boolean"
+                },
                 "version": {
                     "type": "integer"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.CreateReq": {
+            "type": "object",
+            "required": [
+                "conditions",
+                "name"
+            ],
+            "properties": {
+                "conditions": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.MemberListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_segments_internal_transport.MemberResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.MemberResp": {
+            "type": "object",
+            "properties": {
+                "added_at": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "external_id": {
+                    "type": "string"
+                },
+                "player_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.PlayerSummary": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "external_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.PreviewReq": {
+            "type": "object",
+            "required": [
+                "conditions"
+            ],
+            "properties": {
+                "conditions": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.PreviewResp": {
+            "type": "object",
+            "properties": {
+                "complete": {
+                    "type": "boolean"
+                },
+                "count_estimate": {
+                    "description": "CountEstimate is the number of matching players among the first\nScanned players (ascending id, at most 1000). Exact when Complete.",
+                    "type": "integer"
+                },
+                "sample": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_segments_internal_transport.PlayerSummary"
+                    }
+                },
+                "scanned": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.RefreshResp": {
+            "type": "object",
+            "properties": {
+                "segment": {
+                    "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                },
+                "status": {
+                    "description": "\"queued\"",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.SegmentListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_segments_internal_transport.SegmentResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.SegmentResp": {
+            "type": "object",
+            "properties": {
+                "conditions": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_refreshed_at": {
+                    "type": "string"
+                },
+                "member_count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "refreshing": {
+                    "type": "boolean"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_segments_internal_transport.UpdateReq": {
+            "type": "object",
+            "properties": {
+                "conditions": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
                 }
             }
         },
@@ -11010,6 +16257,10 @@ const docTemplate = `{
                 "activity_key": {
                     "type": "string",
                     "maxLength": 100
+                },
+                "auto_record": {
+                    "description": "AutoRecord (default true): activities whose event_type equals\nactivity_key record a period automatically.",
+                    "type": "boolean"
                 },
                 "description": {
                     "type": "string",
@@ -11173,6 +16424,9 @@ const docTemplate = `{
                 "activity_key": {
                     "type": "string"
                 },
+                "auto_record": {
+                    "type": "boolean"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -11222,6 +16476,9 @@ const docTemplate = `{
                     "maxLength": 100,
                     "minLength": 1
                 },
+                "auto_record": {
+                    "type": "boolean"
+                },
                 "description": {
                     "type": "string",
                     "maxLength": 1000
@@ -11253,6 +16510,252 @@ const docTemplate = `{
                 "slug": {
                     "type": "string",
                     "maxLength": 100,
+                    "minLength": 1
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.CreateEndpointReq": {
+            "type": "object",
+            "required": [
+                "event_types",
+                "url"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "event_types": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "url": {
+                    "type": "string",
+                    "maxLength": 2048
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.DeliveryListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.DeliveryResp": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "delivered_at": {
+                    "type": "string"
+                },
+                "endpoint_id": {
+                    "type": "string"
+                },
+                "event": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_attempt_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "latency_ms": {
+                    "type": "integer"
+                },
+                "payload": {
+                    "type": "object"
+                },
+                "response_body": {
+                    "type": "string"
+                },
+                "response_status": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "pending",
+                        "succeeded",
+                        "failed"
+                    ]
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.EndpointListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EndpointResp"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.EndpointResp": {
+            "type": "object",
+            "properties": {
+                "consecutive_failures": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "disabled_at": {
+                    "type": "string"
+                },
+                "disabled_reason": {
+                    "type": "string"
+                },
+                "event_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.EndpointWithSecretResp": {
+            "type": "object",
+            "properties": {
+                "consecutive_failures": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "disabled_at": {
+                    "type": "string"
+                },
+                "disabled_reason": {
+                    "type": "string"
+                },
+                "event_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "secret": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.EventTypeListResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_modules_webhooks_internal_transport.EventTypeResp"
+                    }
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.EventTypeResp": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "event": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_modules_webhooks_internal_transport.UpdateEndpointReq": {
+            "type": "object",
+            "required": [
+                "event_types"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "event_types": {
+                    "type": "array",
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "url": {
+                    "type": "string",
+                    "maxLength": 2048,
                     "minLength": 1
                 }
             }

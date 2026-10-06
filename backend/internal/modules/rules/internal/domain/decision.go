@@ -16,6 +16,10 @@ const (
 	ExecLimited    = "limited"      // matched but a limit refused it
 	ExecOutOfScope = "out_of_scope" // program-scoped, player not enrolled
 	ExecInvalid    = "invalid"      // stored definition no longer compiles
+	// ExecOutOfSchedule: occurred_at outside the version's schedule.
+	ExecOutOfSchedule = "out_of_schedule"
+	// ExecSkippedByStop: an earlier stop_processing rule fired.
+	ExecSkippedByStop = "skipped_by_stop"
 )
 
 // Effect statuses.

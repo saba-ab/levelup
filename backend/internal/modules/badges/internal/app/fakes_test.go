@@ -26,6 +26,12 @@ type fakeRepo struct {
 	drift       []domain.Drift
 	markedAt    time.Time
 	sweptSince  time.Time
+
+	// requirements projection
+	stats      map[string]*fakeStats // key tenant|player
+	applied    map[string]time.Time  // key tenant|event_key
+	awardStats AwardStats
+	statsSince time.Time
 }
 
 func newFakeRepo() *fakeRepo {
@@ -33,6 +39,8 @@ func newFakeRepo() *fakeRepo {
 		badges:   map[string]domain.Badge{},
 		holdings: map[string]domain.PlayerBadge{},
 		awards:   map[string]domain.Award{},
+		stats:    map[string]*fakeStats{},
+		applied:  map[string]time.Time{},
 	}
 }
 
@@ -323,8 +331,18 @@ func (f *fakeOutbox) byTopic(topic string) []any {
 // fakePlayers is the PlayerReader port.
 type fakePlayers struct {
 	players map[string]ports.PlayerSnapshot
-	err     error
-	calls   int
+	// external maps external id → player id for ports.ExternalIDResolver.
+	external map[string]string
+	err      error
+	calls    int
+}
+
+func (f *fakePlayers) IDByExternalID(_ context.Context, tenantID, externalID string) (string, bool, error) {
+	pid, ok := f.external[externalID]
+	if !ok || f.players[pid].TenantID != tenantID {
+		return "", false, nil
+	}
+	return pid, true, nil
 }
 
 func (f *fakePlayers) ByID(ctx context.Context, tenantID, playerID string) (ports.PlayerSnapshot, bool, error) {

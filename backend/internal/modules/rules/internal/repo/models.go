@@ -31,16 +31,18 @@ type rule struct {
 
 // ruleVersion → rules_svc.rule_versions
 type ruleVersion struct {
-	ID          string `gorm:"primaryKey;type:uuid"`
-	RuleID      string `gorm:"type:uuid"`
-	TenantID    string `gorm:"type:uuid"`
-	Version     int
-	Conditions  string `gorm:"type:jsonb"`
-	Actions     string `gorm:"type:jsonb"`
-	Limits      string `gorm:"type:jsonb"`
-	PublishedAt *time.Time
-	CreatedBy   string
-	CreatedAt   time.Time
+	ID             string `gorm:"primaryKey;type:uuid"`
+	RuleID         string `gorm:"type:uuid"`
+	TenantID       string `gorm:"type:uuid"`
+	Version        int
+	Conditions     string `gorm:"type:jsonb"`
+	Actions        string `gorm:"type:jsonb"`
+	Limits         string `gorm:"type:jsonb"`
+	Schedule       string `gorm:"type:jsonb"`
+	StopProcessing bool
+	PublishedAt    *time.Time
+	CreatedBy      string
+	CreatedAt      time.Time
 }
 
 // rulesetGeneration → rules_svc.ruleset_generations
@@ -115,6 +117,16 @@ type rulePlayerCounter struct {
 	LastFiredAt time.Time
 }
 
+// rulePlayerEventDay → rules_svc.rule_player_event_days, the per-player
+// history projection (grammar v2; written with raw SQL).
+type rulePlayerEventDay struct {
+	TenantID  string    `gorm:"primaryKey;type:uuid"`
+	PlayerID  string    `gorm:"primaryKey;type:uuid"`
+	EventType string    `gorm:"primaryKey"`
+	Day       time.Time `gorm:"primaryKey;type:date"`
+	Count     int64
+}
+
 func ptr(s string) *string {
 	if s == "" {
 		return nil
@@ -157,6 +169,7 @@ func fromVersion(v domain.Version) ruleVersion {
 	return ruleVersion{
 		ID: v.ID, RuleID: v.RuleID, TenantID: v.TenantID, Version: v.Version,
 		Conditions: jsonText(v.Conditions, "null"), Actions: jsonText(v.Actions, "null"), Limits: jsonText(v.Limits, "null"),
+		Schedule: jsonText(v.Schedule, "null"), StopProcessing: v.StopProcessing,
 		PublishedAt: v.PublishedAt, CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt,
 	}
 }
@@ -165,6 +178,7 @@ func (m ruleVersion) toDomain() domain.Version {
 	return domain.Version{
 		ID: m.ID, RuleID: m.RuleID, TenantID: m.TenantID, Version: m.Version,
 		Conditions: json.RawMessage(m.Conditions), Actions: json.RawMessage(m.Actions), Limits: json.RawMessage(m.Limits),
+		Schedule: json.RawMessage(jsonText(json.RawMessage(m.Schedule), "null")), StopProcessing: m.StopProcessing,
 		PublishedAt: m.PublishedAt, CreatedBy: m.CreatedBy, CreatedAt: m.CreatedAt.UTC(),
 	}
 }

@@ -169,10 +169,19 @@ func (s *Service) Grant(ctx context.Context, cmd contracts.GrantCmdV1) error {
 			c := domain.NewClaim(r, cmd.PlayerID, true, s.cfg.HoldTTL, s.code, now)
 			key := cmd.IdempotencyKey
 			c.GrantKey = &key
+			src := cmd.Source
+			// A granted points, badge or level reward is delivered at once:
+			// there is nothing for the player to redeem.
+			var delivery []outboxMsg
+			if r.FulfilsByCommand() {
+				delivery = s.fulfil(&c, &r, &src, now)
+			}
 			if err := s.repo.InsertClaim(ctx, tx, c); err != nil {
 				return err
 			}
-			src := cmd.Source
+			if err := s.publishAll(ctx, tx, delivery); err != nil {
+				return err
+			}
 			return s.outbox.Publish(ctx, tx, contracts.TopicClaimed, claimEvent(c, &r, "", &src, now))
 		})
 	})
@@ -217,9 +226,11 @@ func (s *Service) ListPlayerClaims(ctx context.Context, playerID, cursor string,
 	return rows, next, nil
 }
 
-// Redeem consumes a claimed claim (claimed → redeemed) under its row lock
-// and publishes rewards.redeemed.v1 for the fulfilment consumers (badges,
-// points). A badge already earned no longer blocks the redeem (doc 05 R8).
+// Redeem consumes a claimed claim (claimed → redeemed) under its row lock,
+// issues the fulfilment commands of its reward type in the same tx (see
+// fulfil.go) and publishes rewards.redeemed.v1. A badge already earned no
+// longer blocks the redeem (doc 05 R8): badges records the award as
+// rejected (already_earned).
 func (s *Service) Redeem(ctx context.Context, claimID string) (domain.Claim, error) {
 	p, err := s.authorize(ctx, contracts.PermRedeem)
 	if err != nil {
@@ -235,11 +246,6 @@ func (s *Service) Redeem(ctx context.Context, claimID string) (domain.Claim, err
 		if err := c.Redeem(now); err != nil {
 			return err
 		}
-		if err := s.repo.SaveClaim(ctx, tx, c); err != nil {
-			return err
-		}
-		c.Version++
-		out = c
 		r, err := s.repo.RewardByID(ctx, c.TenantID, c.RewardID, true)
 		if err != nil && !isNotFound(err) {
 			return err
@@ -247,6 +253,15 @@ func (s *Service) Redeem(ctx context.Context, claimID string) (domain.Claim, err
 		var rp *domain.Reward
 		if err == nil {
 			rp = &r
+		}
+		delivery := s.fulfil(&c, rp, nil, now)
+		if err := s.repo.SaveClaim(ctx, tx, c); err != nil {
+			return err
+		}
+		c.Version++
+		out = c
+		if err := s.publishAll(ctx, tx, delivery); err != nil {
+			return err
 		}
 		return s.outbox.Publish(ctx, tx, contracts.TopicRedeemed, claimEvent(c, rp, "", nil, now))
 	})
@@ -464,18 +479,19 @@ func isUUID(s string) bool {
 
 func claimEvent(c domain.Claim, r *domain.Reward, reason string, src *effect.Source, now time.Time) contracts.ClaimV1 {
 	ev := contracts.ClaimV1{
-		ClaimID:    c.ID,
-		TenantID:   c.TenantID,
-		PlayerID:   c.PlayerID,
-		RewardID:   c.RewardID,
-		RewardSlug: c.RewardSlug,
-		Status:     c.Status,
-		PointsCost: c.PointsCost,
-		Reason:     reason,
-		At:         now,
-		RewardType: c.RewardType,
-		ExpiresAt:  c.ExpiresAt,
-		Source:     src,
+		ClaimID:     c.ID,
+		TenantID:    c.TenantID,
+		PlayerID:    c.PlayerID,
+		RewardID:    c.RewardID,
+		RewardSlug:  c.RewardSlug,
+		Status:      c.Status,
+		PointsCost:  c.PointsCost,
+		Reason:      reason,
+		At:          now,
+		RewardType:  c.RewardType,
+		ExpiresAt:   c.ExpiresAt,
+		Source:      src,
+		FulfilledAt: c.FulfilledAt,
 	}
 	if c.Paid() {
 		ev.DebitKey = c.DebitKey

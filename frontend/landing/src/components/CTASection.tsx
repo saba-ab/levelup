@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Sparkles } from "lucide-react";
-import { PORTAL_ROUTES } from "@/lib/constants";
+import { PORTAL_ROUTES, SALES_EMAIL } from "@/lib/constants";
 
 const CTASection = () => {
   return (
@@ -26,7 +26,7 @@ const CTASection = () => {
           </h2>
 
           <p className="text-lg text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Join 500+ organizations using LevelUpOS to drive engagement, retention, and growth. Get started in minutes with our free tier.
+            Create a free account, define your first rule, and send your first activity in minutes.
           </p>
 
           {/* CTAs */}
@@ -38,7 +38,7 @@ const CTASection = () => {
               </a>
             </Button>
             <Button variant="heroOutline" size="xl" asChild>
-              <a href="mailto:sales@levelupos.com">
+              <a href={`mailto:${SALES_EMAIL}`}>
                 <Calendar className="w-5 h-5" />
                 Schedule Demo
               </a>

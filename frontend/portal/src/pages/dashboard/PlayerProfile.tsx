@@ -42,6 +42,7 @@ import {
   useSetPlayerActiveMutation,
   useDeletePlayerMutation,
 } from '@/services/queries/players';
+import { usePlayerLastSeenQuery } from '@/services/queries/activities';
 import { formatDate, formatDateTime, getActivityIcon, getPlayerName } from '@/lib/player-utils';
 import {
   PlayerAvatar,
@@ -51,6 +52,7 @@ import {
   PlayerFormDialog,
   WalletOperationDialog,
   WalletTransactionsCard,
+  LastSeen,
   type WalletOperation,
 } from '@/components/players';
 
@@ -71,6 +73,7 @@ export default function PlayerProfile() {
   const { data: playerMissions = [] } = usePlayerMissionsQuery(playerId);
   const { data: playerStreaks = [] } = usePlayerStreaksQuery(playerId);
   const { data: xpGrants } = usePlayerXpGrantsQuery(playerId, { limit: 10 });
+  const lastSeen = usePlayerLastSeenQuery(playerId);
 
   const setActiveMutation = useSetPlayerActiveMutation();
   const deleteMutation = useDeletePlayerMutation();
@@ -182,6 +185,22 @@ export default function PlayerProfile() {
                 {player.is_active ? 'Active' : 'Inactive'}
               </Badge>
               <span className="text-muted-foreground text-sm">Joined {formatDate(player.created_at)}</span>
+              {!lastSeen.isError && (
+                <span className="text-muted-foreground text-sm inline-flex items-center gap-1">
+                  · Last seen{' '}
+                  {lastSeen.data === undefined ? (
+                    '…'
+                  ) : (
+                    <LastSeen
+                      at={lastSeen.data?.last_activity_at}
+                      className="text-foreground"
+                    />
+                  )}
+                  {lastSeen.data?.last_event_type && (
+                    <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">{lastSeen.data.last_event_type}</code>
+                  )}
+                </span>
+              )}
             </div>
           </div>
         </div>

@@ -13,6 +13,11 @@ var (
 	ErrVersionConflict = errs.WithCode(
 		errs.New(errs.Conflict, "player modified concurrently, retry"), contracts.CodePlayerVersionConflict)
 
+	ErrInvalidSort = errs.WithCode(
+		errs.New(errs.Invalid, "sort must be created_at, -created_at or display_name"), contracts.CodeInvalidSort)
+	ErrInvalidCreatedRange = errs.WithCode(
+		errs.New(errs.Invalid, "created_from must be before created_to"), contracts.CodeInvalidCreatedRange)
+
 	ErrNoTenant          = errs.New(errs.Invalid, "player needs a tenant")
 	ErrNoExternalID      = errs.New(errs.Invalid, "external_id is required")
 	ErrExternalIDTooLong = errs.New(errs.Invalid, "external_id must be at most 255 characters")

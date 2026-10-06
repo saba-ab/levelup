@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Coins, Wallet, Send, TrendingUp, TrendingDown, History } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQueryClient } from '@tanstack/react-query';
+import { Search, Coins, Wallet, Send, TrendingUp, TrendingDown, History, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/AuthContext';
+import { StatBarChart } from '@/components/mechanics/StatBarChart';
+import {
+  walletAnalyticsKey,
+  useWalletSummaryQuery,
+  useWalletDistributionQuery,
+  useWalletDailyQuery,
+  describeMechanicsError,
+} from '@/services/queries/mechanics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -17,11 +29,105 @@ import {
   type WalletOperation,
 } from '@/components/players';
 
+/** YYYY-MM-DD of a date in UTC (the ledger buckets by UTC day). */
+const utcDay = (d: Date) => d.toISOString().slice(0, 10);
+const daysAgo = (n: number) => utcDay(new Date(Date.now() - n * 86_400_000));
+
+function compact(n: number): string {
+  return Math.abs(n) >= 10_000 ? new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n) : n.toLocaleString();
+}
+
+/** Balance histogram (GET /wallets/distribution). */
+function DistributionCard() {
+  const { data: buckets, isLoading, error } = useWalletDistributionQuery();
+  const chartData = (buckets ?? []).map((b) => ({
+    range: b.from === b.to ? compact(b.from) : `${compact(b.from)}–${compact(b.to)}`,
+    players: b.players,
+  }));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Balance distribution</CardTitle>
+        <CardDescription>Wallets per balance range.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-[260px] w-full" />
+        ) : error ? (
+          <p className="text-sm text-destructive py-8 text-center">Failed to load the distribution: {error.message}</p>
+        ) : chartData.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">No wallets yet.</p>
+        ) : (
+          <StatBarChart data={chartData} xKey="range" series={[{ key: 'players', label: 'Wallets', color: 'hsl(var(--primary))' }]} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Daily credited / debited totals (GET /wallets/daily?from&to). */
+function DailyCard() {
+  const [from, setFrom] = useState(() => daysAgo(29));
+  const [to, setTo] = useState(() => utcDay(new Date()));
+  const { data: days, isLoading, error } = useWalletDailyQuery({ from: from || undefined, to: to || undefined });
+  const chartData = (days ?? []).map((d) => ({ day: d.day, credited: d.credited, debited: d.debited }));
+  const empty = chartData.every((d) => d.credited === 0 && d.debited === 0);
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">Daily points flow</CardTitle>
+            <CardDescription>Points credited and debited per day (UTC, at most 366 days).</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="daily-from" className="text-xs">From</Label>
+              <Input id="daily-from" type="date" className="w-40" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="daily-to" className="text-xs">To</Label>
+              <Input id="daily-to" type="date" className="w-40" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-[260px] w-full" />
+        ) : error ? (
+          <p className="text-sm text-destructive py-8 text-center">
+            {describeMechanicsError(error, 'Failed to load daily totals', {
+              invalid_range: 'Pick a range where "from" is not after "to" and that spans at most 366 days.',
+            })}
+          </p>
+        ) : empty ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">No points moved in this range.</p>
+        ) : (
+          <StatBarChart
+            data={chartData}
+            xKey="day"
+            tickFormatter={(d) => d.slice(5)}
+            series={[
+              { key: 'credited', label: 'Credited', color: 'hsl(142 71% 45%)' },
+              { key: 'debited', label: 'Debited', color: 'hsl(var(--destructive))' },
+            ]}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Points() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [operation, setOperation] = useState<WalletOperation | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage:mechanics');
+  const summary = useWalletSummaryQuery();
 
   const search = useDebouncedValue(searchQuery.trim());
   const pager = useCursorPagination(10);
@@ -39,23 +145,20 @@ export default function Points() {
   const playerIds = useMemo(() => players.map((p) => p.id), [players]);
   const wallets = usePlayerWalletsQuery(playerIds);
 
-  /** Real totals over the wallets loaded on this page (the API has no tenant-wide aggregate). */
-  const pageTotals = useMemo(() => {
-    const loaded = Object.values(wallets.byPlayer);
-    return {
-      balance: loaded.reduce((sum, w) => sum + w.balance, 0),
-      earned: loaded.reduce((sum, w) => sum + w.lifetime_earned, 0),
-      spent: loaded.reduce((sum, w) => sum + w.lifetime_spent, 0),
-      openWallets: loaded.filter((w) => w.opened).length,
-    };
-  }, [wallets.byPlayer]);
+  const closeDialog = () => {
+    setOperation(null);
+    // Wallet operations change the tenant-wide figures and charts.
+    queryClient.invalidateQueries({ queryKey: walletAnalyticsKey() });
+  };
 
   const openDialog = (type: WalletOperation, player?: Player) => {
     setSelectedPlayer(player ?? null);
     setOperation(type);
   };
 
-  const statValue = (n: number) => (wallets.isLoading ? '...' : n.toLocaleString());
+  const totals = summary.data;
+  const statValue = (n: number | undefined) =>
+    summary.isLoading ? '...' : summary.error || n === undefined ? '-' : n.toLocaleString();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -64,7 +167,7 @@ export default function Points() {
           <h1 className="text-3xl font-bold">Points & Wallets</h1>
           <p className="text-muted-foreground mt-1">Manage player points and view transactions.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {canManage && <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="gap-2" onClick={() => openDialog('credit')}>
             <TrendingUp className="w-4 h-4" />
             Credit Points
@@ -77,10 +180,15 @@ export default function Points() {
             <Send className="w-4 h-4" />
             Transfer Points
           </Button>
-        </div>
+        </div>}
       </div>
 
-      {/* Totals over the wallets on the current page */}
+      {/* Tenant-wide totals (GET /wallets/summary) */}
+      {summary.error && (
+        <Card className="p-4 border-destructive">
+          <p className="text-sm text-destructive">Failed to load the wallet summary: {summary.error.message}</p>
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="stat-card">
           <CardContent className="p-6">
@@ -93,9 +201,9 @@ export default function Points() {
               </Badge>
             </div>
             <h3 className="font-semibold text-lg mb-1">Points Held</h3>
-            <p className="text-3xl font-bold mt-4">{statValue(pageTotals.balance)}</p>
+            <p className="text-3xl font-bold mt-4">{statValue(totals?.total_balance)}</p>
             <p className="text-xs text-muted-foreground">
-              Across {pageTotals.openWallets} open wallet{pageTotals.openWallets === 1 ? '' : 's'} on this page
+              Across {statValue(totals?.open_wallets)} open wallet{totals?.open_wallets === 1 ? '' : 's'}
             </p>
           </CardContent>
         </Card>
@@ -111,8 +219,10 @@ export default function Points() {
               </Badge>
             </div>
             <h3 className="font-semibold text-lg mb-1">Lifetime Earned</h3>
-            <p className="text-3xl font-bold mt-4">{statValue(pageTotals.earned)}</p>
-            <p className="text-xs text-muted-foreground">Players on this page</p>
+            <p className="text-3xl font-bold mt-4">{statValue(totals?.lifetime_earned)}</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <ArrowUpRight className="w-3 h-3 text-emerald-500" /> {statValue(totals?.credited_last_30d)} credited in the last 30 days
+            </p>
           </CardContent>
         </Card>
 
@@ -127,10 +237,17 @@ export default function Points() {
               </Badge>
             </div>
             <h3 className="font-semibold text-lg mb-1">Lifetime Spent</h3>
-            <p className="text-3xl font-bold mt-4">{statValue(pageTotals.spent)}</p>
-            <p className="text-xs text-muted-foreground">Players on this page</p>
+            <p className="text-3xl font-bold mt-4">{statValue(totals?.lifetime_spent)}</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <ArrowDownRight className="w-3 h-3 text-destructive" /> {statValue(totals?.debited_last_30d)} debited in the last 30 days
+            </p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <DailyCard />
+        <DistributionCard />
       </div>
 
       {/* Players List */}
@@ -203,6 +320,7 @@ export default function Points() {
                         </td>
                         <td className="p-4 text-right">
                           <div className="flex gap-2 justify-end">
+                            {canManage && <>
                             <Button size="sm" variant="outline" onClick={() => openDialog('credit', player)}>
                               <TrendingUp className="w-3 h-3 mr-1" />
                               Credit
@@ -215,6 +333,7 @@ export default function Points() {
                               <Send className="w-3 h-3 mr-1" />
                               Transfer
                             </Button>
+                            </>}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -244,7 +363,7 @@ export default function Points() {
         </CardContent>
       </Card>
 
-      <WalletOperationDialog operation={operation} player={selectedPlayer} onClose={() => setOperation(null)} />
+      <WalletOperationDialog operation={operation} player={selectedPlayer} onClose={closeDialog} />
     </div>
   );
 }

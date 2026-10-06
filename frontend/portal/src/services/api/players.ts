@@ -25,7 +25,20 @@ import type {
   TransferPointsData,
   TransferPointsResult,
 } from './types';
-import { PLAYER_ENDPOINTS, WALLET_ENDPOINTS, BADGE_ENDPOINTS, toQuery } from '@/lib/api-routes';
+import type { WalletSummary } from './models/players';
+import { API_VERSION, PLAYER_ENDPOINTS, WALLET_ENDPOINTS, BADGE_ENDPOINTS, toQuery } from '@/lib/api-routes';
+
+/** Batch and tenant-wide reads added after the shared endpoint maps. */
+export const PLAYER_BATCH_ENDPOINTS = {
+  /** GET ?player_ids=a,b (max 100): ProgressResp per known player (progression.view). */
+  PROGRESS: `${API_VERSION}/progress`,
+  /** GET ?player_ids=a,b (max 100): WalletResp per known player, zero views included (points.view_wallet). */
+  WALLETS: `${API_VERSION}/wallets`,
+  /** GET: tenant-wide wallet summary (points.view_wallet). */
+  WALLET_SUMMARY: `${API_VERSION}/wallets/summary`,
+} as const;
+
+const idsQuery = (playerIds: ID[]) => toQuery({ player_ids: playerIds.join(',') });
 
 /** Money mutations report their own errors (insufficient_balance etc.) in the UI. */
 const MONEY_OPTIONS: ApiOptions = { idempotencyKey: true, showErrorToast: false };
@@ -106,6 +119,26 @@ export function usePlayersService() {
     return api.delete(BADGE_ENDPOINTS.REVOKE(badgeId, playerId));
   }, [api]);
 
+  // ---------- batch reads (one request per page of players) ----------
+
+  /** Unknown or foreign players are omitted. */
+  const getPlayersProgress = useCallback(async (playerIds: ID[]) => {
+    return api.get<{ data: PlayerProgressSummary[] }>(`${PLAYER_BATCH_ENDPOINTS.PROGRESS}${idsQuery(playerIds)}`, {
+      showErrorToast: false,
+    });
+  }, [api]);
+
+  /** Never-opened wallets come back as zero views (opened=false). */
+  const getPlayersWallets = useCallback(async (playerIds: ID[]) => {
+    return api.get<{ data: Wallet[] }>(`${PLAYER_BATCH_ENDPOINTS.WALLETS}${idsQuery(playerIds)}`, {
+      showErrorToast: false,
+    });
+  }, [api]);
+
+  const getWalletSummary = useCallback(async () => {
+    return api.get<WalletSummary>(PLAYER_BATCH_ENDPOINTS.WALLET_SUMMARY, { showErrorToast: false });
+  }, [api]);
+
   // ---------- wallet ----------
 
   /** Returns a zero view with opened=false when the player has no wallet yet. */
@@ -152,5 +185,8 @@ export function usePlayersService() {
     creditWallet,
     debitWallet,
     transferPoints,
+    getPlayersProgress,
+    getPlayersWallets,
+    getWalletSummary,
   };
 }

@@ -28,6 +28,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/register", h.register)
 		r.Post("/login", h.login)
 		r.Post("/refresh", h.refresh)
+		h.mountAccountAuth(r)
 		r.Group(func(r chi.Router) {
 			r.Use(httpx.RequireAuth)
 			r.Post("/logout", h.logout)
@@ -38,6 +39,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(httpx.RequireAuth)
 		r.Get("/", h.listUsers)
 		r.Post("/", h.createUser)
+		h.mountInvitations(r)
 		r.Get("/{id}", h.getUser)
 		r.Patch("/{id}", h.updateUser)
 		r.Delete("/{id}", h.deleteUser)

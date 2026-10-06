@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/pressly/goose/v3"
 
+	activitycontracts "levelup/internal/modules/activity/contracts"
 	identitycontracts "levelup/internal/modules/identity/contracts"
 	"levelup/internal/modules/player/contracts"
 	"levelup/internal/modules/player/internal/app"
@@ -31,8 +32,8 @@ type Module struct {
 }
 
 // New wires the module. Constructors do no I/O. player depends on no other
-// module's reader: it is a provider (Reader()) and consumes only
-// identity's tenant.deleted.v1 event.
+// module's reader: it is a provider (Reader()) and consumes identity's
+// tenant.deleted.v1 and activity's activity.received.v1 events.
 func New(d modkit.Deps, cfg Config) *Module {
 	pg := repo.NewPostgres(d.DB)
 	var r app.Repository = pg
@@ -45,6 +46,9 @@ func New(d modkit.Deps, cfg Config) *Module {
 
 // Reader is player's offered synchronous read surface for every mechanic.
 func (m *Module) Reader() contracts.Reader { return m.svc }
+
+// IDLister exposes keyset paging over player ids (segments refresh).
+func (m *Module) IDLister() contracts.IDLister { return m.svc }
 
 func (m *Module) Name() string { return contracts.Module }
 
@@ -61,13 +65,39 @@ func (m *Module) RegisterHTTP(r chi.Router) {
 
 // Subscriptions: tenant.deleted.v1 replaces the Laravel FK cascade. The
 // purge is idempotent by construction (delete-where-tenant finds nothing
-// the second time).
+// the second time). activity.received.v1 drives player auto-creation
+// (idempotent: derived id plus the live unique index).
 func (m *Module) Subscriptions() []bus.Subscription {
-	return []bus.Subscription{{
+	subs := []bus.Subscription{{
 		Topic:   identitycontracts.TopicTenantDeleted,
 		Group:   contracts.Module,
 		Handler: m.onTenantDeleted,
 	}}
+	if m.cfg.AutoCreateFromActivities {
+		subs = append(subs, bus.Subscription{
+			Topic:   activitycontracts.TopicReceived,
+			Group:   contracts.Module,
+			Handler: m.onActivityReceived,
+		})
+	}
+	return subs
+}
+
+func (m *Module) onActivityReceived(ctx context.Context, e bus.Envelope) error {
+	return handleActivityReceived(ctx, m.svc, e)
+}
+
+type autoCreator interface {
+	AutoCreateFromActivity(ctx context.Context, ev activitycontracts.ReceivedV1) (bool, error)
+}
+
+func handleActivityReceived(ctx context.Context, svc autoCreator, e bus.Envelope) error {
+	var ev activitycontracts.ReceivedV1
+	if err := json.Unmarshal(e.Payload, &ev); err != nil {
+		return errs.Wrap(errs.Invalid, "undecodable activity.received.v1", err)
+	}
+	_, err := svc.AutoCreateFromActivity(ctx, ev)
+	return err
 }
 
 func (m *Module) onTenantDeleted(ctx context.Context, e bus.Envelope) error {

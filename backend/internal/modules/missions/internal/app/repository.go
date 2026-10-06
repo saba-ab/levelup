@@ -22,6 +22,15 @@ type AttemptFilter struct {
 	Status    string
 }
 
+// AttemptStats are one mission's attempt aggregates. AvgHoursToComplete is
+// nil when no attempt completed.
+type AttemptStats struct {
+	Started            int64
+	InProgress         int64
+	Completed          int64
+	AvgHoursToComplete *float64
+}
+
 // Cursor is a keyset position over (created_at, id) DESC. The zero value
 // is the first page.
 type Cursor struct {
@@ -46,6 +55,10 @@ type Repository interface {
 	// its mission summary).
 	MissionsByIDs(ctx context.Context, tenantID string, ids []string) (map[string]domain.Mission, error)
 
+	// AutoMissions returns the tenant's live, active missions whose
+	// criteria.event_type equals eventType (the activity subscriber's scan).
+	AutoMissions(ctx context.Context, tenantID, eventType string) ([]domain.Mission, error)
+
 	// Attempts.
 	// OpenAttemptForUpdate locks the in_progress attempt of a period.
 	OpenAttemptForUpdate(ctx context.Context, tx *gorm.DB, tenantID, missionID, playerID, periodKey string) (domain.Attempt, bool, error)
@@ -62,6 +75,9 @@ type Repository interface {
 	AttemptByID(ctx context.Context, tenantID, id string) (domain.Attempt, error)
 	ListAttempts(ctx context.Context, tenantID string, f AttemptFilter, after Cursor, limit int) ([]domain.Attempt, error)
 	CompletedCounts(ctx context.Context, tenantID string, playerIDs []string) (map[string]int, error)
+	// AttemptStats aggregates attempts per mission in one grouped query.
+	// Missions without attempts are absent.
+	AttemptStats(ctx context.Context, tenantID string, missionIDs []string) (map[string]AttemptStats, error)
 
 	// Progress idempotency ledger.
 	// InsertProgressEvent reports false when the key was already recorded.

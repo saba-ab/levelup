@@ -33,6 +33,8 @@ type Service struct {
 	db      *gorm.DB
 	clock   clock.Clock
 	batch   int
+	// maxDepth caps CausationDepth of activities that progress missions.
+	maxDepth int
 
 	tx func(ctx context.Context, fn func(tx *gorm.DB) error) error
 }
@@ -44,11 +46,20 @@ func NewService(repo Repository, players ports.PlayerReader, ob outbox.Store,
 	if batch <= 0 {
 		batch = defaultBatch
 	}
-	s := &Service{repo: repo, players: players, outbox: ob, authz: enf, db: db, clock: c, batch: batch}
+	s := &Service{repo: repo, players: players, outbox: ob, authz: enf, db: db, clock: c, batch: batch,
+		maxDepth: DefaultMaxCausationDepth}
 	s.tx = func(ctx context.Context, fn func(tx *gorm.DB) error) error {
 		return postgres.InTx(ctx, s.db, fn)
 	}
 	return s
+}
+
+// SetMaxCausationDepth overrides the loop guard of the activity subscriber
+// (<= 0 keeps the default).
+func (s *Service) SetMaxCausationDepth(n int) {
+	if n > 0 {
+		s.maxDepth = n
+	}
 }
 
 // Page is one keyset page; NextCursor is "" on the last page.
@@ -225,6 +236,9 @@ func applyUpdate(m *domain.Mission, cmd UpdateMissionCmd, now time.Time) error {
 		m.Target = *cmd.Target
 	}
 	if cmd.Criteria != nil {
+		if _, err := domain.ParseCriteria(cmd.Criteria); err != nil {
+			return err
+		}
 		m.Criteria = cmd.Criteria
 	}
 	if cmd.PointsReward != nil {

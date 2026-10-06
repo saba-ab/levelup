@@ -15,3 +15,27 @@ export const PORTAL_ROUTES = {
   /** Rules → Simulate: evaluate an activity against live rules without side effects. */
   SIMULATOR: `${PORTAL_URL}/rules`,
 } as const;
+
+export const CONTACT_EMAIL = 'hello@levelupos.com';
+export const SALES_EMAIL = 'sales@levelupos.com';
+
+// Operator details shown on the legal pages. Every value in brackets is a
+// placeholder the site owner must replace before launch.
+export const LEGAL = {
+  COMPANY_NAME: '[Company legal name]',
+  COMPANY_ADDRESS: '[Registered address]',
+  COMPANY_REGISTRATION: '[Company registration number]',
+  PRIVACY_CONTACT: '[Privacy contact email]',
+  SECURITY_CONTACT: '[Security contact email]',
+  EMAIL_PROVIDER: '[Transactional email provider]',
+  GOVERNING_LAW: '[Governing law and jurisdiction]',
+  SUPERVISORY_AUTHORITY: '[Competent data protection authority]',
+  BACKUP_RETENTION: '[Backup retention period]',
+  LAST_UPDATED: '6 October 2026',
+} as const;
+
+// Official SDK package names (sdks/typescript, sdks/python).
+export const SDK_PACKAGES = {
+  TYPESCRIPT: '@levelup/sdk',
+  PYTHON: 'levelup',
+} as const;

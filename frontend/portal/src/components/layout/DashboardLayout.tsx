@@ -6,6 +6,7 @@ import Header from './Header';
 import { CommandPalette } from '@/components/CommandPalette';
 import EnvironmentSwitcher from '@/components/EnvironmentSwitcher';
 import { cn } from '@/lib/utils';
+import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 
 export default function DashboardLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -49,6 +50,7 @@ export default function DashboardLayout() {
         )}
       >
         <div className="p-6">
+          <EmailVerificationBanner className="mb-6" />
           <Outlet />
         </div>
       </main>

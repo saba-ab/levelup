@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"levelup/internal/modules/leaderboards/contracts"
 	"levelup/internal/modules/leaderboards/internal/domain"
 	"levelup/internal/modules/leaderboards/internal/ports"
 	"levelup/internal/platform/authz"
@@ -152,6 +153,20 @@ func (f *fakeRepo) ActiveByType(_ context.Context, tenantID, typ string) ([]doma
 	var out []domain.Leaderboard
 	for _, b := range f.boards {
 		if b.TenantID == tenantID && b.Type == typ && b.Active && b.DeletedAt == nil {
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (f *fakeRepo) ActiveForActivity(_ context.Context, tenantID, eventType string) ([]domain.Leaderboard, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []domain.Leaderboard
+	for _, b := range f.boards {
+		if b.TenantID == tenantID && b.Type == contracts.TypeActivity && b.Activity != nil &&
+			b.Activity.EventType == eventType && b.Active && b.DeletedAt == nil {
 			out = append(out, b)
 		}
 	}
@@ -624,6 +639,15 @@ func (a allowKeys) Authorize(_ context.Context, _ authz.Principal, perm authz.Pe
 
 type fakePlayers struct {
 	players map[string]ports.PlayerSnapshot
+}
+
+func (f fakePlayers) IDByExternalID(_ context.Context, _ string, externalID string) (string, bool, error) {
+	for id, p := range f.players {
+		if p.ExternalID == externalID {
+			return id, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func (f fakePlayers) ByIDs(_ context.Context, _ string, ids []string) (map[string]ports.PlayerSnapshot, error) {

@@ -88,16 +88,32 @@ func (l Limits) IsZero() bool { return l == Limits{} }
 
 // Definition is one compiled rule body.
 type Definition struct {
-	cond          *node
-	Actions       []Action
-	Limits        Limits
-	needsProgress bool
-	needsPoints   bool
-	needsPlayer   bool
+	cond           *node
+	Actions        []Action
+	Limits         Limits
+	Schedule       *Schedule // nil = always
+	StopProcessing bool
+	needsProgress  bool
+	needsPoints    bool
+	needsPlayer    bool
+	needsHistory   bool
+	historyTypes   map[string]bool // event types read by history leaves; "" = the trigger
 }
 
 // NeedsPlayer reports whether any condition reads player.*.
 func (d *Definition) NeedsPlayer() bool { return d.needsPlayer }
+
+// NeedsHistory reports whether any condition reads history.*.
+func (d *Definition) NeedsHistory() bool { return d.needsHistory }
+
+// Spec is one rule body as stored: the input of CompileSpec.
+type Spec struct {
+	Conditions     json.RawMessage
+	Actions        json.RawMessage
+	Limits         json.RawMessage
+	Schedule       json.RawMessage
+	StopProcessing bool
+}
 
 type nodeKind uint8
 
@@ -116,11 +132,14 @@ type node struct {
 }
 
 type leaf struct {
-	source   string
-	field    string
-	segs     []string
-	pf       playerField
-	af       activityField
+	source    string
+	field     string
+	segs      []string
+	pf        playerField
+	af        activityField
+	hf        historyField
+	eventType string // history.count: "" = the trigger
+	window    string // history.count
 	op       string
 	val      value
 	list     []value
@@ -149,17 +168,24 @@ func (f fieldErrors) err() error {
 	return errs.WithCode(errs.WithFields(errs.New(errs.Invalid, msg), f), CodeInvalidDefinition)
 }
 
-// CompileDefinition validates and compiles one rule body. It is the write-time
-// gate (create, PATCH of a draft, new version, publish).
+// CompileDefinition validates and compiles a rule body without schedule or
+// stop_processing (see CompileSpec).
 func CompileDefinition(conditions, actions, limits json.RawMessage, opts Options) (*Definition, error) {
+	return CompileSpec(Spec{Conditions: conditions, Actions: actions, Limits: limits}, opts)
+}
+
+// CompileSpec validates and compiles one rule body. It is the write-time
+// gate (create, PATCH of a draft, new version, publish, draft simulation).
+func CompileSpec(spec Spec, opts Options) (*Definition, error) {
 	opts = opts.withDefaults()
 	fe := fieldErrors{}
-	d := &Definition{}
+	d := &Definition{StopProcessing: spec.StopProcessing, historyTypes: map[string]bool{}}
 
 	c := &condCompiler{fe: fe, max: opts.MaxConditions, def: d}
-	d.cond = c.compileRoot(conditions)
-	d.Actions = compileActions(actions, opts.MaxActions, fe)
-	d.Limits = compileLimits(limits, fe)
+	d.cond = c.compileRoot(spec.Conditions)
+	d.Actions = compileActions(spec.Actions, opts.MaxActions, fe)
+	d.Limits = compileLimits(spec.Limits, fe)
+	d.Schedule = compileSchedule(spec.Schedule, fe)
 
 	if err := fe.err(); err != nil {
 		return nil, err
@@ -302,7 +328,7 @@ func (c *condCompiler) compileLeaf(obj map[string]any, path string) *node {
 	}
 	for k := range obj {
 		switch k {
-		case "source", "type", "field", "operator", "op", "value":
+		case "source", "type", "field", "operator", "op", "value", "event_type", "window":
 		default:
 			c.fe.add(path+"."+k, "unknown key")
 		}
@@ -335,9 +361,21 @@ func (c *condCompiler) compileLeaf(obj map[string]any, path string) *node {
 	if !ok1 || !ok2 || !ok3 {
 		return nil
 	}
+	if alias, ok := operatorAliases[op]; ok {
+		op = alias
+	}
+	if src == SourceHistory {
+		return c.compileHistoryLeaf(obj, path, field, op)
+	}
+	for _, k := range []string{"event_type", "window"} {
+		if _, ok := obj[k]; ok {
+			c.fe.add(path+"."+k, "is only allowed for source history")
+			return nil
+		}
+	}
 	bad := false
 	if src == "" {
-		c.fe.add(path+".source", "is required (trigger, player or activity)")
+		c.fe.add(path+".source", "is required (trigger, player, activity or history)")
 		bad = true
 	}
 	if field == "" {
@@ -350,9 +388,6 @@ func (c *condCompiler) compileLeaf(obj map[string]any, path string) *node {
 	}
 	if bad {
 		return nil
-	}
-	if alias, ok := operatorAliases[op]; ok {
-		op = alias
 	}
 	if !knownOperators[op] {
 		c.fe.add(path+".operator", fmt.Sprintf("unknown operator %q", op))

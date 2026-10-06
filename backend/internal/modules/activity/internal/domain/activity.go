@@ -178,3 +178,11 @@ func capped(m map[string]any, maxBytes int, tooLarge error) (map[string]any, err
 // normalizeTime pins times to UTC at Postgres precision, so the stored row
 // and the published event carry the identical instant.
 func normalizeTime(t time.Time) time.Time { return t.UTC().Truncate(time.Microsecond) }
+
+// LastSeen is a player's most recent activity: when it occurred and its
+// event type.
+type LastSeen struct {
+	PlayerID  string
+	At        time.Time
+	EventType string
+}

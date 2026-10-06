@@ -33,12 +33,16 @@ func setupRepo(t *testing.T) (*Postgres, *gorm.DB) {
 	return NewPostgres(moduleDB), moduleDB
 }
 
+func missionsReq(n float64) map[string]any {
+	return map[string]any{"all": []any{map[string]any{"metric": "missions_completed", "gte": n}}}
+}
+
 func now() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
 
 func seedBadge(t *testing.T, r *Postgres, db *gorm.DB, tenantID string, mut func(*domain.NewBadgeParams)) domain.Badge {
 	t.Helper()
 	p := domain.NewBadgeParams{TenantID: tenantID, Name: "Badge " + id.NewID(), Tier: "gold", Category: "skill", Active: true,
-		Requirements: map[string]any{"missions": 3.0}}
+		Requirements: missionsReq(3)}
 	if mut != nil {
 		mut(&p)
 	}
@@ -56,7 +60,7 @@ func TestBadgeRoundTripSlugAndVersion(t *testing.T) {
 
 	got, err := r.BadgeByID(ctx, tenant, b.ID)
 	require.NoError(t, err)
-	require.Equal(t, map[string]any{"missions": 3.0}, got.Requirements, "jsonb round-trips as a string param")
+	require.Equal(t, missionsReq(3), got.Requirements, "jsonb round-trips as a string param")
 	_, err = r.BadgeByID(ctx, id.NewID(), b.ID)
 	require.ErrorIs(t, err, domain.ErrBadgeNotFound, "another tenant's badge is not found")
 

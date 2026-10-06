@@ -38,10 +38,14 @@ type Claim struct {
 	RedeemedAt      *time.Time
 	ExpiresAt       *time.Time
 	CancelledAt     *time.Time
-	Code            *string
-	Version         int
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// FulfilledAt is when the reward was delivered: the fulfilment
+	// commands were issued (points, badge, level) or the voucher was
+	// redeemed (discount, item, custom). Nil until then.
+	FulfilledAt *time.Time
+	Code        *string
+	Version     int
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // NewClaim starts a claim on a reward whose stock the caller already held.
@@ -189,6 +193,18 @@ func (c *Claim) Expire(now time.Time) error {
 	c.UpdatedAt = now
 	return nil
 }
+
+// MarkFulfilled stamps the delivery time once; later calls keep the first.
+func (c *Claim) MarkFulfilled(now time.Time) {
+	if c.FulfilledAt != nil {
+		return
+	}
+	c.FulfilledAt = &now
+	c.UpdatedAt = now
+}
+
+// Fulfilled reports whether the reward was already delivered.
+func (c *Claim) Fulfilled() bool { return c.FulfilledAt != nil }
 
 func (c *Claim) settle(r Reward, code func() string, now time.Time) {
 	c.ClaimedAt = &now

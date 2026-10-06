@@ -3,12 +3,14 @@ package repo
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"levelup/internal/modules/player/contracts"
 	"levelup/internal/modules/player/internal/app"
 	"levelup/internal/modules/player/internal/domain"
 	"levelup/internal/modules/player/migrations"
@@ -219,4 +221,134 @@ func idsOf(ps []domain.Player) []string {
 		out[i] = p.ID
 	}
 	return out
+}
+
+func TestCreateIfAbsentToleratesEveryUniqueKey(t *testing.T) {
+	r, db := setupRepo(t)
+	ctx := context.Background()
+	tenant := id.NewID()
+	insertIfAbsent := func(p domain.Player) bool {
+		t.Helper()
+		var ok bool
+		require.NoError(t, postgres.InTx(ctx, db, func(tx *gorm.DB) error {
+			var err error
+			ok, err = r.CreateIfAbsent(ctx, tx, p)
+			if err != nil {
+				return err
+			}
+			// The transaction must still be usable after a collision.
+			return tx.Exec("SELECT 1").Error
+		}))
+		return ok
+	}
+
+	p := newPlayer(t, tenant, "auto-1", base)
+	p.CreatedBy = ""
+	require.True(t, insertIfAbsent(p))
+
+	again := p
+	require.False(t, insertIfAbsent(again), "same id: primary key collision is a no-op")
+
+	rival := newPlayer(t, tenant, "auto-1", base)
+	require.False(t, insertIfAbsent(rival), "live (tenant, external_id) collision is a no-op")
+
+	got, err := r.ByID(ctx, tenant, p.ID)
+	require.NoError(t, err)
+	require.Empty(t, got.CreatedBy, "created_by stays NULL for the system")
+
+	// Soft-delete: the same derived id still collides; a new id succeeds.
+	require.NoError(t, postgres.InTx(ctx, db, func(tx *gorm.DB) error {
+		got.MarkDeleted(base.Add(time.Minute))
+		return r.Save(ctx, tx, got)
+	}))
+	require.False(t, insertIfAbsent(p), "a deleted player is not resurrected by a redelivered id")
+	require.True(t, insertIfAbsent(rival), "the external id is free again for a new player")
+}
+
+func TestListSortsKeysetAndCreatedRange(t *testing.T) {
+	r, db := setupRepo(t)
+	ctx := context.Background()
+	tenant := id.NewID()
+
+	mk := func(ext, name string, at time.Time) domain.Player {
+		p, err := domain.NewPlayer(id.NewID(), tenant, ext, domain.Profile{DisplayName: name}, "", at)
+		require.NoError(t, err)
+		require.NoError(t, create(t, r, db, p))
+		return p
+	}
+	bravo := mk("e1", "bravo", base)
+	alpha1 := mk("e2", "Alpha", base.Add(time.Second))
+	charlie := mk("Charlie-ext", "", base.Add(2*time.Second))
+	alpha2 := mk("e4", "alpha", base.Add(3*time.Second))
+	delta := mk("e5", "delta", base.Add(4*time.Second))
+	foreign, err := domain.NewPlayer(id.NewID(), id.NewID(), "zz", domain.Profile{DisplayName: "aaa"}, "", base)
+	require.NoError(t, err)
+	require.NoError(t, create(t, r, db, foreign))
+
+	walk := func(f app.ListFilter) []string {
+		t.Helper()
+		var out []string
+		f.Limit = 2
+		for range 10 {
+			page, err := r.List(ctx, tenant, f)
+			require.NoError(t, err)
+			out = append(out, idsOf(page)...)
+			if len(page) < f.Limit {
+				return out
+			}
+			last := page[len(page)-1]
+			f.HasAfter, f.After, f.AfterKey, f.AfterID = true, last.CreatedAt, last.SortName(), last.ID
+		}
+		t.Fatal("did not terminate")
+		return nil
+	}
+
+	firstAlpha, secondAlpha := alpha1.ID, alpha2.ID
+	if secondAlpha < firstAlpha {
+		firstAlpha, secondAlpha = secondAlpha, firstAlpha
+	}
+	require.Equal(t, []string{firstAlpha, secondAlpha, bravo.ID, charlie.ID, delta.ID},
+		walk(app.ListFilter{Sort: contracts.SortDisplayName}), "lower(COALESCE(display_name, external_id)), id")
+	require.Equal(t, []string{bravo.ID, alpha1.ID, charlie.ID, alpha2.ID, delta.ID},
+		walk(app.ListFilter{Sort: contracts.SortCreatedAsc}))
+	require.Equal(t, []string{delta.ID, alpha2.ID, charlie.ID, alpha1.ID, bravo.ID},
+		walk(app.ListFilter{Sort: contracts.SortCreatedDesc}))
+
+	from, to := base.Add(time.Second), base.Add(3*time.Second)
+	page, err := r.List(ctx, tenant, app.ListFilter{Sort: contracts.SortCreatedAsc, Limit: 10, CreatedFrom: &from, CreatedTo: &to})
+	require.NoError(t, err)
+	require.Equal(t, []string{alpha1.ID, charlie.ID}, idsOf(page), "from inclusive, to exclusive")
+
+	var idx int64
+	require.NoError(t, db.Raw(`SELECT count(*) FROM pg_indexes WHERE indexname = 'ix_players_tenant_sort_name'`).Scan(&idx).Error)
+	require.EqualValues(t, 1, idx, "migration 0004 created the index")
+}
+
+func TestIDsAfterPagesLiveIDsInOrder(t *testing.T) {
+	r, db := setupRepo(t)
+	ctx := context.Background()
+	tenant := id.NewID()
+	var live []string
+	for _, ext := range []string{"p1", "p2", "p3", "p4", "gone"} {
+		p := newPlayer(t, tenant, ext, base)
+		require.NoError(t, create(t, r, db, p))
+		if ext == "gone" {
+			require.NoError(t, postgres.InTx(ctx, db, func(tx *gorm.DB) error {
+				p.MarkDeleted(base)
+				return r.Save(ctx, tx, p)
+			}))
+			continue
+		}
+		live = append(live, p.ID)
+	}
+	require.NoError(t, create(t, r, db, newPlayer(t, id.NewID(), "foreign", base)))
+	slices.Sort(live)
+
+	first, err := r.IDsAfter(ctx, tenant, "", 3)
+	require.NoError(t, err)
+	require.Equal(t, live[:3], first)
+
+	rest, err := r.IDsAfter(ctx, tenant, first[2], 3)
+	require.NoError(t, err)
+	require.Equal(t, live[3:], rest, "a short page is the last one; deleted and foreign rows are absent")
 }

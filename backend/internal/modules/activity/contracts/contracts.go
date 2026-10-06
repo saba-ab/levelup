@@ -4,6 +4,7 @@
 package contracts
 
 import (
+	"context"
 	"time"
 
 	"levelup/internal/platform/authz"
@@ -62,3 +63,27 @@ var (
 )
 
 var AllPermissions = []authz.Permission{PermIngest, PermViewAny, PermView}
+
+// Player display hints (auto-create convention). When ACTIVITY_AUTO_CREATE_PLAYERS
+// flags an activity, the player owner creates the player with display_name =
+// properties[PropPlayerDisplayName] (else context[...], else the external id)
+// and email = properties[PropPlayerEmail] (else context[...], else none).
+// Invalid hints are ignored, never fatal.
+const (
+	PropPlayerDisplayName = "player_display_name"
+	PropPlayerEmail       = "player_email"
+)
+
+// MaxLastSeenIDs bounds one LastSeen request (HTTP and Reader alike);
+// callers chunk larger sets.
+const MaxLastSeenIDs = 100
+
+// Reader is activity's offered synchronous read surface.
+type Reader interface {
+	// LastSeen maps each player id to the occurred_at of that player's most
+	// recent activity in the tenant. Players with no activity (or whose
+	// activities are not yet resolved to a player id) are absent, never an
+	// error. Malformed ids are ignored; more than MaxLastSeenIDs distinct ids
+	// is errs.Invalid.
+	LastSeen(ctx context.Context, tenantID string, playerIDs []string) (map[string]time.Time, error)
+}

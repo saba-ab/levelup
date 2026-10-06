@@ -83,6 +83,10 @@ func republishedCounter(reg *prometheus.Registry) prometheus.Counter {
 	return c
 }
 
+// Reader is activity's offered synchronous read surface (last seen per
+// player).
+func (m *Module) Reader() contracts.Reader { return m.svc }
+
 func (m *Module) Name() string { return contracts.Module }
 
 func (m *Module) Migrations() fs.FS { return migrations.FS }

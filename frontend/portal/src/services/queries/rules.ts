@@ -11,6 +11,14 @@ import type {
   SimulateRulesData,
   RuleDecisionFilters,
 } from '@/services/api/types';
+import type {
+  CreateRuleDataV2,
+  CreateRuleVersionDataV2,
+  RuleStatsParams,
+  RuleV2,
+  SimulateRulesDataV2,
+  UpdateRuleDataV2,
+} from '@/services/api/models/rules';
 
 /**
  * A failed API call, keeping what the UI branches on: the problem+json code
@@ -45,6 +53,7 @@ export const ruleKeys = {
   versions: (id: ID, params?: CursorParams) => [...ruleKeys.detail(id), 'versions', params] as const,
   decisions: (filters?: RuleDecisionFilters) => [...ruleKeys.all, 'decisions', filters] as const,
   decision: (id: ID) => [...ruleKeys.all, 'decision', id] as const,
+  stats: (params?: RuleStatsParams) => [...ruleKeys.all, 'stats', params] as const,
 };
 
 /** One cursor page of rules: { data, next_cursor }. */
@@ -79,7 +88,7 @@ export function useCreateRuleMutation() {
   const queryClient = useQueryClient();
   const { createRule } = useRulesService();
   return useMutation({
-    mutationFn: async (data: CreateRuleData) => unwrap(await createRule(data), 'Failed to create rule'),
+    mutationFn: async (data: CreateRuleData | CreateRuleDataV2) => unwrap(await createRule(data), 'Failed to create rule'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
   });
 }
@@ -88,7 +97,7 @@ export function useUpdateRuleMutation() {
   const queryClient = useQueryClient();
   const { updateRule } = useRulesService();
   return useMutation({
-    mutationFn: async ({ ruleId, data }: { ruleId: ID; data: UpdateRuleData }) =>
+    mutationFn: async ({ ruleId, data }: { ruleId: ID; data: UpdateRuleData | UpdateRuleDataV2 }) =>
       unwrap(await updateRule(ruleId, data), 'Failed to update rule'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
   });
@@ -110,7 +119,7 @@ export function useCreateRuleVersionMutation() {
   const queryClient = useQueryClient();
   const { createRuleVersion } = useRulesService();
   return useMutation({
-    mutationFn: async ({ ruleId, data }: { ruleId: ID; data: CreateRuleVersionData }) =>
+    mutationFn: async ({ ruleId, data }: { ruleId: ID; data: CreateRuleVersionData | CreateRuleVersionDataV2 }) =>
       unwrap(await createRuleVersion(ruleId, data), 'Failed to create rule version'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
   });
@@ -126,11 +135,14 @@ export function usePublishRuleMutation() {
   });
 }
 
-/** Evaluates a hypothetical activity against the live ruleset; writes nothing. */
+/**
+ * Evaluates a hypothetical activity against the live ruleset, or against
+ * data.definition alone (an unsaved draft); writes nothing.
+ */
 export function useSimulateRulesMutation() {
   const { simulateRules } = useRulesService();
   return useMutation({
-    mutationFn: async (data: SimulateRulesData) => unwrap(await simulateRules(data), 'Simulation failed'),
+    mutationFn: async (data: SimulateRulesData | SimulateRulesDataV2) => unwrap(await simulateRules(data), 'Simulation failed'),
   });
 }
 
@@ -150,5 +162,61 @@ export function useRuleDecisionQuery(decisionId: ID | undefined) {
     queryKey: ruleKeys.decision(decisionId ?? ''),
     queryFn: async () => unwrap(await getDecision(decisionId!), 'Failed to fetch decision'),
     enabled: !!decisionId,
+  });
+}
+
+/**
+ * GET /rules/stats: per-rule firing counts over [from, to) (default: the last
+ * 30 days). Needs rules.view_decisions; a 403 surfaces as an ApiRequestError
+ * with status 403 (callers usually hide the widget then).
+ */
+export function useRuleStatsQuery(params?: RuleStatsParams, options?: { enabled?: boolean }) {
+  const { getRuleStats } = useRulesService();
+  return useQuery({
+    queryKey: ruleKeys.stats(params),
+    queryFn: async () => unwrap(await getRuleStats(params), 'Failed to fetch rule statistics'),
+    enabled: options?.enabled ?? true,
+    staleTime: 60_000,
+    retry: (count, err) => !(err instanceof ApiRequestError && err.status === 403) && count < 2,
+  });
+}
+
+/** The name for a copy: "Name (copy)", then "Name (copy 2)", ... within 255 chars. */
+function copyName(name: string, attempt: number): string {
+  const suffix = attempt === 1 ? ' (copy)' : ` (copy ${attempt})`;
+  return `${name.slice(0, 255 - suffix.length)}${suffix}`;
+}
+
+/**
+ * Duplicates a rule: a new rule named "… (copy)" with the source's latest
+ * definition. It is created as a draft (not live); the API only allows
+ * active -> inactive, so a draft is the inactive state of a new rule. A slug_taken
+ * conflict retries with "(copy 2)", "(copy 3)", ...
+ */
+export function useDuplicateRuleMutation() {
+  const queryClient = useQueryClient();
+  const { getRule, createRule } = useRulesService();
+  return useMutation({
+    mutationFn: async (ruleId: ID): Promise<RuleV2> => {
+      const source = unwrap(await getRule(ruleId), 'Failed to load the rule to duplicate');
+      const version = source.latest_version ?? source.current_version;
+      if (!version) throw new Error('The rule has no version to copy.');
+      for (let attempt = 1; ; attempt++) {
+        const res = await createRule({
+          name: copyName(source.name, attempt),
+          description: source.description || undefined,
+          trigger_event: source.trigger_event,
+          program_id: source.program_id ?? undefined,
+          priority: source.priority,
+          conditions: version.conditions,
+          actions: version.actions,
+          limits: version.limits ?? undefined,
+          schedule: version.schedule ?? undefined,
+          stop_processing: version.stop_processing || undefined,
+        });
+        if (res.success || res.code !== 'slug_taken' || attempt >= 5) return unwrap(res, 'Failed to duplicate rule');
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
   });
 }

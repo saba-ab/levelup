@@ -38,7 +38,13 @@ func TestNewRewardValidation(t *testing.T) {
 		{"negative cost", func(p *RewardPatch) { p.PointsCost = ptr(int64(-1)) }, ErrBadPointsCost},
 		{"bad value", func(p *RewardPatch) { p.Value = ptr("ten") }, ErrBadValue},
 		{"too many decimals", func(p *RewardPatch) { p.Value = ptr("1.234") }, ErrBadValue},
-		{"good value", func(p *RewardPatch) { p.Value = ptr("10.50") }, nil},
+		{"good value", func(p *RewardPatch) { p.Type = ptr(contracts.TypeDiscount); p.Value = ptr("10.50") }, nil},
+		{"points value must be whole", func(p *RewardPatch) { p.Value = ptr("10.50") }, ErrBadRewardValue},
+		{"points value must be positive", func(p *RewardPatch) { p.Value = ptr("0") }, ErrBadRewardValue},
+		{"points value zero decimals", func(p *RewardPatch) { p.Value = ptr("0.00") }, ErrBadRewardValue},
+		{"points whole value", func(p *RewardPatch) { p.Value = ptr("250") }, nil},
+		{"points whole value with cents", func(p *RewardPatch) { p.Value = ptr("250.00") }, nil},
+		{"level value must be whole", func(p *RewardPatch) { p.Type = ptr(contracts.TypeLevel); p.Value = ptr("1.5") }, ErrBadRewardValue},
 		{"bad value type", func(p *RewardPatch) { p.ValueType = ptr("ratio") }, ErrBadValueType},
 		{"negative limit", func(p *RewardPatch) { p.MaxRedemptions = ptr(-2) }, ErrBadLimit},
 		{"zero limit clears", func(p *RewardPatch) { p.MaxRedemptions = ptr(0) }, nil},
@@ -61,7 +67,6 @@ func TestNewRewardValidation(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, "coffee-mug", r.Slug)
-			require.Equal(t, contracts.TypePoints, r.Type)
 		})
 	}
 }
@@ -258,4 +263,38 @@ func TestExpireIfEnded(t *testing.T) {
 	require.True(t, r.ExpireIfEnded(t0))
 	require.Equal(t, contracts.RewardExpired, r.Status)
 	require.False(t, r.ExpireIfEnded(t0))
+}
+
+func TestWholeValueAndFulfilment(t *testing.T) {
+	r := activeReward(t, func(p *RewardPatch) { p.Value = ptr("250.00") })
+	n, ok := r.WholeValue()
+	require.True(t, ok)
+	require.EqualValues(t, 250, n)
+	require.True(t, r.FulfilsByCommand())
+
+	unset := activeReward(t, nil)
+	_, ok = unset.WholeValue()
+	require.False(t, ok, "a points reward without value credits nothing")
+
+	for _, typ := range []string{contracts.TypeDiscount, contracts.TypeItem, contracts.TypeCustom} {
+		v := activeReward(t, func(p *RewardPatch) { p.Type = ptr(typ) })
+		require.False(t, v.FulfilsByCommand(), typ)
+	}
+	for _, typ := range []string{contracts.TypeBadge, contracts.TypeLevel} {
+		v := activeReward(t, func(p *RewardPatch) { p.Type = ptr(typ) })
+		require.True(t, v.FulfilsByCommand(), typ)
+	}
+
+	// An existing decimal value blocks a later switch to the points type.
+	disc := activeReward(t, func(p *RewardPatch) { p.Type = ptr(contracts.TypeDiscount); p.Value = ptr("9.99") })
+	require.ErrorIs(t, disc.Apply(RewardPatch{Type: ptr(contracts.TypePoints)}, t0), ErrBadRewardValue)
+}
+
+func TestMarkFulfilledKeepsFirstTime(t *testing.T) {
+	c := NewClaim(activeReward(t, nil), "p1", true, time.Minute, nil, t0)
+	require.False(t, c.Fulfilled())
+	c.MarkFulfilled(t0)
+	c.MarkFulfilled(t0.Add(time.Hour))
+	require.True(t, c.Fulfilled())
+	require.Equal(t, t0, *c.FulfilledAt)
 }

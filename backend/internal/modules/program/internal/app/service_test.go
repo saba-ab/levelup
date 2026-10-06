@@ -158,27 +158,27 @@ func TestListFiltersAndPages(t *testing.T) {
 	require.NoError(t, err)
 	h.create(t, ctxFor(tenantB), "foreign")
 
-	page1, next, err := h.svc.List(ctx, "", "", 2)
+	page1, next, err := h.svc.List(ctx, "", "", "", 2)
 	require.NoError(t, err)
 	require.Equal(t, []string{ids[2], ids[1]}, programIDs(page1), "newest first")
 	require.NotEmpty(t, next)
 
-	page2, next, err := h.svc.List(ctx, "", next, 2)
+	page2, next, err := h.svc.List(ctx, "", "", next, 2)
 	require.NoError(t, err)
 	require.Equal(t, []string{ids[0]}, programIDs(page2))
 	require.Empty(t, next, "empty cursor when done")
 
-	active, _, err := h.svc.List(ctx, "active", "", 0)
+	active, _, err := h.svc.List(ctx, "active", "", "", 0)
 	require.NoError(t, err)
 	require.Equal(t, []string{ids[1]}, programIDs(active))
 
-	_, _, err = h.svc.List(ctx, "archived", "", 0)
+	_, _, err = h.svc.List(ctx, "archived", "", "", 0)
 	requireCode(t, err, errs.Invalid, "invalid_status")
 
-	_, _, err = h.svc.List(ctx, "", "%%%", 0)
+	_, _, err = h.svc.List(ctx, "", "", "%%%", 0)
 	require.Equal(t, errs.Invalid, errs.KindOf(err))
 
-	_, _, err = newHarness(t, allowKeys{}).svc.List(ctx, "", "", 0)
+	_, _, err = newHarness(t, allowKeys{}).svc.List(ctx, "", "", "", 0)
 	require.Equal(t, errs.PermissionDenied, errs.KindOf(err))
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"levelup/internal/modules/player/contracts"
 	"levelup/internal/modules/player/internal/app"
 	"levelup/internal/modules/player/internal/domain"
 	"levelup/internal/platform/authz"
@@ -72,6 +73,21 @@ func (r *Repo) Create(_ context.Context, _ *gorm.DB, p domain.Player) error {
 	}
 	r.Rows[p.ID] = clone(p)
 	return nil
+}
+
+func (r *Repo) CreateIfAbsent(_ context.Context, _ *gorm.DB, p domain.Player) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, taken := r.Rows[p.ID]; taken {
+		return false, nil
+	}
+	for _, x := range r.Rows {
+		if x.TenantID == p.TenantID && x.ExternalID == p.ExternalID && x.DeletedAt == nil {
+			return false, nil
+		}
+	}
+	r.Rows[p.ID] = clone(p)
+	return true, nil
 }
 
 func (r *Repo) live(tenantID string, match func(domain.Player) bool) []domain.Player {
@@ -133,23 +149,46 @@ func (r *Repo) List(_ context.Context, tenantID string, f app.ListFilter) ([]dom
 			!strings.HasPrefix(strings.ToLower(p.Email), search) {
 			return false
 		}
-		if f.HasAfter {
-			if p.CreatedAt.After(f.After) || (p.CreatedAt.Equal(f.After) && p.ID >= f.AfterID) {
-				return false
-			}
+		if f.CreatedFrom != nil && p.CreatedAt.Before(*f.CreatedFrom) {
+			return false
 		}
-		return true
-	})
-	sort.Slice(rows, func(i, j int) bool {
-		if !rows[i].CreatedAt.Equal(rows[j].CreatedAt) {
-			return rows[i].CreatedAt.After(rows[j].CreatedAt)
+		if f.CreatedTo != nil && !p.CreatedAt.Before(*f.CreatedTo) {
+			return false
 		}
-		return rows[i].ID > rows[j].ID
+		return !f.HasAfter || after(p, f)
 	})
+	sort.Slice(rows, func(i, j int) bool { return less(rows[i], rows[j], f.Sort) })
 	if len(rows) > f.Limit {
 		rows = rows[:f.Limit]
 	}
 	return rows, nil
+}
+
+// less is the fake's ordering for each contracts.Sort* value.
+func less(a, b domain.Player, sortBy string) bool {
+	switch sortBy {
+	case contracts.SortCreatedAsc:
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
+		return a.ID < b.ID
+	case contracts.SortDisplayName:
+		if a.SortName() != b.SortName() {
+			return a.SortName() < b.SortName()
+		}
+		return a.ID < b.ID
+	default:
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.After(b.CreatedAt)
+		}
+		return a.ID > b.ID
+	}
+}
+
+// after reports whether p sorts strictly after the cursor.
+func after(p domain.Player, f app.ListFilter) bool {
+	cur := domain.Player{ID: f.AfterID, CreatedAt: f.After, ExternalID: f.AfterKey}
+	return less(cur, p, f.Sort)
 }
 
 func (r *Repo) ByIDs(_ context.Context, tenantID string, ids []string) ([]domain.Player, error) {
@@ -162,6 +201,21 @@ func (r *Repo) ByExternalIDs(_ context.Context, tenantID string, exts []string) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.live(tenantID, func(p domain.Player) bool { return slices.Contains(exts, p.ExternalID) }), nil
+}
+
+func (r *Repo) IDsAfter(_ context.Context, tenantID, afterID string, limit int) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, id := range slices.Sorted(maps.Keys(r.Rows)) {
+		if len(out) == limit {
+			break
+		}
+		if p := r.Rows[id]; p.TenantID == tenantID && !p.Deleted() && id > afterID {
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 func (r *Repo) PurgeTenantBatch(_ context.Context, _ *gorm.DB, tenantID string, limit int) ([]app.Ref, error) {

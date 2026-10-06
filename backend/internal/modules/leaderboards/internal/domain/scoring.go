@@ -16,6 +16,7 @@ const (
 	FactBadgeAwarded     FactKind = "badges.awarded"
 	FactMissionCompleted FactKind = "missions.completed"
 	FactXPGained         FactKind = "progression.xp_gained"
+	FactActivity         FactKind = "activity.received"
 )
 
 // Fact is leaderboards' own projection of an upstream event.
@@ -27,6 +28,13 @@ type Fact struct {
 	Amount   int64     // positive; the kind gives the direction
 	Absolute int64     // balance_after / total_xp, for balance metrics
 	At       time.Time // when it happened; decides the period bucket
+	// EventType and Properties are set for FactActivity only.
+	EventType  string
+	Properties map[string]any
+	// PlayerExternalID and AutoCreatePlayer let an activity whose player
+	// ingest could not resolve wait for the auto-created player.
+	PlayerExternalID string
+	AutoCreatePlayer bool
 }
 
 // BoardType is the leaderboard type a fact kind feeds.
@@ -40,6 +48,8 @@ func (k FactKind) BoardType() string {
 		return contracts.TypeMissions
 	case FactXPGained:
 		return contracts.TypeXP
+	case FactActivity:
+		return contracts.TypeActivity
 	}
 	return ""
 }
@@ -67,6 +77,9 @@ type Op struct {
 func Contribution(b Leaderboard, f Fact) (Op, bool) {
 	if f.Kind.BoardType() != b.Type {
 		return Op{}, false
+	}
+	if b.Type == contracts.TypeActivity {
+		return activityContribution(b, f)
 	}
 	switch b.Metric {
 	case contracts.MetricEarned:

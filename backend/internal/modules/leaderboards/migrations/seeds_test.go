@@ -25,8 +25,10 @@ func TestGrantsSplitAdminAndMember(t *testing.T) {
 func TestGoMigrationVersionsDoNotCollideWithSQL(t *testing.T) {
 	sqlFiles, err := fs.Glob(FS, "*.sql")
 	require.NoError(t, err)
-	require.Equal(t, []string{"0001_init.sql"}, sqlFiles)
+	require.Equal(t, []string{"0001_init.sql", "0004_activity_type.sql"}, sqlFiles)
+	sqlVersions := map[int64]bool{1: true, 4: true}
 	for _, m := range Go() {
 		require.Greater(t, m.Version, int64(1))
+		require.False(t, sqlVersions[m.Version], "Go migration %d collides with a SQL file", m.Version)
 	}
 }
