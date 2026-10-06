@@ -1,0 +1,29 @@
+# Operator dashboards behind basic auth. Paste these blocks into
+# /etc/caddy/Caddyfile next to api.levelupos.ge, replace the <hash>
+# placeholders, then: caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+#
+# Hashes: printf '%s' "$PASSWORD" | caddy hash-password
+#
+# rabbit: the management UI sends its own Basic credentials on every API call,
+# so this basic_auth MUST use the same user/password as RABBIT_MGMT_USER /
+# RABBIT_MGMT_PASS in .env, or the UI breaks after login.
+rabbit.levelupos.ge {
+	basic_auth {
+		levelup <hash of RABBIT_MGMT_PASS>
+	}
+	reverse_proxy 127.0.0.1:15672
+}
+
+# metrics: Prometheus /metrics of the API admin listener only. /debug/pprof
+# stays private (ssh -L 18081:127.0.0.1:18081 root@<host>).
+metrics.levelupos.ge {
+	basic_auth {
+		admin <hash of a new password>
+	}
+	handle /metrics {
+		reverse_proxy 127.0.0.1:18081
+	}
+	handle {
+		respond 404
+	}
+}
