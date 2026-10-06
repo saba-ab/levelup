@@ -1,37 +1,19 @@
-import { Server, Shield, Zap, FileCode, Users, Activity } from "lucide-react";
+import { Server, Shield, Workflow, FileCode, Users, KeyRound } from "lucide-react";
 
 const highlights = [
-  {
-    icon: Server,
-    label: "RESTful API",
-  },
-  {
-    icon: Shield,
-    label: "Data Isolation",
-  },
-  {
-    icon: Zap,
-    label: "Real-time Events",
-  },
-  {
-    icon: FileCode,
-    label: "Full Documentation",
-  },
-  {
-    icon: Users,
-    label: "Multi-tenant",
-  },
-  {
-    icon: Activity,
-    label: "99.9% Uptime",
-  },
+  { icon: Server, label: "REST API" },
+  { icon: Shield, label: "Tenant Isolation" },
+  { icon: Workflow, label: "Async Rule Processing" },
+  { icon: FileCode, label: "API Reference" },
+  { icon: Users, label: "Multi-tenant" },
+  { icon: KeyRound, label: "Hashed API Keys" },
 ];
 
-const stats = [
-  { value: "500+", label: "Organizations" },
-  { value: "10M+", label: "API Calls/Day" },
-  { value: "50M+", label: "Badges Awarded" },
-  { value: "99.9%", label: "Uptime SLA" },
+const guarantees = [
+  { value: "202", label: "Activities are accepted at once, then evaluated by your rules" },
+  { value: "1×", label: "Each award applied exactly once, even when requests are retried" },
+  { value: "≥ 0", label: "Wallet balances never go negative; every movement is a ledger entry" },
+  { value: "EU", label: "API and database hosted in Nuremberg, Germany" },
 ];
 
 const TechHighlightsSection = () => {
@@ -41,10 +23,10 @@ const TechHighlightsSection = () => {
         {/* Technical Highlights */}
         <div className="text-center mb-12">
           <h2 className="text-2xl sm:text-3xl font-display font-bold mb-4">
-            Enterprise-Grade <span className="text-gradient-primary">Infrastructure</span>
+            Built for <span className="text-gradient-primary">Correctness</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Built with reliability, security, and developer experience in mind.
+            Points and awards are money-like. The engine is designed so retries, redeliveries and concurrency never corrupt them.
           </p>
         </div>
 
@@ -61,17 +43,17 @@ const TechHighlightsSection = () => {
           ))}
         </div>
 
-        {/* Stats */}
+        {/* Guarantees */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 max-w-4xl mx-auto">
-          {stats.map((stat) => (
+          {guarantees.map((guarantee) => (
             <div
-              key={stat.label}
+              key={guarantee.label}
               className="text-center p-6 rounded-2xl bg-gradient-card border border-border/50"
             >
               <div className="text-3xl sm:text-4xl font-display font-bold text-gradient-primary mb-2">
-                {stat.value}
+                {guarantee.value}
               </div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+              <div className="text-sm text-muted-foreground">{guarantee.label}</div>
             </div>
           ))}
         </div>

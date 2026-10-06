@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Play, Trophy, Star, Zap, Target } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Trophy, Star, Zap, Target } from "lucide-react";
 import { PORTAL_ROUTES } from "@/lib/constants";
 
 const HeroSection = () => {
@@ -32,7 +32,7 @@ const HeroSection = () => {
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/50 border border-border mb-8 animate-fade-up">
               <Zap className="w-4 h-4 text-gold" />
               <span className="text-sm text-muted-foreground">
-                Now with automated rules engine
+                Rules engine with a built-in simulator
               </span>
             </div>
 
@@ -44,7 +44,7 @@ const HeroSection = () => {
 
             {/* Subheadline */}
             <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-xl mx-auto lg:mx-0 animate-fade-up animation-delay-200">
-              The Complete API Platform for Points, Badges, Levels, Missions, and More. Build engagement systems that keep users coming back.
+              One API for points, XP and levels, badges, missions, streaks, rewards and leaderboards. Send what your users do; your rules decide what they earn.
             </p>
 
             {/* CTAs */}
@@ -56,31 +56,22 @@ const HeroSection = () => {
                 </a>
               </Button>
               <Button variant="heroOutline" size="xl" asChild>
-                <a href={PORTAL_ROUTES.DOCS}>
-                  <Play className="w-5 h-5" />
-                  See API Demo
+                <a href="/docs">
+                  <BookOpen className="w-5 h-5" />
+                  Read the Docs
                 </a>
               </Button>
             </div>
 
-            {/* Social Proof */}
-            <div className="mt-12 flex flex-col sm:flex-row items-center gap-6 justify-center lg:justify-start animate-fade-up animation-delay-400">
-              <div className="flex -space-x-3">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div
-                    key={i}
-                    className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan/30 to-purple/30 border-2 border-background flex items-center justify-center"
-                  >
-                    <span className="text-xs font-semibold text-foreground/80">
-                      {String.fromCharCode(64 + i)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <span className="text-foreground font-semibold">500+</span> organizations trust LevelUpOS
-              </div>
-            </div>
+            {/* Product facts */}
+            <ul className="mt-12 flex flex-wrap gap-x-6 gap-y-3 justify-center lg:justify-start text-sm text-muted-foreground animate-fade-up animation-delay-400">
+              {["Idempotent by design", "Tenant-isolated data", "API hosted in Germany", "TypeScript & Python SDKs"].map((fact) => (
+                <li key={fact} className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-cyan" />
+                  <span>{fact}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* Right Column - Visual */}

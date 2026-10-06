@@ -1,22 +1,21 @@
-import { Gamepad2, Github, Twitter, Linkedin, Youtube } from "lucide-react";
-import { PORTAL_ROUTES } from "@/lib/constants";
+import { Gamepad2 } from "lucide-react";
+import { CONTACT_EMAIL, PORTAL_ROUTES } from "@/lib/constants";
 
 const footerLinks = {
   Product: [
     { name: "Features", href: "/#features" },
     { name: "Pricing", href: "/#pricing" },
     { name: "Use Cases", href: "/#use-cases" },
+    { name: "SDKs", href: "/#sdks" },
   ],
   Developers: [
-    { name: "Documentation", href: PORTAL_ROUTES.DOCS },
+    { name: "Documentation", href: "/docs" },
     { name: "API Reference", href: PORTAL_ROUTES.API_REFERENCE },
     { name: "Developer Guide", href: PORTAL_ROUTES.DEVELOPER_DOCS },
   ],
   Company: [
     { name: "About", href: "/about" },
-    { name: "Blog", href: "/blog" },
-    { name: "Careers", href: "/careers" },
-    { name: "Contact", href: "mailto:hello@levelupos.com" },
+    { name: "Contact", href: `mailto:${CONTACT_EMAIL}` },
   ],
   Legal: [
     { name: "Privacy", href: "/privacy" },
@@ -24,13 +23,6 @@ const footerLinks = {
     { name: "Security", href: "/security" },
   ],
 };
-
-const socialLinks = [
-  { icon: Twitter, href: "https://twitter.com/levelupos", label: "Twitter" },
-  { icon: Github, href: "https://github.com/levelupos", label: "GitHub" },
-  { icon: Linkedin, href: "https://linkedin.com/company/levelupos", label: "LinkedIn" },
-  { icon: Youtube, href: "https://youtube.com/@levelupos", label: "YouTube" },
-];
 
 const Footer = () => {
   return (
@@ -47,24 +39,9 @@ const Footer = () => {
                 LevelUp<span className="text-gradient-primary">OS</span>
               </span>
             </a>
-            <p className="text-sm text-muted-foreground mb-6">
-              The complete API platform for building powerful gamification systems.
+            <p className="text-sm text-muted-foreground">
+              A multi-tenant gamification API: points, XP, badges, missions, streaks, rewards and leaderboards.
             </p>
-            {/* Social Links */}
-            <div className="flex gap-3">
-              {socialLinks.map((social) => (
-                <a
-                  key={social.label}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-lg bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  aria-label={social.label}
-                >
-                  <social.icon className="w-4 h-4" />
-                </a>
-              ))}
-            </div>
           </div>
 
           {/* Links */}

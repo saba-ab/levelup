@@ -3,22 +3,22 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Sparkles, Zap, Building2 } from "lucide-react";
-import { PORTAL_ROUTES } from "@/lib/constants";
+import { PORTAL_ROUTES, SALES_EMAIL } from "@/lib/constants";
 
 const pricingTiers = [
   {
     name: "Free",
     icon: Zap,
-    description: "Perfect for getting started and exploring the platform.",
+    description: "Everything you need to build and test your first program.",
     monthlyPrice: 0,
     yearlyPrice: 0,
     features: [
-      "Up to 1,000 active users",
-      "5 badge types",
-      "3 missions",
-      "Basic leaderboards",
-      "Community support",
-      "7-day data retention",
+      "Points, XP & levels, badges, missions",
+      "Streaks, rewards and leaderboards",
+      "Rules engine with simulator",
+      "REST API and server-side API keys",
+      "Official TypeScript and Python SDKs",
+      "Email support",
     ],
     cta: "Get Started Free",
     variant: "heroOutline" as const,
@@ -27,39 +27,28 @@ const pricingTiers = [
   {
     name: "Pro",
     icon: Sparkles,
-    description: "For growing teams ready to scale their gamification.",
+    description: "For teams running gamification in production.",
     monthlyPrice: 49,
     yearlyPrice: 39,
     features: [
-      "Up to 50,000 active users",
-      "Unlimited badges & tiers",
-      "Unlimited missions",
-      "Advanced leaderboards",
-      "Rules engine automation",
+      "Everything in Free",
+      "Signed webhooks for badges, levels, points and more",
       "Priority email support",
-      "90-day data retention",
-      "Webhook integrations",
     ],
-    cta: "Start Pro Trial",
+    cta: "Get Started",
     variant: "hero" as const,
     popular: true,
   },
   {
     name: "Enterprise",
     icon: Building2,
-    description: "Custom solutions for large-scale deployments.",
+    description: "For larger programs that need a custom agreement.",
     monthlyPrice: null,
     yearlyPrice: null,
     features: [
-      "Unlimited active users",
-      "Custom badge designs",
-      "White-label options",
-      "Dedicated account manager",
-      "24/7 phone & email support",
-      "Unlimited data retention",
-      "Custom integrations",
-      "SLA guarantee",
-      "On-premise deployment",
+      "Everything in Pro",
+      "Volume pricing",
+      "Custom terms and invoicing",
     ],
     cta: "Contact Sales",
     variant: "heroOutline" as const,
@@ -87,7 +76,7 @@ const PricingSection = () => {
             <span className="text-gradient-primary">Perfect Plan</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Start free and scale as you grow. No hidden fees, cancel anytime.
+            Start free and upgrade when you go to production.
           </p>
         </div>
 
@@ -98,6 +87,8 @@ const PricingSection = () => {
           </span>
           <button
             onClick={() => setIsYearly(!isYearly)}
+            aria-label="Toggle yearly billing"
+            aria-pressed={isYearly}
             className={`
               relative w-14 h-7 rounded-full transition-colors duration-300
               ${isYearly ? 'bg-cyan' : 'bg-secondary'}
@@ -191,7 +182,7 @@ const PricingSection = () => {
 
               {/* CTA */}
               <Button variant={tier.variant} size="lg" className="w-full" asChild>
-                <a href={tier.name === 'Enterprise' ? 'mailto:sales@levelupos.com' : PORTAL_ROUTES.SIGNUP}>
+                <a href={tier.name === 'Enterprise' ? `mailto:${SALES_EMAIL}` : PORTAL_ROUTES.SIGNUP}>
                   {tier.cta}
                 </a>
               </Button>
@@ -201,8 +192,8 @@ const PricingSection = () => {
 
         {/* Bottom Note */}
         <p className="text-center text-sm text-muted-foreground mt-12">
-          All plans include API access, documentation, and basic analytics. Need something custom?{" "}
-          <a href="mailto:sales@levelupos.com" className="text-cyan hover:underline">Let&apos;s talk</a>.
+          All plans include the full API and documentation. Need something custom?{" "}
+          <a href={`mailto:${SALES_EMAIL}`} className="text-cyan hover:underline">Let&apos;s talk</a>.
         </p>
       </div>
     </section>

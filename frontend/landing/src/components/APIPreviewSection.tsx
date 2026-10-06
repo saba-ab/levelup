@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Code, Copy, Check, Terminal, FileCode } from "lucide-react";
 import { API_URL, PORTAL_ROUTES } from "@/lib/constants";
 
-// Real requests against the LevelUp API (Go, /api/v1). There is no SDK yet:
-// these are plain HTTP calls. Shapes match backend/api/docs/swagger.json.
+// Real requests against the LevelUp API (Go, /api/v1) as plain HTTP calls, for
+// any language. The official SDKs are shown in SDKSection. Shapes match
+// backend/api/docs/swagger.json.
 const API = API_URL;
 
 const codeExamples = {
@@ -169,7 +170,7 @@ const APIPreviewSection = () => {
   const currentExample = codeExamples[activeExample];
 
   return (
-    <section className="py-24 relative overflow-hidden">
+    <section id="api" className="py-24 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-background via-muted/20 to-background" />
 
@@ -186,7 +187,7 @@ const APIPreviewSection = () => {
             </span>
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Plain REST and JSON: get started in minutes from any language
+            Plain REST and JSON from any language, or use the official TypeScript and Python SDKs
           </p>
         </div>
 
