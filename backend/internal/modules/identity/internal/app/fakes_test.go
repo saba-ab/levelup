@@ -22,6 +22,7 @@ import (
 	"levelup/internal/platform/authn"
 	"levelup/internal/platform/authz"
 	"levelup/internal/platform/clock"
+	"levelup/internal/platform/mail"
 	"levelup/internal/shared/errs"
 	"levelup/internal/shared/id"
 )
@@ -32,22 +33,34 @@ type fakeRepo struct {
 	tenants map[string]domain.Tenant
 	users   map[string]domain.User
 
+	resets  map[string]domain.PasswordReset     // by id
+	verifs  map[string]domain.EmailVerification // by id
+	invites map[string]domain.Invitation        // by id
+
 	slugCollisions int // fail this many CreateTenant calls with ErrSlugTaken
 	rehashed       map[string]string
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{tenants: map[string]domain.Tenant{}, users: map[string]domain.User{}, rehashed: map[string]string{}}
+	return &fakeRepo{
+		tenants: map[string]domain.Tenant{}, users: map[string]domain.User{}, rehashed: map[string]string{},
+		resets: map[string]domain.PasswordReset{}, verifs: map[string]domain.EmailVerification{},
+		invites: map[string]domain.Invitation{},
+	}
 }
 
 func (f *fakeRepo) snapshot() *fakeRepo {
-	c := &fakeRepo{tenants: maps.Clone(f.tenants), users: maps.Clone(f.users), rehashed: maps.Clone(f.rehashed)}
+	c := &fakeRepo{
+		tenants: maps.Clone(f.tenants), users: maps.Clone(f.users), rehashed: maps.Clone(f.rehashed),
+		resets: maps.Clone(f.resets), verifs: maps.Clone(f.verifs), invites: maps.Clone(f.invites),
+	}
 	c.slugCollisions = f.slugCollisions
 	return c
 }
 
 func (f *fakeRepo) restore(s *fakeRepo) {
 	f.tenants, f.users, f.rehashed = s.tenants, s.users, s.rehashed
+	f.resets, f.verifs, f.invites = s.resets, s.verifs, s.invites
 }
 
 func (f *fakeRepo) CreateTenant(_ context.Context, _ *gorm.DB, t domain.Tenant) error {
@@ -340,12 +353,14 @@ const testSecret = "0123456789abcdef0123456789abcdef"
 var t0 = time.Now().UTC().Truncate(time.Second)
 
 type harness struct {
-	svc     *Service
-	repo    *fakeRepo
-	outbox  *fakeOutbox
-	refresh *fakeRefresh
-	issuer  *authn.Issuer
-	clock   *clock.Fake
+	svc      *Service
+	repo     *fakeRepo
+	outbox   *fakeOutbox
+	refresh  *fakeRefresh
+	issuer   *authn.Issuer
+	clock    *clock.Fake
+	mail     *mail.Recorder
+	throttle *fakeThrottle
 }
 
 func newHarness(t *testing.T, enf authz.Enforcer) *harness {
@@ -355,8 +370,12 @@ func newHarness(t *testing.T, enf authz.Enforcer) *harness {
 		clock: clock.NewFake(t0),
 	}
 	h.issuer = authn.NewIssuer(testSecret, 15*time.Minute, h.clock)
+	h.mail = &mail.Recorder{}
+	h.throttle = newFakeThrottle()
 	h.svc = NewService(h.repo, h.outbox, enf, h.issuer, h.refresh, nil, h.clock, zap.NewNop(),
-		Settings{BcryptCost: 4, AllowSelfSignup: true})
+		Settings{BcryptCost: 4, AllowSelfSignup: true, PortalURL: "https://portal.test/"})
+	h.svc.WithAccountTokens(h.repo, h.mail, h.throttle)
+	h.svc.background = func(fn func()) { fn() }
 	// The fake transaction rolls back repo AND staged events on error, so
 	// atomicity is observable without a database.
 	h.svc.tx = func(_ context.Context, fn func(tx *gorm.DB) error) error {

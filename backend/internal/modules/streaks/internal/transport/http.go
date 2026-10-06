@@ -58,6 +58,9 @@ type CreateReq struct {
 	PointsPerPeriod int64          `json:"points_per_period" validate:"min=0"`
 	Milestones      []MilestoneDTO `json:"milestones" validate:"max=50,dive"`
 	IsActive        *bool          `json:"is_active"`
+	// AutoRecord (default true): activities whose event_type equals
+	// activity_key record a period automatically.
+	AutoRecord *bool `json:"auto_record"`
 }
 
 // UpdateReq is a partial update: omitted fields stay untouched. The period
@@ -71,6 +74,7 @@ type UpdateReq struct {
 	PointsPerPeriod *int64          `json:"points_per_period" validate:"omitempty,min=0"`
 	Milestones      *[]MilestoneDTO `json:"milestones" validate:"omitempty,max=50,dive"`
 	IsActive        *bool           `json:"is_active"`
+	AutoRecord      *bool           `json:"auto_record"`
 }
 
 type RecordReq struct {
@@ -90,6 +94,7 @@ type StreakResp struct {
 	PointsPerPeriod int64          `json:"points_per_period"`
 	Milestones      []MilestoneDTO `json:"milestones"`
 	IsActive        bool           `json:"is_active"`
+	AutoRecord      bool           `json:"auto_record"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 }
@@ -197,6 +202,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		PointsPerPeriod: req.PointsPerPeriod,
 		Milestones:      toMilestones(req.Milestones),
 		Active:          active,
+		AutoRecord:      req.AutoRecord,
 	})
 	if err != nil {
 		httpx.Error(w, r, err)
@@ -252,6 +258,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		GracePeriods:    req.GracePeriods,
 		PointsPerPeriod: req.PointsPerPeriod,
 		Active:          req.IsActive,
+		AutoRecord:      req.AutoRecord,
 	}
 	if req.Milestones != nil {
 		ms := toMilestones(*req.Milestones)
@@ -398,6 +405,7 @@ func toStreakResp(s domain.Streak) StreakResp {
 		PointsPerPeriod: s.PointsPerPeriod,
 		Milestones:      ms,
 		IsActive:        s.Active,
+		AutoRecord:      s.AutoRecord,
 		CreatedAt:       s.CreatedAt.UTC(),
 		UpdatedAt:       s.UpdatedAt.UTC(),
 	}

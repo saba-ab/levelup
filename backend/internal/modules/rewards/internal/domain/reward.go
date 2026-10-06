@@ -4,6 +4,7 @@ package domain
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -189,6 +190,8 @@ func (r *Reward) validate() error {
 		return ErrBadValue
 	case r.ValueType != nil && *r.ValueType != "percentage" && *r.ValueType != "fixed":
 		return ErrBadValueType
+	case r.Value != nil && r.creditsValue() && !wholePositive(*r.Value):
+		return ErrBadRewardValue
 	case belowOne(r.MaxRedemptions), belowOne(r.MaxPerPlayer), belowOne(r.ClaimTTLDays), belowOne(r.LevelRequirement):
 		return ErrBadLimit
 	case r.StartAt != nil && r.EndAt != nil && r.EndAt.Before(*r.StartAt):
@@ -285,6 +288,51 @@ func (r *Reward) ExpireIfEnded(now time.Time) bool {
 	r.Status = contracts.RewardExpired
 	r.UpdatedAt = now
 	return true
+}
+
+// FulfilsByCommand reports whether a claim of this reward is delivered by
+// a command to another module (points credit, badge award, XP grant). The
+// other types (discount, item, custom) are fulfilled by their voucher code.
+func (r *Reward) FulfilsByCommand() bool {
+	switch r.Type {
+	case contracts.TypePoints, contracts.TypeBadge, contracts.TypeLevel:
+		return true
+	}
+	return false
+}
+
+// WholeValue is the reward's value as a positive whole number: the points
+// a points reward credits, the XP a level reward grants. ok=false when the
+// value is unset or not a positive integer.
+func (r *Reward) WholeValue() (int64, bool) {
+	if r.Value == nil || !wholePositive(*r.Value) {
+		return 0, false
+	}
+	whole, _, _ := strings.Cut(*r.Value, ".")
+	n, err := strconv.ParseInt(whole, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// creditsValue reports whether the value is an amount credited on
+// fulfilment (points or XP), which must then be a positive integer.
+func (r *Reward) creditsValue() bool {
+	return r.Type == contracts.TypePoints || r.Type == contracts.TypeLevel
+}
+
+// wholePositive accepts "100" and "100.00" (numeric(10,2) reads back with
+// decimals), never "0", "1.5" or "-3".
+func wholePositive(v string) bool {
+	if !valuePattern.MatchString(v) {
+		return false
+	}
+	whole, frac, _ := strings.Cut(v, ".")
+	if strings.Trim(frac, "0") != "" {
+		return false
+	}
+	return strings.Trim(whole, "0") != ""
 }
 
 func (r *Reward) soldOut() bool {

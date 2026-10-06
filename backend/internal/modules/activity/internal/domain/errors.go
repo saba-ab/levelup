@@ -27,4 +27,7 @@ var (
 	ErrMalformedDecision    = errs.New(errs.Invalid, "decision payload needs tenant_id, activity_id and decision_id as UUIDs")
 	ErrMalformedTrigger     = errs.New(errs.Invalid, "internal trigger payload needs tenant_id and player_id")
 	ErrMalformedTenantPurge = errs.New(errs.Invalid, "tenant.deleted.v1 payload needs tenant_id")
+	ErrPlayerIDsRequired    = errs.WithCode(errs.New(errs.Invalid, "player_ids is required"), "invalid_player_ids")
+	ErrTooManyPlayerIDs     = errs.WithCode(errs.New(errs.Invalid, "player_ids holds at most 100 ids"), "invalid_player_ids")
+	ErrMalformedPlayerID    = errs.WithCode(errs.New(errs.Invalid, "player_ids must be UUIDs"), "invalid_player_ids")
 )

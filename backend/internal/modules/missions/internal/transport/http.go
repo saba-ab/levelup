@@ -30,6 +30,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(httpx.RequireAuth)
 		r.Get("/", h.list)
 		r.Post("/", h.create)
+		r.Get("/stats", h.listStats)
 		r.Get("/{id}", h.get)
 		r.Patch("/{id}", h.update)
 		r.Delete("/{id}", h.delete)
@@ -37,6 +38,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/{id}/progress", h.progress)
 		r.Post("/{id}/complete", h.complete)
 		r.Get("/{id}/attempts", h.attempts)
+		r.Get("/{id}/stats", h.stats)
 	})
 	// Registered as a single route (not a /players subrouter) so it coexists
 	// with the player module's /players mount.
@@ -46,12 +48,15 @@ func (h *Handler) Mount(r chi.Router) {
 // ---- DTOs ----
 
 type CreateMissionReq struct {
-	Slug                    string         `json:"slug" validate:"omitempty,max=120"`
-	Name                    string         `json:"name" validate:"required,max=255"`
-	Description             string         `json:"description" validate:"max=1000"`
-	Type                    string         `json:"type" validate:"required,oneof=one_time daily weekly repeating"`
-	Status                  string         `json:"status" validate:"omitempty,oneof=draft active"`
-	Target                  int64          `json:"target" validate:"required,gt=0"`
+	Slug        string `json:"slug" validate:"omitempty,max=120"`
+	Name        string `json:"name" validate:"required,max=255"`
+	Description string `json:"description" validate:"max=1000"`
+	Type        string `json:"type" validate:"required,oneof=one_time daily weekly repeating"`
+	Status      string `json:"status" validate:"omitempty,oneof=draft active"`
+	Target      int64  `json:"target" validate:"required,gt=0"`
+	// Criteria grammar: {"event_type": "...", "where": [{"field", "operator", "value"}],
+	// "increment": {"by": "count"} | {"by": "property", "field": "..."}}.
+	// With event_type, matching activities progress the mission automatically.
 	Criteria                map[string]any `json:"criteria"`
 	PointsReward            int64          `json:"points_reward" validate:"gte=0"`
 	XPReward                int64          `json:"xp_reward" validate:"gte=0"`
@@ -139,6 +144,26 @@ type ProgressResp struct {
 	Duplicate bool `json:"duplicate"`
 }
 
+// MissionStatsResp is one mission's completion analytics.
+// completion_rate = completed / started (0..1, 0 when nothing started);
+// avg_hours_to_complete is null when no attempt completed.
+type MissionStatsResp struct {
+	MissionID          string   `json:"mission_id"`
+	Name               string   `json:"name"`
+	Slug               string   `json:"slug"`
+	Status             string   `json:"status"`
+	Started            int64    `json:"started"`
+	InProgress         int64    `json:"in_progress"`
+	Completed          int64    `json:"completed"`
+	CompletionRate     float64  `json:"completion_rate"`
+	AvgHoursToComplete *float64 `json:"avg_hours_to_complete"`
+}
+
+type MissionStatsListResp struct {
+	Data       []MissionStatsResp `json:"data"`
+	NextCursor string             `json:"next_cursor"`
+}
+
 type MissionListResp struct {
 	Data       []MissionResp `json:"data"`
 	NextCursor string        `json:"next_cursor"`
@@ -190,7 +215,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 // @Failure      401 {object} httpx.Problem
 // @Failure      403 {object} httpx.Problem
 // @Failure      409 {object} httpx.Problem "slug_taken"
-// @Failure      422 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "invalid_mission_criteria (fields keyed criteria.*)"
 // @Router       /missions [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req CreateMissionReq
@@ -251,7 +276,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 // @Failure      403 {object} httpx.Problem
 // @Failure      404 {object} httpx.Problem "mission_not_found"
 // @Failure      409 {object} httpx.Problem "invalid_status_transition, slug_taken, version_conflict, mission_type_immutable"
-// @Failure      422 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "invalid_mission_criteria (fields keyed criteria.*)"
 // @Router       /missions/{id} [patch]
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var req UpdateMissionReq
@@ -470,7 +495,70 @@ func (h *Handler) playerMissions(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, out)
 }
 
+// @Summary      Completion analytics of every mission
+// @Description  One page of missions (newest first) with started / in_progress / completed attempt counts, completion_rate and avg_hours_to_complete. Missions without attempts report zeros.
+// @Tags         missions
+// @Produce      json
+// @Security     BearerAuth
+// @Param        limit  query int    false "Page size (default 25, max 100)"
+// @Param        cursor query string false "Opaque cursor from next_cursor"
+// @Param        status query string false "Filter by mission status"
+// @Param        type   query string false "Filter by mission type"
+// @Success      200 {object} MissionStatsListResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem
+// @Router       /missions/stats [get]
+func (h *Handler) listStats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page, err := h.svc.ListMissionStats(r.Context(),
+		app.MissionFilter{Status: q.Get("status"), Type: q.Get("type")},
+		q.Get("cursor"), limitParam(r))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	out := MissionStatsListResp{Data: make([]MissionStatsResp, len(page.Items)), NextCursor: page.NextCursor}
+	for i, st := range page.Items {
+		out.Data[i] = toStatsResp(st)
+	}
+	httpx.JSON(w, http.StatusOK, out)
+}
+
+// @Summary      Completion analytics of one mission
+// @Tags         missions
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id path string true "Mission id"
+// @Success      200 {object} MissionStatsResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Failure      404 {object} httpx.Problem "mission_not_found"
+// @Router       /missions/{id}/stats [get]
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	st, err := h.svc.GetMissionStats(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toStatsResp(st))
+}
+
 // ---- mapping ----
+
+func toStatsResp(st app.MissionStats) MissionStatsResp {
+	return MissionStatsResp{
+		MissionID:          st.MissionID,
+		Name:               st.Name,
+		Slug:               st.Slug,
+		Status:             st.Status,
+		Started:            st.Started,
+		InProgress:         st.InProgress,
+		Completed:          st.Completed,
+		CompletionRate:     st.CompletionRate,
+		AvgHoursToComplete: st.AvgHoursToComplete,
+	}
+}
 
 func toMissionResp(m domain.Mission) MissionResp {
 	out := MissionResp{

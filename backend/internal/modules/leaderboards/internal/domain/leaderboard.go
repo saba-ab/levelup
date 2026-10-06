@@ -29,12 +29,14 @@ type Leaderboard struct {
 	Metric         string
 	ResetFrequency string
 	ProgramID      string // empty = every player of the tenant
-	MaxEntries     int
-	Active         bool
-	Version        int
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
+	// Activity is the config of a type "activity" board; nil otherwise.
+	Activity   *ActivityConfig
+	MaxEntries int
+	Active     bool
+	Version    int
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  *time.Time
 }
 
 // NewLeaderboardInput is what a creator supplies; tenant comes from the
@@ -48,8 +50,10 @@ type NewLeaderboardInput struct {
 	Metric         string
 	ResetFrequency string
 	ProgramID      string
-	MaxEntries     int
-	Active         bool
+	// Activity is required for type activity and refused for every other.
+	Activity   *ActivityConfig
+	MaxEntries int
+	Active     bool
 }
 
 var slugRe = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -84,13 +88,15 @@ func validMetric(typ, metric string) bool {
 		return metric == contracts.MetricEarned || metric == contracts.MetricBalance
 	case contracts.TypeBadges, contracts.TypeMissions:
 		return metric == contracts.MetricCount
+	case contracts.TypeActivity:
+		return metric == contracts.MetricCount || metric == contracts.MetricEarned
 	}
 	return false
 }
 
 func validType(typ string) bool {
 	switch typ {
-	case contracts.TypePoints, contracts.TypeBadges, contracts.TypeMissions, contracts.TypeXP:
+	case contracts.TypePoints, contracts.TypeBadges, contracts.TypeMissions, contracts.TypeXP, contracts.TypeActivity:
 		return true
 	}
 	return false
@@ -124,6 +130,16 @@ func NewLeaderboard(in NewLeaderboardInput, now time.Time) (Leaderboard, error) 
 		return Leaderboard{}, ErrInvalidType
 	}
 	metric := in.Metric
+	var activity *ActivityConfig
+	if in.Type == contracts.TypeActivity {
+		cfg, m, err := normaliseActivity(in.Activity, metric)
+		if err != nil {
+			return Leaderboard{}, err
+		}
+		activity, metric = &cfg, m
+	} else if in.Activity != nil {
+		return Leaderboard{}, ErrConfigNotAllowed
+	}
 	if metric == "" {
 		metric = DefaultMetric(in.Type)
 	}
@@ -157,6 +173,7 @@ func NewLeaderboard(in NewLeaderboardInput, now time.Time) (Leaderboard, error) 
 		Metric:         metric,
 		ResetFrequency: reset,
 		ProgramID:      in.ProgramID,
+		Activity:       activity,
 		MaxEntries:     maxEntries,
 		Active:         in.Active,
 		CreatedAt:      now,

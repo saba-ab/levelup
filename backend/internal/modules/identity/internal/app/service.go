@@ -14,6 +14,7 @@ import (
 	"levelup/internal/modules/identity/internal/domain"
 	"levelup/internal/platform/authz"
 	"levelup/internal/platform/clock"
+	"levelup/internal/platform/mail"
 	"levelup/internal/platform/outbox"
 	"levelup/internal/platform/postgres"
 	"levelup/internal/shared/errs"
@@ -48,6 +49,9 @@ type Repository interface {
 	UserInTenantForUpdate(ctx context.Context, tx *gorm.DB, tenantID, id string) (domain.User, error)
 	// UserByID ignores tenancy: only session flows (refresh, me) use it.
 	UserByID(ctx context.Context, id string) (domain.User, error)
+	// UserByIDForUpdate also ignores tenancy: only token flows (reset,
+	// verification) use it, after the token proved who the user is.
+	UserByIDForUpdate(ctx context.Context, tx *gorm.DB, id string) (domain.User, error)
 	UserByEmail(ctx context.Context, email string) (domain.User, error)
 	ListUsers(ctx context.Context, tenantID string, page Page) ([]domain.User, error)
 	UserIDsInTenant(ctx context.Context, tenantID string) ([]string, error)
@@ -76,6 +80,16 @@ type RefreshTokens interface {
 type Settings struct {
 	BcryptCost      int
 	AllowSelfSignup bool
+
+	// PortalURL is the base of every emailed link (no trailing slash).
+	PortalURL string
+	// TTLs of the emailed single-use tokens; zero means the default.
+	PasswordResetTTL     time.Duration
+	InvitationTTL        time.Duration
+	EmailVerificationTTL time.Duration
+	// ResetRequestsPerHour caps forgot-password mails per address (and
+	// verification resends per user); zero means the default.
+	ResetRequestsPerHour int
 }
 
 type Service struct {
@@ -91,6 +105,12 @@ type Service struct {
 	pw       *passwords
 	keys     APIKeyRepository
 	keyCache KeyCache
+	tokens   AccountTokenRepository
+	mailer   mail.Mailer
+	throttle Throttle
+	// background runs best-effort work that must not shape the response
+	// time (the forgot-password mail); tests make it synchronous.
+	background func(fn func())
 
 	tx func(ctx context.Context, fn func(tx *gorm.DB) error) error
 }
@@ -102,7 +122,8 @@ func NewService(repo Repository, ob outbox.Store, enf authz.Enforcer, issuer Acc
 	}
 	s := &Service{
 		repo: repo, outbox: ob, authz: enf, issuer: issuer, refresh: refresh,
-		db: db, clock: c, log: log, settings: st, pw: newPasswords(st.BcryptCost),
+		db: db, clock: c, log: log, settings: st.withDefaults(), pw: newPasswords(st.BcryptCost),
+		background: func(fn func()) { go fn() },
 	}
 	s.tx = func(ctx context.Context, fn func(tx *gorm.DB) error) error {
 		return postgres.InTx(ctx, s.db, fn)

@@ -6,6 +6,8 @@ import (
 	"levelup/internal/config"
 	"levelup/internal/modules/activity"
 	activityadapters "levelup/internal/modules/activity/adapters"
+	"levelup/internal/modules/ai"
+	"levelup/internal/modules/analytics"
 	"levelup/internal/modules/badges"
 	badgesadapters "levelup/internal/modules/badges/adapters"
 	"levelup/internal/modules/eventcatalog"
@@ -14,6 +16,8 @@ import (
 	leaderboardsadapters "levelup/internal/modules/leaderboards/adapters"
 	"levelup/internal/modules/missions"
 	missionsadapters "levelup/internal/modules/missions/adapters"
+	"levelup/internal/modules/notifications"
+	notifadapters "levelup/internal/modules/notifications/adapters"
 	"levelup/internal/modules/player"
 	"levelup/internal/modules/points"
 	pointsadapters "levelup/internal/modules/points/adapters"
@@ -25,8 +29,12 @@ import (
 	rewardsadapters "levelup/internal/modules/rewards/adapters"
 	"levelup/internal/modules/rules"
 	rulesadapters "levelup/internal/modules/rules/adapters"
+	"levelup/internal/modules/segments"
+	segmentsadapters "levelup/internal/modules/segments/adapters"
 	"levelup/internal/modules/streaks"
 	streaksadapters "levelup/internal/modules/streaks/adapters"
+	"levelup/internal/modules/webhooks"
+	"levelup/internal/platform/mail"
 	"levelup/internal/platform/modkit"
 )
 
@@ -38,6 +46,13 @@ import (
 // adapter over the provider's contracts.Reader. Swapping one for a remote
 // adapter is the extraction seam (docs/examples.md §10).
 func buildModules(p *Platform, cfg config.Config) ([]modkit.Module, error) {
+	mailer, err := mail.New(mail.Config{
+		Driver: cfg.Mail.Driver, From: cfg.Mail.From, Host: cfg.Mail.Host, Port: cfg.Mail.Port,
+		Username: cfg.Mail.Username, Password: cfg.Mail.Password,
+	}, p.Tel.Log)
+	if err != nil {
+		return nil, err
+	}
 	var (
 		identityMod     *identity.Module
 		playerMod       *player.Module
@@ -45,11 +60,13 @@ func buildModules(p *Platform, cfg config.Config) ([]modkit.Module, error) {
 		programMod      *program.Module
 		pointsMod       *points.Module
 		progressionMod  *progression.Module
+		badgesMod       *badges.Module
+		activityMod     *activity.Module
 	)
 
 	all := map[string]func() modkit.Module{
 		"identity": func() modkit.Module {
-			identityMod = identity.New(p.DepsFor("identity"), cfg.Identity, p.Authn)
+			identityMod = identity.New(p.DepsFor("identity"), cfg.Identity, p.Authn, mailer)
 			return identityMod
 		},
 		"player": func() modkit.Module {
@@ -74,8 +91,9 @@ func buildModules(p *Platform, cfg config.Config) ([]modkit.Module, error) {
 		},
 		"badges": func() modkit.Module {
 			need(playerMod, "badges", "player")
-			return badges.New(p.DepsFor("badges"), cfg.Badges,
+			badgesMod = badges.New(p.DepsFor("badges"), cfg.Badges,
 				badgesadapters.NewLocalPlayers(playerMod.Reader()))
+			return badgesMod
 		},
 		"progression": func() modkit.Module {
 			need(playerMod, "progression", "player")
@@ -112,9 +130,37 @@ func buildModules(p *Platform, cfg config.Config) ([]modkit.Module, error) {
 		"activity": func() modkit.Module {
 			need(playerMod, "activity", "player")
 			need(eventcatalogMod, "activity", "eventcatalog")
-			return activity.New(p.DepsFor("activity"), cfg.Activity,
+			activityMod = activity.New(p.DepsFor("activity"), cfg.Activity,
 				activityadapters.NewLocalPlayers(playerMod.Reader()),
 				activityadapters.NewLocalEventTypes(eventcatalogMod.Reader()))
+			return activityMod
+		},
+		"notifications": func() modkit.Module {
+			need(playerMod, "notifications", "player")
+			return notifications.New(p.DepsFor("notifications"), cfg.Notifications,
+				notifadapters.NewLocalPlayers(playerMod.Reader()), mailer)
+		},
+		"segments": func() modkit.Module {
+			need(playerMod, "segments", "player")
+			need(progressionMod, "segments", "progression")
+			need(pointsMod, "segments", "points")
+			need(badgesMod, "segments", "badges")
+			need(activityMod, "segments", "activity")
+			return segments.New(p.DepsFor("segments"), cfg.Segments,
+				segmentsadapters.NewLocalPlayers(playerMod.Reader(), playerMod.IDLister()),
+				segmentsadapters.NewLocalProgress(progressionMod.Reader()),
+				segmentsadapters.NewLocalWallets(pointsMod.Reader()),
+				segmentsadapters.NewLocalBadges(badgesMod.Reader()),
+				segmentsadapters.NewLocalActivity(activityMod.Reader()))
+		},
+		"analytics": func() modkit.Module {
+			return analytics.New(p.DepsFor("analytics"), cfg.Analytics)
+		},
+		"webhooks": func() modkit.Module {
+			return webhooks.New(p.DepsFor("webhooks"), cfg.Webhooks)
+		},
+		"ai": func() modkit.Module {
+			return ai.New(p.DepsFor("ai"), cfg.AI)
 		},
 		"rules": func() modkit.Module {
 			need(playerMod, "rules", "player")

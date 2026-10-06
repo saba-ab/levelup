@@ -25,6 +25,7 @@ type streak struct {
 	PointsPerPeriod int64
 	Milestones      milestoneList `gorm:"type:jsonb"`
 	IsActive        bool
+	AutoRecord      bool
 	Version         int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -83,6 +84,7 @@ func (m streak) toDomain() domain.Streak {
 		PointsPerPeriod: m.PointsPerPeriod,
 		Milestones:      ms,
 		Active:          m.IsActive,
+		AutoRecord:      m.AutoRecord,
 		Version:         m.Version,
 		CreatedAt:       m.CreatedAt.UTC(),
 		UpdatedAt:       m.UpdatedAt.UTC(),
@@ -106,6 +108,7 @@ func streakFromDomain(s domain.Streak) streak {
 		PointsPerPeriod: s.PointsPerPeriod,
 		Milestones:      ms,
 		IsActive:        s.Active,
+		AutoRecord:      s.AutoRecord,
 		Version:         s.Version,
 		CreatedAt:       s.CreatedAt,
 		UpdatedAt:       s.UpdatedAt,

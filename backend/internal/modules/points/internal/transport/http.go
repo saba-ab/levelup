@@ -40,6 +40,10 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/players/{playerID}/wallet/credit", h.credit)
 		r.Post("/players/{playerID}/wallet/debit", h.debit)
 		r.Post("/wallets/transfer", h.transfer)
+		r.Get("/wallets", h.listWallets)
+		r.Get("/wallets/summary", h.summary)
+		r.Get("/wallets/distribution", h.distribution)
+		r.Get("/wallets/daily", h.daily)
 	})
 }
 

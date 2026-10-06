@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -45,14 +46,20 @@ type goldenRule struct {
 	conditions string
 	actions    string
 	limits     string
+	schedule   string
+	stop       bool
 }
 
 func (g goldenRule) source() RuleSource {
 	return RuleSource{
 		RuleID: g.id, RuleVersionID: g.ver, Name: "r" + g.id[len(g.id)-1:], Priority: g.priority,
 		Conditions: json.RawMessage(g.conditions), Actions: json.RawMessage(g.actions), Limits: json.RawMessage(g.limits),
+		Schedule: json.RawMessage(g.schedule), StopProcessing: g.stop,
 	}
 }
+
+// goldenNow is every golden activity's occurred_at: Monday 2026-10-05 12:00 UTC.
+var goldenNow = time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 
 type wantEffect struct {
 	rule   string
@@ -70,6 +77,7 @@ func TestGoldenCorpusEvaluator(t *testing.T) {
 		rules      []goldenRule
 		properties string
 		player     *Player
+		history    *History
 		wantOrder  []string // rule ids in evaluation order (all rules)
 		wantStatus []string // per rule, in order
 		effects    []wantEffect
@@ -196,6 +204,102 @@ func TestGoldenCorpusEvaluator(t *testing.T) {
 			wantOrder:  []string{ruleA}, wantStatus: []string{StatusMatched},
 			effects: []wantEffect{{ruleA, ActionGrantXP, 500}},
 		},
+		// Grammar v1 completion and v2 (doc 06 §11.5): stop_processing,
+		// schedule, history. Stop is applied with "matched = fired"
+		// (ApplyStop); the limited-stopper case is proven in internal/app.
+		{
+			id: "V01 stop_processing rule fires → lower-priority rules skipped_by_stop",
+			rules: []goldenRule{
+				{id: ruleA, ver: verA, priority: 10, actions: credit(10), stop: true},
+				{id: ruleB, ver: verB, priority: 5, actions: credit(5)},
+				{id: ruleC, ver: verC, priority: 1, actions: credit(1)},
+			},
+			properties: `{}`,
+			wantOrder:  []string{ruleA, ruleB, ruleC},
+			wantStatus: []string{StatusMatched, StatusSkippedByStop, StatusSkippedByStop},
+			effects:    []wantEffect{{ruleA, ActionCreditPoints, 10}},
+		},
+		{
+			id: "V02 stop_processing rule not matched → nothing stops",
+			rules: []goldenRule{
+				{id: ruleA, ver: verA, priority: 10, actions: credit(10), stop: true,
+					conditions: `[{"source":"trigger","field":"amount","operator":"gt","value":1000}]`},
+				{id: ruleB, ver: verB, priority: 5, actions: credit(5)},
+			},
+			properties: `{"amount":10}`,
+			wantOrder:  []string{ruleA, ruleB}, wantStatus: []string{StatusNotMatched, StatusMatched},
+			effects: []wantEffect{{ruleB, ActionCreditPoints, 5}},
+		},
+		{
+			id: "V03 equal priority: stop rule with the lower id stops the other (id ASC tiebreak)",
+			rules: []goldenRule{
+				{id: ruleB, ver: verB, priority: 5, actions: credit(2), stop: true},
+				{id: ruleA, ver: verA, priority: 5, actions: credit(1), stop: true},
+			},
+			properties: `{}`,
+			wantOrder:  []string{ruleA, ruleB}, wantStatus: []string{StatusMatched, StatusSkippedByStop},
+			effects: []wantEffect{{ruleA, ActionCreditPoints, 1}},
+		},
+		{
+			id: "V04 schedule outside (weekend only, activity on Monday) → out_of_schedule, does not stop",
+			rules: []goldenRule{
+				{id: ruleA, ver: verA, priority: 10, actions: credit(10), stop: true, schedule: `{"days_of_week":[0,6]}`},
+				{id: ruleB, ver: verB, priority: 5, actions: credit(5),
+					schedule: `{"starts_at":"2026-10-01T00:00:00Z","ends_at":"2026-11-01T00:00:00Z","hours":{"from":"09:00","to":"17:00"}}`},
+			},
+			properties: `{}`,
+			wantOrder:  []string{ruleA, ruleB}, wantStatus: []string{StatusOutOfSchedule, StatusMatched},
+			effects: []wantEffect{{ruleB, ActionCreditPoints, 5}},
+		},
+		{
+			id: "V05 schedule timezone: 12:00 UTC is 16:00 in Tbilisi, outside 09:00-15:00 local",
+			rules: []goldenRule{{id: ruleA, ver: verA, actions: credit(1),
+				schedule: `{"hours":{"from":"09:00","to":"15:00"},"timezone":"Asia/Tbilisi"}`}},
+			properties: `{}`,
+			wantOrder:  []string{ruleA}, wantStatus: []string{StatusOutOfSchedule},
+		},
+		{
+			id: "V06 history.first_time with no prior activity → matched; count(all) gte 1 → not matched",
+			rules: []goldenRule{
+				{id: ruleA, ver: verA, priority: 2, actions: credit(100),
+					conditions: `[{"source":"history","field":"first_time"}]`},
+				{id: ruleB, ver: verB, priority: 1, actions: credit(1),
+					conditions: `[{"source":"history","field":"count","window":"all","operator":"gte","value":1}]`},
+			},
+			properties: `{}`,
+			history:    &History{},
+			wantOrder:  []string{ruleA, ruleB}, wantStatus: []string{StatusMatched, StatusNotMatched},
+			effects: []wantEffect{{ruleA, ActionCreditPoints, 100}},
+		},
+		{
+			id: "V07 history.count of another event type in 7d (3rd login this week) and first_time false",
+			rules: []goldenRule{
+				{id: ruleA, ver: verA, priority: 2, actions: credit(30),
+					conditions: `{"all":[{"source":"history","field":"count","event_type":"login","window":"7d","operator":"eq","value":2},` +
+						`{"source":"history","field":"first_time","operator":"eq","value":false}]}`},
+				{id: ruleB, ver: verB, priority: 1, actions: credit(1),
+					conditions: `[{"source":"history","field":"first_time"}]`},
+			},
+			properties: `{}`,
+			history: &History{Counts: map[string]map[string]int64{
+				"login":              {Window7d: 2, WindowAll: 9},
+				"purchase_completed": {WindowAll: 4},
+			}},
+			wantOrder: []string{ruleA, ruleB}, wantStatus: []string{StatusMatched, StatusNotMatched},
+			effects: []wantEffect{{ruleA, ActionCreditPoints, 30}},
+		},
+		{
+			id: "V08 history not loaded → history facts missing (only neq-style operators hold)",
+			rules: []goldenRule{
+				{id: ruleA, ver: verA, priority: 2, actions: credit(1),
+					conditions: `[{"source":"history","field":"first_time"}]`},
+				{id: ruleB, ver: verB, priority: 1, actions: credit(2),
+					conditions: `[{"source":"history","field":"count","window":"1d","operator":"neq","value":3}]`},
+			},
+			properties: `{}`,
+			wantOrder:  []string{ruleA, ruleB}, wantStatus: []string{StatusNotMatched, StatusMatched},
+			effects: []wantEffect{{ruleB, ActionCreditPoints, 2}},
+		},
 	}
 
 	for _, tc := range cases {
@@ -204,14 +308,16 @@ func TestGoldenCorpusEvaluator(t *testing.T) {
 			for i, r := range tc.rules {
 				srcs[i] = r.source()
 				// every golden rule is also valid at write time
-				_, err := CompileDefinition(srcs[i].Conditions, srcs[i].Actions, srcs[i].Limits, Options{})
+				_, err := CompileSpec(srcs[i].Spec(), Options{})
 				require.NoError(t, err)
 			}
 			prog := Compile(srcs, Options{})
 			res := Evaluate(prog, Facts{
-				Activity: Activity{EventType: "purchase_completed", Properties: props(t, tc.properties)},
+				Activity: Activity{EventType: "purchase_completed", Properties: props(t, tc.properties), OccurredAt: goldenNow},
 				Player:   tc.player,
+				History:  tc.history,
 			})
+			res.ApplyStop()
 
 			var order, status []string
 			var effects []wantEffect
@@ -243,6 +349,16 @@ func TestGoldenCompileRejections(t *testing.T) {
 		{"G19 credit amount 10.5", ``, `[{"type":"credit_points","amount":10.5}]`, ``, "actions[0].amount"},
 		{"G19b credit amount string", ``, `[{"type":"credit_points","amount":"amount"}]`, ``, "actions[0].amount"},
 		{"G20 unknown action type", ``, `[{"type":"emit_confetti"}]`, ``, "actions[0].type"},
+		{"V20 history unknown field", `[{"source":"history","field":"sum"}]`, credit(1), ``, "conditions[0].field"},
+		{"V21 history count without window", `[{"source":"history","field":"count","operator":"gt","value":1}]`, credit(1), ``, "conditions[0].window"},
+		{"V22 history count bad window", `[{"source":"history","field":"count","window":"2w","operator":"gt","value":1}]`, credit(1), ``, "conditions[0].window"},
+		{"V23 history count string value", `[{"source":"history","field":"count","window":"7d","operator":"gt","value":"1"}]`, credit(1), ``, "conditions[0].value"},
+		{"V24 history count contains", `[{"source":"history","field":"count","window":"7d","operator":"contains","value":1}]`, credit(1), ``, "conditions[0].operator"},
+		{"V25 history first_time gt", `[{"source":"history","field":"first_time","operator":"gt","value":true}]`, credit(1), ``, "conditions[0].operator"},
+		{"V26 history first_time non-bool", `[{"source":"history","field":"first_time","value":1}]`, credit(1), ``, "conditions[0].value"},
+		{"V27 history first_time with window", `[{"source":"history","field":"first_time","window":"7d"}]`, credit(1), ``, "conditions[0].window"},
+		{"V28 window on a trigger leaf", `[{"source":"trigger","field":"a","operator":"eq","value":1,"window":"7d"}]`, credit(1), ``, "conditions[0].window"},
+		{"V29 history bad event_type", `[{"source":"history","field":"count","event_type":"Bad Type","window":"7d","operator":"gt","value":1}]`, credit(1), ``, "conditions[0].event_type"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {

@@ -228,6 +228,16 @@ func (p onePlayer) PlayersByIDs(_ context.Context, tenantID string, ids []string
 	return out, nil
 }
 
+func (p onePlayer) PlayersByExternalIDs(_ context.Context, tenantID string, ext []string) (map[string]ports.PlayerSnapshot, error) {
+	out := map[string]ports.PlayerSnapshot{}
+	for _, x := range ext {
+		if x == "ext-"+p.id && tenantID == p.tenant {
+			out[x] = ports.PlayerSnapshot{ID: p.id, TenantID: tenantID, ExternalID: x, Active: true}
+		}
+	}
+	return out, nil
+}
+
 // Concurrent redelivery of one command plus concurrent distinct commands:
 // the duplicate applies once, and the attempt completes exactly once.
 func TestConcurrentProgressCompletesExactlyOnce(t *testing.T) {

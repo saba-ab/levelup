@@ -34,6 +34,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(httpx.RequireAuth)
 		r.Get("/", h.list)
 		r.Post("/", h.create)
+		r.Get("/stats", h.stats)
 		r.Get("/{id}", h.get)
 		r.Patch("/{id}", h.update)
 		r.Delete("/{id}", h.delete)
@@ -126,6 +127,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Create a badge
+// @Description  requirements, when set, is evaluated automatically: {"all":[cond],"any":[cond]} with cond {"metric": lifetime_points|missions_completed|streak_days|level|badges_earned|activity_count, "event_type": "<type>" (activity_count only), "gte": int >= 1}. A player meeting it is awarded the badge once. {} or null means no requirements.
 // @Tags         badges
 // @Accept       json
 // @Produce      json
@@ -135,7 +137,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 // @Failure      401 {object} httpx.Problem
 // @Failure      403 {object} httpx.Problem
 // @Failure      409 {object} httpx.Problem "badge_slug_taken"
-// @Failure      422 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "invalid_badge_requirements"
 // @Router       /badges [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req CreateBadgeReq
@@ -149,6 +151,24 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toBadgeResp(b))
+}
+
+// @Summary      Badge award statistics
+// @Description  Per badge (live badges, plus deleted ones that were awarded): applied awards, distinct players and the last award time, from the award ledger (revokes do not subtract). awards_per_day covers the last 30 UTC days, oldest first, zero-filled.
+// @Tags         badges
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200 {object} StatsResp
+// @Failure      401 {object} httpx.Problem
+// @Failure      403 {object} httpx.Problem
+// @Router       /badges/stats [get]
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	rep, err := h.svc.Stats(r.Context())
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toStatsResp(rep))
 }
 
 // @Summary      Get a badge
@@ -188,7 +208,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 // @Failure      403 {object} httpx.Problem
 // @Failure      404 {object} httpx.Problem "badge_not_found"
 // @Failure      409 {object} httpx.Problem "badge_slug_taken, version_conflict"
-// @Failure      422 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "invalid_badge_requirements"
 // @Router       /badges/{id} [patch]
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	badgeID, err := pathUUID(r, "id", errMalformedBadgeID)

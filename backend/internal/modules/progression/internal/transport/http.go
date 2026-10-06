@@ -44,6 +44,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/players/{playerID}/progress", h.getProgress)
 		r.Post("/players/{playerID}/xp", h.grantXP)
 		r.Get("/players/{playerID}/xp-grants", h.listGrants)
+		r.Get("/progress", h.batchProgress)
 	})
 }
 
@@ -348,14 +349,18 @@ func (h *Handler) getProgress(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, ProgressResp{
+	httpx.JSON(w, http.StatusOK, toProgressResp(v))
+}
+
+func toProgressResp(v domain.View) ProgressResp {
+	return ProgressResp{
 		PlayerID:        v.PlayerID,
 		TotalXP:         v.TotalXP,
 		CurrentLevel:    toLevelRef(v.Current),
 		NextLevel:       toLevelRef(v.Next),
 		XPToNext:        v.XPToNext,
 		ProgressPercent: v.ProgressPercent,
-	})
+	}
 }
 
 // @Summary      Grant XP to a player

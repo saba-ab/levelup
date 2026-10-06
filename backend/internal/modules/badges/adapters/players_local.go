@@ -46,3 +46,17 @@ func (l *LocalPlayers) ByIDs(ctx context.Context, tenantID string, playerIDs []s
 	}
 	return out, nil
 }
+
+// IDByExternalID implements ports.ExternalIDResolver.
+func (l *LocalPlayers) IDByExternalID(ctx context.Context, tenantID, externalID string) (string, bool, error) {
+	got, err := l.players.PlayersByExternalIDs(ctx, tenantID, []string{externalID})
+	if err != nil {
+		return "", false, err
+	}
+	for _, p := range got {
+		if p.TenantID == tenantID && p.ExternalID == externalID {
+			return p.ID, true, nil
+		}
+	}
+	return "", false, nil
+}

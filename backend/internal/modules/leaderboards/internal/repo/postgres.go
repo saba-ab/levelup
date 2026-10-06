@@ -4,6 +4,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"levelup/internal/modules/leaderboards/contracts"
 	"levelup/internal/modules/leaderboards/internal/app"
 	"levelup/internal/modules/leaderboards/internal/domain"
 	"levelup/internal/shared/errs"
@@ -39,12 +41,39 @@ type leaderboard struct {
 	Metric         string `gorm:"not null"`
 	ResetFrequency string `gorm:"not null"`
 	ProgramID      *string
-	MaxEntries     int  `gorm:"not null"`
-	IsActive       bool `gorm:"not null"`
-	Version        int  `gorm:"not null"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
+	// JSONB travels as string: under pgx's exec mode (PgBouncer) a []byte
+	// argument is encoded as bytea and Postgres refuses it for jsonb.
+	Config     string `gorm:"type:jsonb;not null"`
+	MaxEntries int    `gorm:"not null"`
+	IsActive   bool   `gorm:"not null"`
+	Version    int    `gorm:"not null"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  *time.Time
+}
+
+// boardConfig is the JSON shape of leaderboards.config.
+type boardConfig struct {
+	EventType string `json:"event_type,omitempty"`
+	Value     string `json:"value,omitempty"`
+	Property  string `json:"property,omitempty"`
+}
+
+func encodeConfig(a *domain.ActivityConfig) string {
+	if a == nil {
+		return "{}"
+	}
+	b, _ := json.Marshal(boardConfig{EventType: a.EventType, Value: a.Value, Property: a.Property}) // plain strings: cannot fail
+	return string(b)
+}
+
+func decodeConfig(typ, raw string) *domain.ActivityConfig {
+	if typ != contracts.TypeActivity {
+		return nil
+	}
+	var c boardConfig
+	_ = json.Unmarshal([]byte(raw), &c) // the CHECK constraint guarantees the keys
+	return &domain.ActivityConfig{EventType: c.EventType, Value: c.Value, Property: c.Property}
 }
 
 func (m leaderboard) toDomain() domain.Leaderboard {
@@ -57,6 +86,7 @@ func (m leaderboard) toDomain() domain.Leaderboard {
 		Type:           m.Type,
 		Metric:         m.Metric,
 		ResetFrequency: m.ResetFrequency,
+		Activity:       decodeConfig(m.Type, m.Config),
 		MaxEntries:     m.MaxEntries,
 		Active:         m.IsActive,
 		Version:        m.Version,
@@ -83,6 +113,7 @@ func fromDomain(lb domain.Leaderboard) leaderboard {
 		Type:           lb.Type,
 		Metric:         lb.Metric,
 		ResetFrequency: lb.ResetFrequency,
+		Config:         encodeConfig(lb.Activity),
 		MaxEntries:     lb.MaxEntries,
 		IsActive:       lb.Active,
 		Version:        lb.Version,
@@ -228,6 +259,24 @@ func (r *Postgres) ActiveByType(ctx context.Context, tenantID, typ string) ([]do
 		Find(&ms).Error
 	if err != nil {
 		return nil, errs.Wrap(errs.Internal, "load active leaderboards", err)
+	}
+	return toDomains(ms), nil
+}
+
+// ActiveForActivity returns the tenant's live active activity boards for
+// one event type (index ix_leaderboards_activity_event).
+func (r *Postgres) ActiveForActivity(ctx context.Context, tenantID, eventType string) ([]domain.Leaderboard, error) {
+	if !validUUID(tenantID) || eventType == "" {
+		return nil, nil
+	}
+	var ms []leaderboard
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND type = ? AND config ->> 'event_type' = ? AND is_active AND deleted_at IS NULL",
+			tenantID, contracts.TypeActivity, eventType).
+		Order("id").
+		Find(&ms).Error
+	if err != nil {
+		return nil, errs.Wrap(errs.Internal, "load activity leaderboards", err)
 	}
 	return toDomains(ms), nil
 }

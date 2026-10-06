@@ -23,6 +23,11 @@ type PlayerCreatedV1 struct {
 	ExternalID  string    `json:"external_id"`
 	DisplayName string    `json:"display_name"`
 	At          time.Time `json:"at"`
+	// AutoCreated marks a player created by the system from an
+	// activity.received.v1 flagged auto_create_player (created_by is null);
+	// SourceActivityID names that activity. Additive.
+	AutoCreated      bool   `json:"auto_created,omitempty"`
+	SourceActivityID string `json:"source_activity_id,omitempty"`
 }
 
 type PlayerUpdatedV1 struct {
@@ -61,6 +66,18 @@ const (
 	CodePlayerNotFound        = "player_not_found"
 	CodeExternalIDTaken       = "player_external_id_taken"
 	CodePlayerVersionConflict = "player_version_conflict"
+	CodeInvalidSort           = "invalid_sort"
+	CodeInvalidCreatedRange   = "invalid_created_range"
+)
+
+// List sort orders accepted by GET /players?sort=. Each is keyset-paged on
+// a unique total order (the id breaks ties).
+const (
+	SortCreatedDesc = "-created_at" // default
+	SortCreatedAsc  = "created_at"
+	// SortDisplayName orders by lower(display_name), falling back to the
+	// external id when no display name is set, ascending.
+	SortDisplayName = "display_name"
 )
 
 var (
@@ -89,4 +106,11 @@ type PlayerSnapshot struct {
 type Reader interface {
 	PlayersByIDs(ctx context.Context, tenantID string, ids []string) ([]PlayerSnapshot, error)
 	PlayersByExternalIDs(ctx context.Context, tenantID string, externalIDs []string) ([]PlayerSnapshot, error)
+}
+
+// IDLister pages a tenant's live player ids in ascending id order, strictly
+// after afterID ("" starts at the beginning). A short page is the last one.
+// It is separate from Reader so existing Reader fakes stay valid.
+type IDLister interface {
+	ListPlayerIDs(ctx context.Context, tenantID, afterID string, limit int) ([]string, error)
 }

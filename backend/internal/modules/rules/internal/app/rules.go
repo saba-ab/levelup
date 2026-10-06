@@ -31,30 +31,43 @@ type CreateRuleInput struct {
 	Conditions   json.RawMessage
 	Actions      json.RawMessage
 	Limits       json.RawMessage
+	// Schedule (JSON object or null) and StopProcessing are version parts.
+	Schedule       json.RawMessage
+	StopProcessing bool
 }
 
 // UpdateRuleInput is a partial update. Definition parts (Conditions,
-// Actions, Limits; nil = untouched) edit the latest version and only while
-// it is a draft: published versions are immutable.
+// Actions, Limits, Schedule, StopProcessing; nil = untouched) edit the
+// latest version and only while it is a draft: published versions are
+// immutable.
 type UpdateRuleInput struct {
-	Name         *string
-	Description  OptString
-	TriggerEvent *string
-	ProgramID    OptString
-	Priority     *int
-	Status       *string
-	Conditions   json.RawMessage
-	Actions      json.RawMessage
-	Limits       json.RawMessage
+	Name           *string
+	Description    OptString
+	TriggerEvent   *string
+	ProgramID      OptString
+	Priority       *int
+	Status         *string
+	Conditions     json.RawMessage
+	Actions        json.RawMessage
+	Limits         json.RawMessage
+	Schedule       json.RawMessage
+	StopProcessing *bool
+}
+
+func (in UpdateRuleInput) definitionPatch() domain.DefinitionPatch {
+	return domain.DefinitionPatch{Conditions: in.Conditions, Actions: in.Actions, Limits: in.Limits,
+		Schedule: in.Schedule, StopProcessing: in.StopProcessing}
 }
 
 // CreateVersionInput creates a new draft. Parts left nil are copied from
 // FromVersion (or the latest version when FromVersion is nil).
 type CreateVersionInput struct {
-	FromVersion *int
-	Conditions  json.RawMessage
-	Actions     json.RawMessage
-	Limits      json.RawMessage
+	FromVersion    *int
+	Conditions     json.RawMessage
+	Actions        json.RawMessage
+	Limits         json.RawMessage
+	Schedule       json.RawMessage
+	StopProcessing *bool
 }
 
 // RuleView is a rule with its live and latest versions (fixes B11: the
@@ -78,7 +91,8 @@ func (s *Service) CreateRule(ctx context.Context, in CreateRuleInput) (RuleView,
 	if err != nil {
 		return RuleView{}, err
 	}
-	v, err := domain.NewVersion(rule, 1, in.Conditions, in.Actions, in.Limits, p.UserID, s.cfg.Compile, now)
+	v, err := domain.NewVersion(rule, 1, domain.Definition{Conditions: in.Conditions, Actions: in.Actions,
+		Limits: in.Limits, Schedule: in.Schedule, StopProcessing: in.StopProcessing}, p.UserID, s.cfg.Compile, now)
 	if err != nil {
 		return RuleView{}, err
 	}
@@ -191,7 +205,7 @@ func (s *Service) UpdateRule(ctx context.Context, ruleID string, in UpdateRuleIn
 				return err
 			}
 		}
-		if in.Conditions != nil || in.Actions != nil || in.Limits != nil {
+		if patch := in.definitionPatch(); !patch.IsZero() {
 			latest, err := s.repo.LatestVersionTx(ctx, tx, p.TenantID, rule.ID)
 			if err != nil {
 				return err
@@ -199,7 +213,7 @@ func (s *Service) UpdateRule(ctx context.Context, ruleID string, in UpdateRuleIn
 			if latest.Published() {
 				return domain.ErrNoDraft
 			}
-			if err := latest.Edit(in.Conditions, in.Actions, in.Limits, s.cfg.Compile); err != nil {
+			if err := latest.Edit(patch, s.cfg.Compile); err != nil {
 				return err
 			}
 			if err := s.repo.SaveDraftVersion(ctx, tx, latest); err != nil {
@@ -226,7 +240,7 @@ func (s *Service) UpdateRule(ctx context.Context, ruleID string, in UpdateRuleIn
 func onlyArchive(in UpdateRuleInput) bool {
 	return in.Status != nil && *in.Status == domain.StatusArchived &&
 		in.Name == nil && !in.Description.Set && in.TriggerEvent == nil && !in.ProgramID.Set &&
-		in.Priority == nil && in.Conditions == nil && in.Actions == nil && in.Limits == nil
+		in.Priority == nil && in.definitionPatch().IsZero()
 }
 
 func triggersOf(a, b domain.Rule) []string {
@@ -294,17 +308,9 @@ func (s *Service) CreateVersion(ctx context.Context, ruleID string, in CreateVer
 				return err
 			}
 		}
-		conditions, actions, limits := in.Conditions, in.Actions, in.Limits
-		if conditions == nil {
-			conditions = base.Conditions
-		}
-		if actions == nil {
-			actions = base.Actions
-		}
-		if limits == nil {
-			limits = base.Limits
-		}
-		v, err = domain.NewVersion(rule, latest.Version+1, conditions, actions, limits, p.UserID, s.cfg.Compile, now)
+		def := domain.DefinitionPatch{Conditions: in.Conditions, Actions: in.Actions, Limits: in.Limits,
+			Schedule: in.Schedule, StopProcessing: in.StopProcessing}.Apply(base.Definition())
+		v, err = domain.NewVersion(rule, latest.Version+1, def, p.UserID, s.cfg.Compile, now)
 		if err != nil {
 			return err
 		}
@@ -365,7 +371,7 @@ func (s *Service) Publish(ctx context.Context, ruleID string, version int) (Rule
 		}
 		// Re-validate under today's grammar: a draft written under a looser
 		// limit must not go live.
-		if _, err := domain.NewVersion(rule, v.Version, v.Conditions, v.Actions, v.Limits, v.CreatedBy, s.cfg.Compile, now); err != nil {
+		if _, _, err := domain.ValidateDefinition(v.Definition(), s.cfg.Compile); err != nil {
 			return err
 		}
 		if err := rule.Publish(v, now); err != nil {

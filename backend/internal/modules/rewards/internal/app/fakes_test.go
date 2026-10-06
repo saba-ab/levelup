@@ -272,6 +272,62 @@ func (f *fakeRepo) ListPlayerClaims(_ context.Context, tenantID, playerID string
 	return capN(out, p.Limit), nil
 }
 
+func (f *fakeRepo) ListClaims(_ context.Context, tenantID string, flt ClaimFilter, p Page) ([]domain.Claim, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []domain.Claim
+	for _, c := range f.claims {
+		switch {
+		case c.TenantID != tenantID,
+			flt.Status != "" && c.Status != flt.Status,
+			flt.RewardID != "" && c.RewardID != flt.RewardID,
+			flt.PlayerID != "" && c.PlayerID != flt.PlayerID,
+			flt.From != nil && c.CreatedAt.Before(*flt.From),
+			flt.To != nil && !c.CreatedAt.Before(*flt.To),
+			p.AfterID != "" && c.ID >= p.AfterID:
+			continue
+		}
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
+	return capN(out, p.Limit), nil
+}
+
+func (f *fakeRepo) RewardStats(_ context.Context, tenantID string) ([]RewardStats, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []RewardStats
+	for id, r := range f.rewards {
+		if r.TenantID != tenantID {
+			continue
+		}
+		st := RewardStats{RewardID: id, Slug: r.Slug, Name: r.Name, Type: r.Type, Deleted: f.deleted[id]}
+		for _, c := range f.claims {
+			if c.TenantID != tenantID || c.RewardID != id {
+				continue
+			}
+			if c.ClaimedAt != nil {
+				st.Claimed++
+			}
+			switch c.Status {
+			case contracts.ClaimRedeemed:
+				st.Redeemed++
+			case contracts.ClaimExpired:
+				st.Expired++
+			case contracts.ClaimCancelled, contracts.ClaimRefundPending, contracts.ClaimRefunded:
+				st.Cancelled++
+			}
+			switch c.Status {
+			case contracts.ClaimClaimed, contracts.ClaimRedeemed, contracts.ClaimExpired:
+				st.PointsSpent += c.PointsCost
+			}
+		}
+		out = append(out, st)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RewardID > out[j].RewardID })
+	return out, nil
+}
+
 func (f *fakeRepo) claimsWhere(match func(domain.Claim) bool, limit int) []domain.Claim {
 	f.mu.Lock()
 	defer f.mu.Unlock()

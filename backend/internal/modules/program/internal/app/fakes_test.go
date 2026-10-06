@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -20,6 +21,7 @@ type fakeRepo struct {
 	programs    map[string]domain.Program
 	enrollments map[[2]string]domain.Enrollment // (program_id, player_id)
 	saveErr     error
+	countCalls  int
 }
 
 func newFakeRepo() *fakeRepo {
@@ -80,10 +82,14 @@ func (r *fakeRepo) Save(_ context.Context, _ *gorm.DB, p domain.Program) error {
 	return nil
 }
 
-func (r *fakeRepo) List(_ context.Context, tenantID string, status domain.Status, page Page) ([]domain.Program, error) {
+func (r *fakeRepo) List(_ context.Context, tenantID string, f ListFilter, page Page) ([]domain.Program, error) {
 	var out []domain.Program
 	for _, p := range r.programs {
-		if p.TenantID != tenantID || p.DeletedAt != nil || (status != "" && p.Status != status) {
+		if p.TenantID != tenantID || p.DeletedAt != nil || (f.Status != "" && p.Status != f.Status) {
+			continue
+		}
+		if q := strings.ToLower(f.Search); q != "" &&
+			!strings.Contains(strings.ToLower(p.Name), q) && !strings.Contains(strings.ToLower(p.Slug), q) {
 			continue
 		}
 		if page.ID != "" && !before(p.CreatedAt, p.ID, page.At, page.ID) {
@@ -96,6 +102,17 @@ func (r *fakeRepo) List(_ context.Context, tenantID string, status domain.Status
 	})
 	if len(out) > page.Limit {
 		out = out[:page.Limit]
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) MemberCounts(_ context.Context, tenantID string, programIDs []string) (map[string]int64, error) {
+	r.countCalls++
+	out := map[string]int64{}
+	for _, e := range r.enrollments {
+		if e.TenantID == tenantID && slices.Contains(programIDs, e.ProgramID) {
+			out[e.ProgramID]++
+		}
 	}
 	return out, nil
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -199,13 +200,17 @@ func (r *Postgres) Save(ctx context.Context, tx *gorm.DB, p domain.Program) erro
 	return nil
 }
 
-func (r *Postgres) List(ctx context.Context, tenantID string, status domain.Status, page app.Page) ([]domain.Program, error) {
+func (r *Postgres) List(ctx context.Context, tenantID string, f app.ListFilter, page app.Page) ([]domain.Program, error) {
 	q := r.db.WithContext(ctx).
 		Where("tenant_id = ? AND deleted_at IS NULL", tenantID).
 		Order("created_at DESC, id DESC").
 		Limit(page.Limit)
-	if status != "" {
-		q = q.Where("status = ?", string(status))
+	if f.Status != "" {
+		q = q.Where("status = ?", string(f.Status))
+	}
+	if f.Search != "" {
+		pattern := "%" + escapeLike(f.Search) + "%"
+		q = q.Where(`(name ILIKE ? ESCAPE '\' OR slug ILIKE ? ESCAPE '\')`, pattern, pattern)
 	}
 	if page.ID != "" {
 		q = q.Where("(created_at, id) < (?, ?)", page.At, page.ID)
@@ -215,6 +220,38 @@ func (r *Postgres) List(ctx context.Context, tenantID string, status domain.Stat
 		return nil, errs.Wrap(errs.Internal, "list programs", err)
 	}
 	return toDomains(ms)
+}
+
+// escapeLike makes %, _ and the escape character itself match literally.
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+type memberCountRow struct {
+	ProgramID string
+	Members   int64
+}
+
+// MemberCounts is one GROUP BY over the page's program ids.
+func (r *Postgres) MemberCounts(ctx context.Context, tenantID string, programIDs []string) (map[string]int64, error) {
+	out := make(map[string]int64, len(programIDs))
+	if len(programIDs) == 0 {
+		return out, nil
+	}
+	var rows []memberCountRow
+	err := r.db.WithContext(ctx).
+		Model(&enrollment{}).
+		Select("program_id, COUNT(*) AS members").
+		Where("tenant_id = ? AND program_id IN ?", tenantID, programIDs).
+		Group("program_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, errs.Wrap(errs.Internal, "count program members", err)
+	}
+	for _, row := range rows {
+		out[row.ProgramID] = row.Members
+	}
+	return out, nil
 }
 
 func (r *Postgres) DueForAutoEnd(ctx context.Context, now time.Time, limit int) ([]domain.Program, error) {

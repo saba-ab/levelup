@@ -364,3 +364,84 @@ func newTestService(repo *fakeRepo, players ports.PlayerReader, ob *fakeOutbox, 
 }
 
 func newClock() *clock.Fake { return clock.NewFake(testNow) }
+
+func (f *fakeRepo) Summary(_ context.Context, tenantID string, since time.Time) (WalletSummary, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var s WalletSummary
+	for _, w := range f.wallets {
+		if w.TenantID != tenantID {
+			continue
+		}
+		s.OpenWallets++
+		s.TotalBalance += w.Balance.Minor()
+		s.LifetimeEarned += w.LifetimeEarned.Minor()
+		s.LifetimeSpent += w.LifetimeSpent.Minor()
+	}
+	for _, e := range f.entries {
+		if e.TenantID != tenantID || e.CreatedAt.Before(since) {
+			continue
+		}
+		if e.Direction == domain.Credit {
+			s.CreditedLast30d += e.Amount.Minor()
+		} else {
+			s.DebitedLast30d += e.Amount.Minor()
+		}
+	}
+	return s, nil
+}
+
+// BalanceDistribution mirrors the SQL bucket sizing.
+func (f *fakeRepo) BalanceDistribution(_ context.Context, tenantID string, n int) ([]BalanceBucket, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var bals []int64
+	for _, w := range f.wallets {
+		if w.TenantID == tenantID {
+			bals = append(bals, w.Balance.Minor())
+		}
+	}
+	if len(bals) == 0 {
+		return nil, nil
+	}
+	lo, hi := bals[0], bals[0]
+	for _, b := range bals {
+		lo, hi = min(lo, b), max(hi, b)
+	}
+	w := max((hi-lo+1+int64(n)-1)/int64(n), 1)
+	out := make([]BalanceBucket, n)
+	for i := range out {
+		out[i] = BalanceBucket{From: lo + int64(i)*w, To: lo + int64(i+1)*w - 1}
+	}
+	for _, b := range bals {
+		out[(b-lo)/w].Players++
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) DailyTotals(_ context.Context, tenantID string, from, to time.Time) ([]DailyTotal, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	byDay := map[time.Time]*DailyTotal{}
+	var order []time.Time
+	for _, e := range f.entries {
+		if e.TenantID != tenantID || e.CreatedAt.Before(from) || !e.CreatedAt.Before(to) {
+			continue
+		}
+		d := truncDay(e.CreatedAt)
+		if byDay[d] == nil {
+			byDay[d] = &DailyTotal{Day: d}
+			order = append(order, d)
+		}
+		if e.Direction == domain.Credit {
+			byDay[d].Credited += e.Amount.Minor()
+		} else {
+			byDay[d].Debited += e.Amount.Minor()
+		}
+	}
+	out := make([]DailyTotal, 0, len(order))
+	for _, d := range order {
+		out = append(out, *byDay[d])
+	}
+	return out, nil
+}

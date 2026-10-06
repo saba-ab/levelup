@@ -11,12 +11,17 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/prometheus/client_golang/prometheus"
 
+	activitycontracts "levelup/internal/modules/activity/contracts"
 	"levelup/internal/modules/badges/contracts"
 	"levelup/internal/modules/badges/internal/app"
 	"levelup/internal/modules/badges/internal/repo"
 	"levelup/internal/modules/badges/internal/transport"
 	"levelup/internal/modules/badges/migrations"
 	identitycontracts "levelup/internal/modules/identity/contracts"
+	missionscontracts "levelup/internal/modules/missions/contracts"
+	pointscontracts "levelup/internal/modules/points/contracts"
+	progressioncontracts "levelup/internal/modules/progression/contracts"
+	streakscontracts "levelup/internal/modules/streaks/contracts"
 	"levelup/internal/platform/authz"
 	"levelup/internal/platform/bus"
 	"levelup/internal/platform/jobs"
@@ -78,16 +83,27 @@ func (m *Module) RegisterHTTP(r chi.Router) {
 	transport.NewHandler(m.svc, m.deps.Validate).Mount(r)
 }
 
-// Subscriptions: purge the tenant's rows on tenant.deleted.v1 (idempotent).
+// Subscriptions: purge the tenant's rows on tenant.deleted.v1, and feed the
+// requirements engine's per-player projection (each one then evaluates the
+// badges with requirements). All are idempotent under redelivery and
+// reordering.
 func (m *Module) Subscriptions() []bus.Subscription {
-	return []bus.Subscription{{
-		Topic:   identitycontracts.TopicTenantDeleted,
-		Group:   contracts.Module,
-		Handler: m.svc.OnTenantDeleted,
-	}}
+	sub := func(topic string, h bus.Handler) bus.Subscription {
+		return bus.Subscription{Topic: topic, Group: contracts.Module, Handler: h}
+	}
+	return []bus.Subscription{
+		sub(identitycontracts.TopicTenantDeleted, m.svc.OnTenantDeleted),
+		sub(pointscontracts.TopicCredited, m.svc.OnPointsCredited),
+		sub(missionscontracts.TopicCompleted, m.svc.OnMissionCompleted),
+		sub(streakscontracts.TopicActivityRecorded, m.svc.OnStreakActivity),
+		sub(progressioncontracts.TopicLevelReached, m.svc.OnLevelReached),
+		sub(contracts.TopicAwarded, m.svc.OnBadgeAwarded),
+		sub(activitycontracts.TopicReceived, m.svc.OnActivityReceived),
+	}
 }
 
-// Jobs: the badges.award command consumer and the hourly reconcile sweep.
+// Jobs: the badges.award command consumer, the hourly reconcile sweep and
+// the daily prune of the projection's dedupe keys.
 func (m *Module) Jobs() []jobs.Job {
 	return []jobs.Job{
 		{
@@ -99,6 +115,13 @@ func (m *Module) Jobs() []jobs.Job {
 			Schedule: m.cfg.ReconcileSchedule,
 			Run: func(ctx context.Context, _ []byte) error {
 				return m.svc.Reconcile(ctx, m.repo)
+			},
+		},
+		{
+			Name:     contracts.JobPruneAppliedEvents,
+			Schedule: m.cfg.PruneSchedule,
+			Run: func(ctx context.Context, _ []byte) error {
+				return m.svc.PruneAppliedEvents(ctx, m.cfg.AppliedEventsRetention)
 			},
 		},
 	}

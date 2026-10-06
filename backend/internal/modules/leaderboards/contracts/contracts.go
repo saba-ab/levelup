@@ -16,6 +16,10 @@ const (
 	TypeBadges   = "badges"
 	TypeMissions = "missions"
 	TypeXP       = "xp"
+	// TypeActivity ranks players by one activity event type
+	// (activity.received.v1), configured per board: metric count counts
+	// events, metric earned sums a numeric property.
+	TypeActivity = "activity"
 
 	MetricEarned  = "earned"  // sum of credits in the period
 	MetricNet     = "net"     // credits minus debits in the period
@@ -26,6 +30,12 @@ const (
 	ResetDaily   = "daily"
 	ResetWeekly  = "weekly"
 	ResetMonthly = "monthly"
+)
+
+// Activity board config "value" options.
+const (
+	ActivityValueCount    = "count"    // one point per matching event (metric count)
+	ActivityValueProperty = "property" // sum of a numeric property (metric earned)
 )
 
 type TopEntryV1 struct {

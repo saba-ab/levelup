@@ -18,21 +18,23 @@ type RulesetCache struct{ cache *redis.ModuleCache }
 func NewRulesetCache(c *redis.ModuleCache) *RulesetCache { return &RulesetCache{cache: c} }
 
 // keyVersion is the shape escape hatch: changing cachedSource bumps it.
-const keyVersion = "rs:v1:"
+const keyVersion = "rs:v2:"
 
 func rulesetKey(tenantID string, generation int64, trigger string) string {
 	return keyVersion + tenantID + ":" + strconv.FormatInt(generation, 10) + ":" + trigger
 }
 
 type cachedSource struct {
-	RuleID        string          `json:"rule_id"`
-	RuleVersionID string          `json:"rule_version_id"`
-	Name          string          `json:"name"`
-	ProgramID     string          `json:"program_id,omitempty"`
-	Priority      int             `json:"priority"`
-	Conditions    json.RawMessage `json:"conditions,omitempty"`
-	Actions       json.RawMessage `json:"actions"`
-	Limits        json.RawMessage `json:"limits,omitempty"`
+	RuleID         string          `json:"rule_id"`
+	RuleVersionID  string          `json:"rule_version_id"`
+	Name           string          `json:"name"`
+	ProgramID      string          `json:"program_id,omitempty"`
+	Priority       int             `json:"priority"`
+	Conditions     json.RawMessage `json:"conditions,omitempty"`
+	Actions        json.RawMessage `json:"actions"`
+	Limits         json.RawMessage `json:"limits,omitempty"`
+	Schedule       json.RawMessage `json:"schedule,omitempty"`
+	StopProcessing bool            `json:"stop_processing,omitempty"`
 }
 
 func (c *RulesetCache) Load(ctx context.Context, tenantID string, generation int64, trigger string,

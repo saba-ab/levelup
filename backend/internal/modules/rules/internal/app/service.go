@@ -51,6 +51,38 @@ type LimitCheck struct {
 	At       time.Time // activity occurred_at: windows and cooldowns use it
 }
 
+// HistoryQuery asks for a player's prior activity counts per event type and
+// window (grammar v2), relative to the activity time At.
+type HistoryQuery struct {
+	TenantID   string
+	PlayerID   string
+	EventTypes []string
+	At         time.Time
+}
+
+// PlayerEvent is one evaluated activity counted into the history projection.
+type PlayerEvent struct {
+	TenantID  string
+	PlayerID  string
+	EventType string
+	At        time.Time // activity occurred_at; the UTC day is the bucket
+}
+
+// RuleStat aggregates one rule's executions and effects over a period.
+type RuleStat struct {
+	RuleID          string
+	Name            string
+	Fired           int64
+	NotMatched      int64
+	Limited         int64
+	OutOfSchedule   int64
+	SkippedByStop   int64
+	EffectsApplied  int64
+	EffectsRejected int64
+	PointsAwarded   int64
+	XPAwarded       int64
+}
+
 // Repository is implemented in internal/repo. Write methods take the tx.
 type Repository interface {
 	CreateRule(ctx context.Context, tx *gorm.DB, r domain.Rule) error
@@ -78,6 +110,9 @@ type Repository interface {
 	InsertExecutions(ctx context.Context, tx *gorm.DB, es []domain.Execution) error
 	InsertEffects(ctx context.Context, tx *gorm.DB, es []domain.Effect) error
 	ApplyLimits(ctx context.Context, tx *gorm.DB, c LimitCheck) (bool, error)
+	RecordPlayerEvent(ctx context.Context, tx *gorm.DB, e PlayerEvent) error
+	PlayerHistory(ctx context.Context, q HistoryQuery) (map[string]map[string]int64, error)
+	RuleStats(ctx context.Context, tenantID string, from, to time.Time) ([]RuleStat, error)
 	ListDecisions(ctx context.Context, tenantID string, f DecisionFilter, p Page) ([]domain.Decision, error)
 	DecisionByID(ctx context.Context, tenantID, id string) (domain.Decision, error)
 	ExecutionsByDecision(ctx context.Context, tenantID, decisionID string) ([]domain.Execution, error)

@@ -34,8 +34,11 @@ type fakeRepo struct {
 	executions  []domain.Execution
 	effects     []domain.Effect
 	counters    map[string]counter
+	eventDays   map[string]int64 // tenant|player|event_type|YYYY-MM-DD
 	liveLoads   int
+	historyHits int
 	lastAttempt map[string]time.Time
+	stats       []RuleStat
 }
 
 type counter struct {
@@ -47,7 +50,7 @@ func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
 		rules: map[string]domain.Rule{}, versions: map[string]domain.Version{},
 		generations: map[string]int64{}, decisions: map[string]domain.Decision{}, counters: map[string]counter{},
-		lastAttempt: map[string]time.Time{},
+		lastAttempt: map[string]time.Time{}, eventDays: map[string]int64{},
 	}
 }
 
@@ -59,20 +62,66 @@ type repoState struct {
 	executions  []domain.Execution
 	effects     []domain.Effect
 	counters    map[string]counter
+	eventDays   map[string]int64
 }
 
 func (f *fakeRepo) snapshot() repoState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return repoState{maps.Clone(f.rules), maps.Clone(f.versions), maps.Clone(f.generations), maps.Clone(f.decisions),
-		slices.Clone(f.executions), slices.Clone(f.effects), maps.Clone(f.counters)}
+		slices.Clone(f.executions), slices.Clone(f.effects), maps.Clone(f.counters), maps.Clone(f.eventDays)}
 }
 
 func (f *fakeRepo) restore(s repoState) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.rules, f.versions, f.generations, f.decisions = s.rules, s.versions, s.generations, s.decisions
-	f.executions, f.effects, f.counters = s.executions, s.effects, s.counters
+	f.executions, f.effects, f.counters, f.eventDays = s.executions, s.effects, s.counters, s.eventDays
+}
+
+func dayKey(tenantID, playerID, eventType string, at time.Time) string {
+	return tenantID + "|" + playerID + "|" + eventType + "|" + at.UTC().Format(time.DateOnly)
+}
+
+func (f *fakeRepo) RecordPlayerEvent(_ context.Context, _ *gorm.DB, e PlayerEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.eventDays[dayKey(e.TenantID, e.PlayerID, e.EventType, e.At)]++
+	return nil
+}
+
+// PlayerHistory mirrors the SQL: UTC-day windows ending on q.At's day.
+func (f *fakeRepo) PlayerHistory(_ context.Context, q HistoryQuery) (map[string]map[string]int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.historyHits++
+	day := q.At.UTC().Truncate(24 * time.Hour)
+	out := map[string]map[string]int64{}
+	for k, n := range f.eventDays {
+		parts := strings.Split(k, "|")
+		if parts[0] != q.TenantID || parts[1] != q.PlayerID || !slices.Contains(q.EventTypes, parts[2]) {
+			continue
+		}
+		d, _ := time.Parse(time.DateOnly, parts[3])
+		if d.After(day) {
+			continue
+		}
+		if out[parts[2]] == nil {
+			out[parts[2]] = map[string]int64{}
+		}
+		for _, w := range eval.HistoryWindows {
+			if days := eval.WindowDays[w]; days == 0 || !d.Before(day.AddDate(0, 0, 1-days)) {
+				out[parts[2]][w] += n
+			}
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) RuleStats(_ context.Context, _ string, _, _ time.Time) ([]RuleStat, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stats, nil
 }
 
 func (f *fakeRepo) CreateRule(_ context.Context, _ *gorm.DB, r domain.Rule) error {
@@ -156,6 +205,7 @@ func (f *fakeRepo) SaveDraftVersion(_ context.Context, _ *gorm.DB, v domain.Vers
 		return domain.ErrVersionPublished
 	}
 	cur.Conditions, cur.Actions, cur.Limits = v.Conditions, v.Actions, v.Limits
+	cur.Schedule, cur.StopProcessing = v.Schedule, v.StopProcessing
 	f.versions[v.ID] = cur
 	return nil
 }
@@ -257,7 +307,8 @@ func (f *fakeRepo) LiveRuleSources(_ context.Context, tenantID, trigger string) 
 		}
 		v := f.versions[r.CurrentVersionID]
 		out = append(out, eval.RuleSource{RuleID: r.ID, RuleVersionID: v.ID, Name: r.Name, ProgramID: r.ProgramID,
-			Priority: r.Priority, Conditions: v.Conditions, Actions: v.Actions, Limits: v.Limits})
+			Priority: r.Priority, Conditions: v.Conditions, Actions: v.Actions, Limits: v.Limits,
+			Schedule: v.Schedule, StopProcessing: v.StopProcessing})
 	}
 	return out, nil
 }

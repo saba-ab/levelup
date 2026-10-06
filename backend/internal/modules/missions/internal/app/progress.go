@@ -38,7 +38,17 @@ type ProgressInput struct {
 	MissionID      string
 	Increment      int64
 	Source         effect.Source
+	// PlayerChecked skips the player lookup: the caller already resolved an
+	// active player of the tenant (the activity subscriber).
+	PlayerChecked bool
+	// Quiet turns business rejections into no-ops: nothing is recorded or
+	// published, so a later delivery of the same key may still apply (the
+	// activity subscriber; rules owns rejections of activities).
+	Quiet bool
 }
+
+// errQuietRejection rolls back a quiet rejection's transaction.
+var errQuietRejection = errs.New(errs.Conflict, "progress rejected quietly")
 
 // ProgressResult is the outcome. Rejections are results, not errors.
 type ProgressResult struct {
@@ -162,9 +172,13 @@ func rejectionError(reason string) error {
 func (s *Service) applyProgress(ctx context.Context, in ProgressInput) (ProgressResult, error) {
 	// The port call happens before the transaction: never hold a tx open
 	// across another module.
-	playerReason, err := s.playerReason(ctx, in.TenantID, in.PlayerID)
-	if err != nil {
-		return ProgressResult{}, err
+	playerReason := ""
+	if !in.PlayerChecked {
+		reason, err := s.playerReason(ctx, in.TenantID, in.PlayerID)
+		if err != nil {
+			return ProgressResult{}, err
+		}
+		playerReason = reason
 	}
 	now := s.clock.Now()
 	ev := domain.ProgressEvent{
@@ -181,7 +195,7 @@ func (s *Service) applyProgress(ctx context.Context, in ProgressInput) (Progress
 	}
 
 	var res ProgressResult
-	err = s.tx(ctx, func(tx *gorm.DB) error {
+	err := s.tx(ctx, func(tx *gorm.DB) error {
 		res = ProgressResult{}
 		inserted, err := s.repo.InsertProgressEvent(ctx, tx, ev)
 		if err != nil {
@@ -193,6 +207,9 @@ func (s *Service) applyProgress(ctx context.Context, in ProgressInput) (Progress
 		}
 		reject := func(reason string) error {
 			res.Outcome, res.Reason = OutcomeRejected, reason
+			if in.Quiet {
+				return errQuietRejection
+			}
 			ev.Status, ev.Reason = domain.ProgressRejected, reason
 			if err := s.repo.FinishProgressEvent(ctx, tx, ev); err != nil {
 				return err
@@ -252,6 +269,9 @@ func (s *Service) applyProgress(ctx context.Context, in ProgressInput) (Progress
 		res = ProgressResult{Outcome: OutcomeApplied, Attempt: a, HasAttempt: true, Completed: completedNow}
 		return nil
 	})
+	if errors.Is(err, errQuietRejection) {
+		return res, nil
+	}
 	if err != nil {
 		return ProgressResult{}, err
 	}

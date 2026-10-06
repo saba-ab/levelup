@@ -67,6 +67,11 @@ type Repository interface {
 	// unit: pending_payment, claimed, redeemed.
 	CountHeldClaims(ctx context.Context, tx *gorm.DB, tenantID, rewardID, playerID string) (int, error)
 	ListPlayerClaims(ctx context.Context, tenantID, playerID string, p Page) ([]domain.Claim, error)
+	// ListClaims pages every claim of the tenant matching f, newest first.
+	ListClaims(ctx context.Context, tenantID string, f ClaimFilter, p Page) ([]domain.Claim, error)
+	// RewardStats aggregates the tenant's claims per reward: every live
+	// reward, plus deleted rewards that still have claims.
+	RewardStats(ctx context.Context, tenantID string) ([]RewardStats, error)
 
 	// Sweep reads span every tenant; each row carries its tenant id.
 	DuePendingClaims(ctx context.Context, now time.Time, limit int) ([]domain.Claim, error)

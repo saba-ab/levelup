@@ -4,10 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"levelup/internal/modules/leaderboards/internal/domain"
+	"levelup/internal/modules/leaderboards/internal/ports"
 	"levelup/internal/shared/errs"
 )
 
@@ -35,7 +37,16 @@ func (s *Service) ApplyFact(ctx context.Context, f domain.Fact) error {
 	if f.At.IsZero() {
 		return errs.New(errs.Invalid, "fact needs an occurrence time")
 	}
-	boards, err := s.repo.ActiveByType(ctx, f.TenantID, typ)
+	var boards []domain.Leaderboard
+	var err error
+	if f.Kind == domain.FactActivity {
+		if f.EventType == "" {
+			return errs.New(errs.Invalid, "activity fact needs an event type")
+		}
+		boards, err = s.repo.ActiveForActivity(ctx, f.TenantID, f.EventType)
+	} else {
+		boards, err = s.repo.ActiveByType(ctx, f.TenantID, typ)
+	}
 	if err != nil {
 		return err
 	}
@@ -91,6 +102,34 @@ func (s *Service) ApplyFact(ctx context.Context, f domain.Fact) error {
 	}
 	s.applyRankOps(ctx, after)
 	return nil
+}
+
+// ApplyActivity is the activity.received.v1 entry point. An activity whose
+// player was not resolved at ingest cannot be attributed: it is acked with
+// no effect rather than dead-lettered. A malformed player id can never
+// succeed and is errs.Invalid.
+func (s *Service) ApplyActivity(ctx context.Context, f domain.Fact) error {
+	if f.Kind != domain.FactActivity {
+		return errs.New(errs.Invalid, "not an activity fact")
+	}
+	if f.PlayerID == "" {
+		r, ok := s.players.(ports.ExternalIDResolver)
+		if !f.AutoCreatePlayer || f.PlayerExternalID == "" || !ok {
+			return nil
+		}
+		id, found, err := r.IDByExternalID(ctx, f.TenantID, f.PlayerExternalID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errs.New(errs.Unavailable, "player not created yet for auto-create activity; retrying")
+		}
+		f.PlayerID = id
+	}
+	if _, err := uuid.Parse(f.PlayerID); err != nil {
+		return errs.New(errs.Invalid, "activity player_id is not a uuid")
+	}
+	return s.ApplyFact(ctx, f)
 }
 
 // applyRankOps mirrors committed score changes into redis. Failures are

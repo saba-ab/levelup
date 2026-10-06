@@ -91,7 +91,7 @@ func TestApplyPatchKeepsSlugOnRenameAndClearsNullables(t *testing.T) {
 	p := validParams()
 	p.Stackable = true
 	p.MaxAwards = intp(3)
-	p.Requirements = map[string]any{"missions": 1.0}
+	p.Requirements = map[string]any{"all": []any{map[string]any{"metric": "missions_completed", "gte": 1.0}}}
 	b, err := domain.NewBadge(p, now)
 	require.NoError(t, err)
 

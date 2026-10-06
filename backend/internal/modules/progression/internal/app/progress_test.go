@@ -185,3 +185,43 @@ func TestReconcileReportsDriftAndOptionallyReplaces(t *testing.T) {
 		})
 	}
 }
+
+func TestBatchProgressMatchesSingleViewInRequestOrder(t *testing.T) {
+	h := newHarness(t, memberKeys, Options{})
+	standardLadder(h, "t1")
+	h.players.add("t1", "p1", true)
+	h.players.add("t1", "p2", true)
+	h.players.add("t2", "foreign", true)
+	_, err := h.svc.HandleGrantXP(context.Background(), grantCmd("t1", "p1", "k1", 175))
+	require.NoError(t, err)
+
+	views, err := h.svc.BatchProgress(asUser("t1"), []string{"p2", "ghost", "p1", "foreign", "p1"})
+	require.NoError(t, err)
+	require.Len(t, views, 2, "unknown and foreign players are omitted, duplicates collapsed")
+	require.Equal(t, "p2", views[0].PlayerID)
+	require.Equal(t, int64(0), views[0].TotalXP)
+	require.Equal(t, "p1", views[1].PlayerID)
+
+	single, err := h.svc.GetProgress(asUser("t1"), "p1")
+	require.NoError(t, err)
+	require.Equal(t, single, views[1])
+	require.Len(t, h.repo.progress, 1, "a batch read never creates rows")
+}
+
+func TestBatchProgressLimitsAndAuthz(t *testing.T) {
+	h := newHarness(t, memberKeys, Options{})
+	ids := make([]string, MaxBatchPlayers+1)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("p%d", i)
+	}
+	_, err := h.svc.BatchProgress(asUser("t1"), ids)
+	require.Equal(t, errs.Invalid, errs.KindOf(err))
+
+	views, err := h.svc.BatchProgress(asUser("t1"), nil)
+	require.NoError(t, err)
+	require.Empty(t, views)
+
+	denied := newHarness(t, allowKeys{}, Options{})
+	_, err = denied.svc.BatchProgress(asUser("t1"), []string{"p1"})
+	require.Equal(t, errs.PermissionDenied, errs.KindOf(err))
+}

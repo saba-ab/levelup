@@ -7,6 +7,7 @@ import (
 	"levelup/internal/modules/activity/contracts"
 	"levelup/internal/modules/activity/internal/domain"
 	"levelup/internal/platform/authz"
+	"levelup/internal/shared/errs"
 	"levelup/internal/shared/pagination"
 )
 
@@ -75,3 +76,83 @@ func (s *Service) List(ctx context.Context, f ListFilter, cursor string, limit i
 	}
 	return page, nil
 }
+
+// ListLastSeen is the HTTP read: each requested player's most recent
+// activity in the caller's tenant. Ids are deduplicated; players with no
+// resolved activity are absent. Results follow the request order.
+func (s *Service) ListLastSeen(ctx context.Context, playerIDs []string) ([]domain.LastSeen, error) {
+	p, err := authz.RequireTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Authorize(ctx, p, contracts.PermViewAny, nil); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(playerIDs))
+	seen := make(map[string]bool, len(playerIDs))
+	for _, id := range playerIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		if !isUUID(id) {
+			return nil, domain.ErrMalformedPlayerID
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	switch {
+	case len(ids) == 0:
+		return nil, domain.ErrPlayerIDsRequired
+	case len(ids) > contracts.MaxLastSeenIDs:
+		return nil, domain.ErrTooManyPlayerIDs
+	}
+	rows, err := s.repo.LastSeen(ctx, p.TenantID, ids)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]domain.LastSeen, len(rows))
+	for _, r := range rows {
+		byID[r.PlayerID] = r
+	}
+	out := make([]domain.LastSeen, 0, len(rows))
+	for _, id := range ids {
+		if r, ok := byID[id]; ok {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// LastSeen implements contracts.Reader: in-process trust, tenant passed
+// explicitly. Malformed ids are ignored; unknown players are absent.
+func (s *Service) LastSeen(ctx context.Context, tenantID string, playerIDs []string) (map[string]time.Time, error) {
+	if !isUUID(tenantID) {
+		return nil, errs.New(errs.Invalid, "tenant id required")
+	}
+	ids := make([]string, 0, len(playerIDs))
+	seen := make(map[string]bool, len(playerIDs))
+	for _, id := range playerIDs {
+		if seen[id] || !isUUID(id) {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	out := make(map[string]time.Time, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	if len(ids) > contracts.MaxLastSeenIDs {
+		return nil, domain.ErrTooManyPlayerIDs
+	}
+	rows, err := s.repo.LastSeen(ctx, tenantID, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.PlayerID] = r.At
+	}
+	return out, nil
+}
+
+var _ contracts.Reader = (*Service)(nil)

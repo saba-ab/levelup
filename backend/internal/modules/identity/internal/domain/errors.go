@@ -50,4 +50,13 @@ var (
 	ErrSignupDisabled         = coded(errs.PermissionDenied, "self-signup is disabled", "signup_disabled")
 
 	ErrVersionConflict = coded(errs.Conflict, "modified concurrently, retry", "version_conflict")
+
+	// Account tokens. Every failure of a token is the same error (unknown,
+	// expired, used, superseded), so a caller learns nothing about which.
+	ErrInvalidResetToken        = coded(errs.Invalid, "the password reset link is invalid or has expired", "invalid_reset_token")
+	ErrInvalidVerificationToken = coded(errs.Invalid, "the verification link is invalid or has expired", "invalid_verification_token")
+	ErrInvalidInvitationToken   = coded(errs.Invalid, "the invitation is invalid or has expired", "invalid_invitation_token")
+	ErrInvitationNotFound       = coded(errs.NotFound, "invitation not found", "invitation_not_found")
+	ErrInvitationAccepted       = coded(errs.Conflict, "the invitation was already accepted", "invitation_already_accepted")
+	ErrEmailAlreadyVerified     = coded(errs.Conflict, "email is already verified", "email_already_verified")
 )

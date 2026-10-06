@@ -96,6 +96,18 @@ func toResp(p domain.Player) PlayerResp {
 	}
 }
 
+// parseInstant accepts RFC 3339 (with or without fractional seconds) or a
+// bare date, read as UTC midnight.
+func parseInstant(raw string) (time.Time, bool) {
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return t.UTC(), true
+	}
+	if t, err := time.Parse(time.DateOnly, raw); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
+}
+
 func optional(s string) *string {
 	if s == "" {
 		return nil
@@ -111,14 +123,17 @@ func optional(s string) *string {
 // @Param        cursor    query string false "Opaque cursor from next_cursor"
 // @Param        is_active query bool   false "Filter by active flag"
 // @Param        search    query string false "Case-insensitive prefix of external_id, display_name or email"
+// @Param        sort      query string false "-created_at (default), created_at, or display_name (case-insensitive, falls back to external_id)" Enums(-created_at, created_at, display_name)
+// @Param        created_from query string false "Created at or after (RFC 3339, or YYYY-MM-DD = UTC midnight), inclusive"
+// @Param        created_to   query string false "Created before (RFC 3339, or YYYY-MM-DD = UTC midnight), exclusive"
 // @Success      200 {object} ListResp
 // @Failure      401 {object} httpx.Problem
 // @Failure      403 {object} httpx.Problem
-// @Failure      422 {object} httpx.Problem
+// @Failure      422 {object} httpx.Problem "validation, invalid_sort, invalid_created_range"
 // @Router       /players [get]
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	query := app.ListQuery{Cursor: q.Get("cursor"), Search: q.Get("search")}
+	query := app.ListQuery{Cursor: q.Get("cursor"), Search: q.Get("search"), Sort: q.Get("sort")}
 	if raw := q.Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 {
@@ -136,6 +151,22 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		query.Active = &b
+	}
+	for _, bound := range []struct {
+		name string
+		dst  **time.Time
+	}{{"created_from", &query.CreatedFrom}, {"created_to", &query.CreatedTo}} {
+		raw := q.Get(bound.name)
+		if raw == "" {
+			continue
+		}
+		t, ok := parseInstant(raw)
+		if !ok {
+			httpx.Error(w, r, errs.WithFields(errs.New(errs.Invalid, "validation failed"),
+				map[string]string{bound.name: "must be an RFC 3339 timestamp or a YYYY-MM-DD date"}))
+			return
+		}
+		*bound.dst = &t
 	}
 	page, err := h.svc.List(r.Context(), query)
 	if err != nil {

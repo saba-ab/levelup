@@ -5,7 +5,9 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 
@@ -44,7 +46,10 @@ type Repository interface {
 	ByIDForShare(ctx context.Context, tx *gorm.DB, tenantID, id string) (domain.Program, error)
 	// Save writes every mutable column guarded by p.Version and bumps it.
 	Save(ctx context.Context, tx *gorm.DB, p domain.Program) error
-	List(ctx context.Context, tenantID string, status domain.Status, page Page) ([]domain.Program, error)
+	List(ctx context.Context, tenantID string, f ListFilter, page Page) ([]domain.Program, error)
+	// MemberCounts counts enrolments per program in ONE grouped query;
+	// programs without members are absent from the map.
+	MemberCounts(ctx context.Context, tenantID string, programIDs []string) (map[string]int64, error)
 	// DueForAutoEnd returns running programs (any tenant) whose ends_at <= now.
 	DueForAutoEnd(ctx context.Context, now time.Time, limit int) ([]domain.Program, error)
 
@@ -149,8 +154,20 @@ func (s *Service) Get(ctx context.Context, id string) (domain.Program, error) {
 	return s.repo.ByID(ctx, p.TenantID, id)
 }
 
-// List pages a tenant's programs newest-first; status "" means all.
-func (s *Service) List(ctx context.Context, status, cursor string, limit int) ([]domain.Program, string, error) {
+// ListFilter narrows List. Status "" means all; Search "" means no search,
+// otherwise a case-insensitive substring of name or slug (LIKE wildcards in
+// it match literally).
+type ListFilter struct {
+	Status domain.Status
+	Search string
+}
+
+// MaxSearchLength caps the search query parameter.
+const MaxSearchLength = 100
+
+// List pages a tenant's programs newest-first; status "" means all, search
+// "" means no search.
+func (s *Service) List(ctx context.Context, status, search, cursor string, limit int) ([]domain.Program, string, error) {
 	p, err := s.authorize(ctx, contracts.PermViewAny)
 	if err != nil {
 		return nil, "", err
@@ -161,11 +178,17 @@ func (s *Service) List(ctx context.Context, status, cursor string, limit int) ([
 			return nil, "", err
 		}
 	}
+	search = strings.TrimSpace(search)
+	if utf8.RuneCountInString(search) > MaxSearchLength {
+		return nil, "", errs.WithFields(errs.WithCode(errs.New(errs.Invalid, "search is too long"), "invalid_search"),
+			map[string]string{"search": "at most 100 characters"})
+	}
 	page, err := pageFrom(cursor, limit)
 	if err != nil {
 		return nil, "", err
 	}
-	rows, err := s.repo.List(ctx, p.TenantID, st, Page{At: page.At, ID: page.ID, Limit: page.Limit + 1})
+	rows, err := s.repo.List(ctx, p.TenantID, ListFilter{Status: st, Search: search},
+		Page{At: page.At, ID: page.ID, Limit: page.Limit + 1})
 	if err != nil {
 		return nil, "", err
 	}
@@ -176,6 +199,29 @@ func (s *Service) List(ctx context.Context, status, cursor string, limit int) ([
 		next = pagination.EncodeCursor(last.CreatedAt, last.ID)
 	}
 	return rows, next, nil
+}
+
+// MemberCounts decorates programs the caller already loaded through an
+// authorized read with their enrolment counts: one grouped query for the
+// whole page, never one per program. Every id gets an entry (0 when empty);
+// ids of another tenant count 0.
+func (s *Service) MemberCounts(ctx context.Context, programIDs []string) (map[string]int64, error) {
+	p, err := authz.RequireTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64, len(programIDs))
+	if len(programIDs) == 0 {
+		return out, nil
+	}
+	got, err := s.repo.MemberCounts(ctx, p.TenantID, programIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range programIDs {
+		out[id] = got[id]
+	}
+	return out, nil
 }
 
 // Update applies a partial patch. Status is not part of the patch: it moves

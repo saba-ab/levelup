@@ -355,3 +355,33 @@ func deref(s *string) string {
 	}
 	return *s
 }
+
+// lastSeenRow is a scan target, not a table model.
+type lastSeenRow struct {
+	PlayerID   string
+	OccurredAt time.Time
+	EventType  string
+}
+
+// LastSeen is one DISTINCT ON query served by
+// ix_activities_tenant_player_occurred: per player the newest row by
+// (occurred_at, id). Rows not yet resolved to a player id do not count.
+func (r *Postgres) LastSeen(ctx context.Context, tenantID string, playerIDs []string) ([]domain.LastSeen, error) {
+	if len(playerIDs) == 0 {
+		return []domain.LastSeen{}, nil
+	}
+	var rows []lastSeenRow
+	err := r.db.WithContext(ctx).Model(&activity{}).
+		Select("DISTINCT ON (player_id) player_id, occurred_at, event_type").
+		Where("tenant_id = ? AND player_id IN ?", tenantID, playerIDs).
+		Order("player_id, occurred_at DESC, id DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, errs.Wrap(errs.Internal, "load last seen", err)
+	}
+	out := make([]domain.LastSeen, len(rows))
+	for i, row := range rows {
+		out[i] = domain.LastSeen{PlayerID: row.PlayerID, At: row.OccurredAt.UTC(), EventType: row.EventType}
+	}
+	return out, nil
+}

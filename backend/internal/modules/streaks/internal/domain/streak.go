@@ -41,9 +41,12 @@ type Streak struct {
 	PointsPerPeriod int64  // paid once per NEW bucket (Laravel paid on every call, S1)
 	Milestones      []Milestone
 	Active          bool
-	Version         int
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// AutoRecord: activity.received.v1 whose event_type equals ActivityKey
+	// records a period automatically. Tenants opt out per streak.
+	AutoRecord bool
+	Version    int
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // NewStreakInput carries creation fields; Slug may be empty (derived from Name).
@@ -57,6 +60,7 @@ type NewStreakInput struct {
 	PointsPerPeriod int64
 	Milestones      []Milestone
 	Active          bool
+	AutoRecord      *bool // nil = true
 }
 
 func NewStreak(tenantID string, in NewStreakInput, now time.Time) (Streak, error) {
@@ -79,6 +83,7 @@ func NewStreak(tenantID string, in NewStreakInput, now time.Time) (Streak, error
 		PointsPerPeriod: in.PointsPerPeriod,
 		Milestones:      normaliseMilestones(in.Milestones),
 		Active:          in.Active,
+		AutoRecord:      in.AutoRecord == nil || *in.AutoRecord,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -101,6 +106,7 @@ type StreakPatch struct {
 	PointsPerPeriod *int64
 	Milestones      *[]Milestone
 	Active          *bool
+	AutoRecord      *bool
 }
 
 func (s *Streak) Apply(p StreakPatch, now time.Time) error {
@@ -128,6 +134,9 @@ func (s *Streak) Apply(p StreakPatch, now time.Time) error {
 	}
 	if p.Active != nil {
 		next.Active = *p.Active
+	}
+	if p.AutoRecord != nil {
+		next.AutoRecord = *p.AutoRecord
 	}
 	if err := next.validate(); err != nil {
 		return err

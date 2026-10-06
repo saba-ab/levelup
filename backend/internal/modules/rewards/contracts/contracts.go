@@ -8,6 +8,7 @@ import (
 
 	"levelup/internal/platform/authz"
 	"levelup/internal/shared/effect"
+	"levelup/internal/shared/id"
 )
 
 const (
@@ -43,6 +44,18 @@ func DebitKey(claimID string) string { return "reward_claim:" + claimID }
 // RefundKey is the points idempotency key of a claim's refund.
 func RefundKey(claimID string) string { return "reward_refund:" + claimID }
 
+// Fulfilment parts: the third element of FulfilmentKey.
+const (
+	FulfilPoints = "points"
+	FulfilBadge  = "badge"
+	FulfilLevel  = "level"
+)
+
+// FulfilmentKey is the idempotency key of the command that delivers a
+// claim's reward: job.points.credit (FulfilPoints), job.badges.award
+// (FulfilBadge) or job.progression.grant_xp (FulfilLevel).
+func FulfilmentKey(claimID, part string) string { return id.Derive("reward_fulfil", claimID, part) }
+
 type GrantCmdV1 struct {
 	IdempotencyKey string        `json:"idempotency_key"`
 	TenantID       string        `json:"tenant_id"`
@@ -76,6 +89,9 @@ type ClaimV1 struct {
 	ValueType      string         `json:"value_type,omitempty"`
 	ExpiresAt      *time.Time     `json:"expires_at,omitempty"`
 	Source         *effect.Source `json:"source,omitempty"`
+	// FulfilledAt is set once the reward was delivered (fulfilment
+	// commands issued, or the voucher redeemed).
+	FulfilledAt *time.Time `json:"fulfilled_at,omitempty"`
 }
 
 // Reward types.

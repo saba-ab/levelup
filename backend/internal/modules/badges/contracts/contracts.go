@@ -7,6 +7,7 @@ import (
 
 	"levelup/internal/platform/authz"
 	"levelup/internal/shared/effect"
+	"levelup/internal/shared/id"
 )
 
 const (
@@ -42,6 +43,18 @@ const (
 // JobReconcile is the hourly cron checking earned_count == applied awards
 // and earned_count <= max_awards (log + metric only).
 const JobReconcile = "badges.reconcile"
+
+// JobPruneAppliedEvents is the daily cron deleting old dedupe keys of the
+// requirements projection (applied_events) past their retention.
+const JobPruneAppliedEvents = "badges.prune_applied_events"
+
+// SourceRequirements is the effect.Source kind of an automatic award made
+// because the player met the badge's requirements (Source.ID = badge id).
+const SourceRequirements = "badge_requirements"
+
+// AutoAwardKey is the idempotency key of the automatic award of a badge to
+// a player: one per (player, badge), ever.
+func AutoAwardKey(playerID, badgeID string) string { return id.Derive("badge_auto", playerID, badgeID) }
 
 type AwardCmdV1 struct {
 	IdempotencyKey string        `json:"idempotency_key"`

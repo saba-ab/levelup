@@ -102,6 +102,7 @@ type ProgramResp struct {
 	Settings    map[string]any `json:"settings"`
 	Mechanics   map[string]any `json:"mechanics"`
 	Version     int            `json:"version"`
+	MemberCount int64          `json:"member_count"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
@@ -134,7 +135,7 @@ type MemberListResp struct {
 	NextCursor string       `json:"next_cursor"`
 }
 
-func toProgramResp(p domain.Program) ProgramResp {
+func toProgramResp(p domain.Program, memberCount int64) ProgramResp {
 	return ProgramResp{
 		ID:          p.ID,
 		TenantID:    p.TenantID,
@@ -147,6 +148,7 @@ func toProgramResp(p domain.Program) ProgramResp {
 		Settings:    nonNil(p.Settings),
 		Mechanics:   nonNil(p.Mechanics),
 		Version:     p.Version,
+		MemberCount: memberCount,
 		CreatedAt:   p.CreatedAt.UTC(),
 		UpdatedAt:   p.UpdatedAt.UTC(),
 	}

@@ -3,6 +3,7 @@ package transport
 import (
 	"time"
 
+	"levelup/internal/modules/rewards/internal/app"
 	"levelup/internal/modules/rewards/internal/domain"
 )
 
@@ -143,6 +144,7 @@ type ClaimResp struct {
 	RedeemedAt    *time.Time `json:"redeemed_at"`
 	ExpiresAt     *time.Time `json:"expires_at"`
 	CancelledAt   *time.Time `json:"cancelled_at"`
+	FulfilledAt   *time.Time `json:"fulfilled_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
@@ -170,7 +172,7 @@ func toClaimResp(c domain.Claim) ClaimResp {
 		RewardSlug: c.RewardSlug, RewardType: c.RewardType, Status: c.Status, PointsCost: c.PointsCost,
 		RejectReason: c.RejectReason, Code: c.Code,
 		HoldExpiresAt: utc(c.HoldExpiresAt), ClaimedAt: utc(c.ClaimedAt), RedeemedAt: utc(c.RedeemedAt),
-		ExpiresAt: utc(c.ExpiresAt), CancelledAt: utc(c.CancelledAt),
+		ExpiresAt: utc(c.ExpiresAt), CancelledAt: utc(c.CancelledAt), FulfilledAt: utc(c.FulfilledAt),
 		CreatedAt: c.CreatedAt.UTC(), UpdatedAt: c.UpdatedAt.UTC(),
 	}
 }
@@ -181,4 +183,49 @@ func utc(t *time.Time) *time.Time {
 	}
 	u := t.UTC()
 	return &u
+}
+
+// RewardStatsResp is one reward's claim counters. claimed counts every claim
+// that settled (whatever happened next); cancelled includes refunded claims;
+// points_spent is the points kept (claims now claimed, redeemed or expired).
+type RewardStatsResp struct {
+	RewardID    string `json:"reward_id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Deleted     bool   `json:"deleted"`
+	Claimed     int64  `json:"claimed"`
+	Redeemed    int64  `json:"redeemed"`
+	Expired     int64  `json:"expired"`
+	Cancelled   int64  `json:"cancelled"`
+	PointsSpent int64  `json:"points_spent"`
+}
+
+// StatsTotalsResp sums RewardStatsResp over the tenant.
+type StatsTotalsResp struct {
+	Claimed     int64 `json:"claimed"`
+	Redeemed    int64 `json:"redeemed"`
+	Expired     int64 `json:"expired"`
+	Cancelled   int64 `json:"cancelled"`
+	PointsSpent int64 `json:"points_spent"`
+}
+
+type StatsResp struct {
+	Rewards []RewardStatsResp `json:"rewards"`
+	Totals  StatsTotalsResp   `json:"totals"`
+}
+
+func toStatsResp(r app.StatsReport) StatsResp {
+	out := StatsResp{Rewards: make([]RewardStatsResp, len(r.Rewards)), Totals: StatsTotalsResp{
+		Claimed: r.Totals.Claimed, Redeemed: r.Totals.Redeemed, Expired: r.Totals.Expired,
+		Cancelled: r.Totals.Cancelled, PointsSpent: r.Totals.PointsSpent,
+	}}
+	for i, s := range r.Rewards {
+		out.Rewards[i] = RewardStatsResp{
+			RewardID: s.RewardID, Slug: s.Slug, Name: s.Name, Type: s.Type, Deleted: s.Deleted,
+			Claimed: s.Claimed, Redeemed: s.Redeemed, Expired: s.Expired, Cancelled: s.Cancelled,
+			PointsSpent: s.PointsSpent,
+		}
+	}
+	return out
 }

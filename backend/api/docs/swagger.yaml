@@ -126,6 +126,22 @@ definitions:
       status:
         type: integer
     type: object
+  internal_modules_activity_internal_transport.LastSeenListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_activity_internal_transport.LastSeenResp'
+        type: array
+    type: object
+  internal_modules_activity_internal_transport.LastSeenResp:
+    properties:
+      last_activity_at:
+        type: string
+      last_event_type:
+        type: string
+      player_id:
+        type: string
+    type: object
   internal_modules_activity_internal_transport.ListResp:
     properties:
       data:
@@ -133,6 +149,206 @@ definitions:
           $ref: '#/definitions/internal_modules_activity_internal_transport.ActivityResp'
         type: array
       next_cursor:
+        type: string
+    type: object
+  internal_modules_ai_internal_transport.ContextDTO:
+    properties:
+      badges:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.RefDTO'
+        maxItems: 200
+        type: array
+      event_types:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.EventTypeDTO'
+        maxItems: 200
+        type: array
+      levels:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.LevelDTO'
+        maxItems: 100
+        type: array
+      missions:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.RefDTO'
+        maxItems: 200
+        type: array
+      rewards:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.RefDTO'
+        maxItems: 200
+        type: array
+    type: object
+  internal_modules_ai_internal_transport.DraftReq:
+    properties:
+      context:
+        $ref: '#/definitions/internal_modules_ai_internal_transport.ContextDTO'
+      count:
+        description: default 3
+        maximum: 5
+        minimum: 1
+        type: integer
+      kind:
+        enum:
+        - badge
+        - level
+        - mission
+        - reward
+        - rule
+        - segment
+        type: string
+      prompt:
+        maxLength: 2000
+        type: string
+    required:
+    - kind
+    - prompt
+    type: object
+  internal_modules_ai_internal_transport.DraftResp:
+    properties:
+      drafts:
+        items:
+          type: object
+        type: array
+      kind:
+        type: string
+      model:
+        type: string
+      quota:
+        $ref: '#/definitions/internal_modules_ai_internal_transport.QuotaResp'
+      rejected:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.RejectionResp'
+        type: array
+      usage:
+        $ref: '#/definitions/internal_modules_ai_internal_transport.TokenUsageResp'
+    type: object
+  internal_modules_ai_internal_transport.EventTypeDTO:
+    properties:
+      description:
+        maxLength: 500
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      slug:
+        maxLength: 100
+        type: string
+    required:
+    - slug
+    type: object
+  internal_modules_ai_internal_transport.LevelDTO:
+    properties:
+      level_number:
+        minimum: 1
+        type: integer
+      name:
+        maxLength: 255
+        type: string
+      xp_required:
+        minimum: 0
+        type: integer
+    required:
+    - level_number
+    type: object
+  internal_modules_ai_internal_transport.QuotaResp:
+    properties:
+      daily_limit:
+        description: 0 = unlimited
+        type: integer
+      remaining:
+        description: -1 = unlimited
+        type: integer
+      used:
+        type: integer
+    type: object
+  internal_modules_ai_internal_transport.RefDTO:
+    properties:
+      id:
+        type: string
+      name:
+        maxLength: 255
+        type: string
+    required:
+    - id
+    type: object
+  internal_modules_ai_internal_transport.RejectionResp:
+    properties:
+      index:
+        type: integer
+      reasons:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_modules_ai_internal_transport.TemplateListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.TemplateResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_ai_internal_transport.TemplateResp:
+    properties:
+      default_count:
+        type: integer
+      description:
+        type: string
+      example_prompt:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+    type: object
+  internal_modules_ai_internal_transport.TokenUsageResp:
+    properties:
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+    type: object
+  internal_modules_ai_internal_transport.UsageDayResp:
+    properties:
+      day:
+        description: YYYY-MM-DD (UTC)
+        type: string
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      requests:
+        type: integer
+    type: object
+  internal_modules_ai_internal_transport.UsageResp:
+    properties:
+      daily_limit:
+        description: 0 = unlimited
+        type: integer
+      data:
+        description: newest first; days without usage omitted
+        items:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.UsageDayResp'
+        type: array
+      enabled:
+        type: boolean
+      model:
+        type: string
+      remaining:
+        description: -1 = unlimited
+        type: integer
+      today:
+        $ref: '#/definitions/internal_modules_ai_internal_transport.UsageDayResp'
+    type: object
+  internal_modules_analytics_internal_transport.DayCountResp:
+    properties:
+      count:
+        type: integer
+      day:
         type: string
     type: object
   internal_modules_badges_internal_transport.AwardReq:
@@ -206,6 +422,25 @@ definitions:
       version:
         type: integer
     type: object
+  internal_modules_badges_internal_transport.BadgeStatResp:
+    properties:
+      awarded_count:
+        type: integer
+      badge_id:
+        type: string
+      deleted:
+        type: boolean
+      last_awarded_at:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      tier:
+        type: string
+      unique_players:
+        type: integer
+    type: object
   internal_modules_badges_internal_transport.CreateBadgeReq:
     properties:
       category:
@@ -261,6 +496,14 @@ definitions:
     - name
     - tier
     type: object
+  internal_modules_badges_internal_transport.DayCountResp:
+    properties:
+      count:
+        type: integer
+      date:
+        description: YYYY-MM-DD
+        type: string
+    type: object
   internal_modules_badges_internal_transport.PlayerBadgeListResp:
     properties:
       data:
@@ -289,6 +532,21 @@ definitions:
       player_id:
         type: string
       version:
+        type: integer
+    type: object
+  internal_modules_badges_internal_transport.StatsResp:
+    properties:
+      awards_per_day:
+        items:
+          $ref: '#/definitions/internal_modules_badges_internal_transport.DayCountResp'
+        type: array
+      badges:
+        items:
+          $ref: '#/definitions/internal_modules_badges_internal_transport.BadgeStatResp'
+        type: array
+      total_awarded:
+        type: integer
+      unique_players:
         type: integer
     type: object
   internal_modules_badges_internal_transport.UpdateBadgeReq:
@@ -524,6 +782,24 @@ definitions:
           $ref: '#/definitions/internal_modules_identity_internal_transport.RoleResp'
         type: array
     type: object
+  internal_modules_identity_internal_transport.AcceptInvitationReq:
+    properties:
+      name:
+        maxLength: 255
+        type: string
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      password_confirmation:
+        type: string
+      token:
+        maxLength: 128
+        type: string
+    required:
+    - password
+    - token
+    type: object
   internal_modules_identity_internal_transport.AssignRolesReq:
     properties:
       role_ids:
@@ -549,6 +825,24 @@ definitions:
         type: array
     required:
     - name
+    type: object
+  internal_modules_identity_internal_transport.CreateInvitationReq:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      role_ids:
+        items:
+          type: integer
+        maxItems: 10
+        minItems: 1
+        type: array
+    required:
+    - email
+    - role_ids
     type: object
   internal_modules_identity_internal_transport.CreateUserReq:
     properties:
@@ -580,6 +874,70 @@ definitions:
         $ref: '#/definitions/internal_modules_identity_internal_transport.APIKeyResp'
       secret:
         description: Secret is shown once; LevelUp stores only its hash.
+        type: string
+    type: object
+  internal_modules_identity_internal_transport.ForgotPasswordReq:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+    required:
+    - email
+    type: object
+  internal_modules_identity_internal_transport.InvitationListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.InvitationResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_identity_internal_transport.InvitationPreviewResp:
+    properties:
+      email:
+        type: string
+      expires_at:
+        type: string
+      inviter_name:
+        type: string
+      name:
+        type: string
+      role_ids:
+        items:
+          type: integer
+        type: array
+      roles:
+        items:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.RoleResp'
+        type: array
+      tenant_name:
+        type: string
+    type: object
+  internal_modules_identity_internal_transport.InvitationResp:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      invited_by:
+        type: string
+      name:
+        type: string
+      role_ids:
+        items:
+          type: integer
+        type: array
+      roles:
+        items:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.RoleResp'
+        type: array
+      status:
+        description: pending | expired (lists show open invitations only)
         type: string
     type: object
   internal_modules_identity_internal_transport.LoginReq:
@@ -641,6 +999,21 @@ definitions:
     - email
     - password
     - tenant_name
+    type: object
+  internal_modules_identity_internal_transport.ResetPasswordReq:
+    properties:
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      password_confirmation:
+        type: string
+      token:
+        maxLength: 128
+        type: string
+    required:
+    - password
+    - token
     type: object
   internal_modules_identity_internal_transport.RoleResp:
     properties:
@@ -767,8 +1140,46 @@ definitions:
       updated_at:
         type: string
     type: object
+  internal_modules_identity_internal_transport.VerifyEmailReq:
+    properties:
+      token:
+        maxLength: 128
+        type: string
+    required:
+    - token
+    type: object
+  internal_modules_leaderboards_internal_transport.ConfigReq:
+    properties:
+      event_type:
+        maxLength: 100
+        type: string
+      property:
+        maxLength: 100
+        type: string
+      value:
+        enum:
+        - count
+        - property
+        type: string
+    required:
+    - event_type
+    - value
+    type: object
+  internal_modules_leaderboards_internal_transport.ConfigResp:
+    properties:
+      event_type:
+        type: string
+      property:
+        type: string
+      value:
+        type: string
+    type: object
   internal_modules_leaderboards_internal_transport.CreateReq:
     properties:
+      config:
+        allOf:
+        - $ref: '#/definitions/internal_modules_leaderboards_internal_transport.ConfigReq'
+        description: Config is required for type activity and refused for every other.
       description:
         maxLength: 2000
         type: string
@@ -806,6 +1217,7 @@ definitions:
         - badges
         - missions
         - xp
+        - activity
         type: string
     required:
     - name
@@ -839,6 +1251,8 @@ definitions:
     type: object
   internal_modules_leaderboards_internal_transport.LeaderboardResp:
     properties:
+      config:
+        $ref: '#/definitions/internal_modules_leaderboards_internal_transport.ConfigResp'
       created_at:
         type: string
       description:
@@ -953,6 +1367,10 @@ definitions:
         type: string
       criteria:
         additionalProperties: {}
+        description: |-
+          Criteria grammar: {"event_type": "...", "where": [{"field", "operator", "value"}],
+          "increment": {"by": "count"} | {"by": "property", "field": "..."}}.
+          With event_type, matching activities progress the mission automatically.
         type: object
       description:
         maxLength: 1000
@@ -1041,6 +1459,36 @@ definitions:
         type: integer
       xp_reward:
         type: integer
+    type: object
+  internal_modules_missions_internal_transport.MissionStatsListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_missions_internal_transport.MissionStatsResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_missions_internal_transport.MissionStatsResp:
+    properties:
+      avg_hours_to_complete:
+        type: number
+      completed:
+        type: integer
+      completion_rate:
+        type: number
+      in_progress:
+        type: integer
+      mission_id:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      started:
+        type: integer
+      status:
+        type: string
     type: object
   internal_modules_missions_internal_transport.MissionSummaryResp:
     properties:
@@ -1134,6 +1582,300 @@ definitions:
         minimum: 0
         type: integer
     type: object
+  internal_modules_notifications_internal_transport.ChannelsResp:
+    properties:
+      email:
+        $ref: '#/definitions/internal_modules_notifications_internal_transport.EmailChannelResp'
+      in_app:
+        $ref: '#/definitions/internal_modules_notifications_internal_transport.InAppChannelResp'
+      updated_at:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.CountsResp:
+    properties:
+      delivered:
+        type: integer
+      failed:
+        type: integer
+      pending:
+        type: integer
+      read:
+        type: integer
+      sent:
+        type: integer
+      skipped:
+        type: integer
+    type: object
+  internal_modules_notifications_internal_transport.CreateTemplateReq:
+    properties:
+      body_template:
+        maxLength: 10000
+        type: string
+      channels:
+        items:
+          type: string
+        maxItems: 2
+        minItems: 1
+        type: array
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        type: string
+      title_template:
+        maxLength: 500
+        type: string
+      trigger:
+        enum:
+        - badges.awarded
+        - progression.level_reached
+        - missions.completed
+        - streaks.milestone_reached
+        - streaks.broken
+        - rewards.claimed
+        - points.credited
+        type: string
+    required:
+    - channels
+    - name
+    - title_template
+    - trigger
+    type: object
+  internal_modules_notifications_internal_transport.EmailChannelPatch:
+    properties:
+      enabled:
+        type: boolean
+      from_name:
+        maxLength: 100
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.EmailChannelResp:
+    properties:
+      enabled:
+        type: boolean
+      from_name:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.FeedItemResp:
+    properties:
+      body:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      read:
+        type: boolean
+      read_at:
+        type: string
+      template_id:
+        type: string
+      title:
+        type: string
+      trigger:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.FeedResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.FeedItemResp'
+        type: array
+      next_cursor:
+        type: string
+      unread_count:
+        type: integer
+    type: object
+  internal_modules_notifications_internal_transport.HistoryListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.NotificationResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.InAppChannelResp:
+    properties:
+      enabled:
+        description: always true
+        type: boolean
+    type: object
+  internal_modules_notifications_internal_transport.NotificationResp:
+    properties:
+      attempts:
+        type: integer
+      body:
+        type: string
+      channel:
+        type: string
+      created_at:
+        type: string
+      delivered_at:
+        type: string
+      event_id:
+        type: string
+      id:
+        type: string
+      last_error:
+        type: string
+      player_id:
+        type: string
+      read_at:
+        type: string
+      reason:
+        type: string
+      status:
+        type: string
+      template_id:
+        type: string
+      template_name:
+        type: string
+      title:
+        type: string
+      trigger:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.PreviewReq:
+    properties:
+      player_id:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.PreviewResp:
+    properties:
+      body:
+        type: string
+      html:
+        type: string
+      title:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.ReadAllResp:
+    properties:
+      updated:
+        type: integer
+    type: object
+  internal_modules_notifications_internal_transport.StatsResp:
+    properties:
+      by_channel:
+        additionalProperties:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.CountsResp'
+        type: object
+      by_template:
+        items:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.TemplateCountsResp'
+        type: array
+      delivered:
+        type: integer
+      failed:
+        type: integer
+      open_rate:
+        type: number
+      pending:
+        type: integer
+      read:
+        type: integer
+      sent:
+        type: integer
+      skipped:
+        type: integer
+    type: object
+  internal_modules_notifications_internal_transport.TemplateCountsResp:
+    properties:
+      delivered:
+        type: integer
+      failed:
+        type: integer
+      name:
+        type: string
+      pending:
+        type: integer
+      read:
+        type: integer
+      sent:
+        type: integer
+      skipped:
+        type: integer
+      template_id:
+        type: string
+      trigger:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.TemplateListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.TemplateResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_notifications_internal_transport.TemplateResp:
+    properties:
+      body_template:
+        type: string
+      channels:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      created_by:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      title_template:
+        type: string
+      trigger:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  internal_modules_notifications_internal_transport.UpdateChannelsReq:
+    properties:
+      email:
+        $ref: '#/definitions/internal_modules_notifications_internal_transport.EmailChannelPatch'
+    required:
+    - email
+    type: object
+  internal_modules_notifications_internal_transport.UpdateTemplateReq:
+    properties:
+      body_template:
+        maxLength: 10000
+        type: string
+      channels:
+        items:
+          type: string
+        maxItems: 2
+        minItems: 1
+        type: array
+      is_active:
+        type: boolean
+      name:
+        maxLength: 255
+        type: string
+      title_template:
+        maxLength: 500
+        type: string
+      trigger:
+        enum:
+        - badges.awarded
+        - progression.level_reached
+        - missions.completed
+        - streaks.milestone_reached
+        - streaks.broken
+        - rewards.claimed
+        - points.credited
+        type: string
+    type: object
   internal_modules_player_internal_transport.CreateReq:
     properties:
       attributes:
@@ -1200,6 +1942,15 @@ definitions:
       is_active:
         type: boolean
     type: object
+  internal_modules_points_internal_transport.BucketResp:
+    properties:
+      from:
+        type: integer
+      players:
+        type: integer
+      to:
+        type: integer
+    type: object
   internal_modules_points_internal_transport.CreditReq:
     properties:
       amount:
@@ -1218,6 +1969,23 @@ definitions:
     - amount
     - kind
     type: object
+  internal_modules_points_internal_transport.DailyListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_points_internal_transport.DailyResp'
+        type: array
+    type: object
+  internal_modules_points_internal_transport.DailyResp:
+    properties:
+      credited:
+        type: integer
+      day:
+        description: YYYY-MM-DD
+        type: string
+      debited:
+        type: integer
+    type: object
   internal_modules_points_internal_transport.DebitReq:
     properties:
       amount:
@@ -1235,6 +2003,13 @@ definitions:
     required:
     - amount
     - kind
+    type: object
+  internal_modules_points_internal_transport.DistributionResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_points_internal_transport.BucketResp'
+        type: array
     type: object
   internal_modules_points_internal_transport.EntryListResp:
     properties:
@@ -1290,6 +2065,21 @@ definitions:
     required:
     - is_active
     type: object
+  internal_modules_points_internal_transport.SummaryResp:
+    properties:
+      credited_last_30d:
+        type: integer
+      debited_last_30d:
+        type: integer
+      lifetime_earned:
+        type: integer
+      lifetime_spent:
+        type: integer
+      open_wallets:
+        type: integer
+      total_balance:
+        type: integer
+    type: object
   internal_modules_points_internal_transport.TransferReq:
     properties:
       amount:
@@ -1314,6 +2104,13 @@ definitions:
         $ref: '#/definitions/internal_modules_points_internal_transport.EntryResp'
       transfer_id:
         type: string
+    type: object
+  internal_modules_points_internal_transport.WalletListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_points_internal_transport.WalletResp'
+        type: array
     type: object
   internal_modules_points_internal_transport.WalletResp:
     properties:
@@ -1452,6 +2249,8 @@ definitions:
       mechanics:
         additionalProperties: {}
         type: object
+      member_count:
+        type: integer
       name:
         type: string
       settings:
@@ -1607,6 +2406,13 @@ definitions:
       xp_required:
         type: integer
     type: object
+  internal_modules_progression_internal_transport.ProgressListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_progression_internal_transport.ProgressResp'
+        type: array
+    type: object
   internal_modules_progression_internal_transport.ProgressResp:
     properties:
       current_level:
@@ -1678,6 +2484,8 @@ definitions:
       created_at:
         type: string
       expires_at:
+        type: string
+      fulfilled_at:
         type: string
       hold_expires_at:
         type: string
@@ -1830,6 +2638,51 @@ definitions:
       value_type:
         type: string
     type: object
+  internal_modules_rewards_internal_transport.RewardStatsResp:
+    properties:
+      cancelled:
+        type: integer
+      claimed:
+        type: integer
+      deleted:
+        type: boolean
+      expired:
+        type: integer
+      name:
+        type: string
+      points_spent:
+        type: integer
+      redeemed:
+        type: integer
+      reward_id:
+        type: string
+      slug:
+        type: string
+      type:
+        type: string
+    type: object
+  internal_modules_rewards_internal_transport.StatsResp:
+    properties:
+      rewards:
+        items:
+          $ref: '#/definitions/internal_modules_rewards_internal_transport.RewardStatsResp'
+        type: array
+      totals:
+        $ref: '#/definitions/internal_modules_rewards_internal_transport.StatsTotalsResp'
+    type: object
+  internal_modules_rewards_internal_transport.StatsTotalsResp:
+    properties:
+      cancelled:
+        type: integer
+      claimed:
+        type: integer
+      expired:
+        type: integer
+      points_spent:
+        type: integer
+      redeemed:
+        type: integer
+    type: object
   internal_modules_rewards_internal_transport.UpdateRewardReq:
     properties:
       badge_reward_id:
@@ -1917,9 +2770,15 @@ definitions:
         type: integer
       program_id:
         type: string
+      schedule:
+        description: 'Schedule: {starts_at?, ends_at?, days_of_week?: [0-6], hours?:
+          {from: "HH:MM", to: "HH:MM"}, timezone?: IANA}.'
+        type: object
       slug:
         maxLength: 120
         type: string
+      stop_processing:
+        type: boolean
       trigger_event:
         maxLength: 100
         type: string
@@ -1941,6 +2800,10 @@ definitions:
         type: integer
       limits:
         type: object
+      schedule:
+        type: object
+      stop_processing:
+        type: boolean
     type: object
   internal_modules_rules_internal_transport.DecisionDetailResp:
     properties:
@@ -2020,6 +2883,27 @@ definitions:
         type: integer
       tenant_id:
         type: string
+    type: object
+  internal_modules_rules_internal_transport.DraftDefinitionReq:
+    properties:
+      actions:
+        items:
+          type: object
+        type: array
+      conditions:
+        type: object
+      limits:
+        type: object
+      schedule:
+        type: object
+      stop_processing:
+        type: boolean
+      trigger_event:
+        maxLength: 100
+        type: string
+    required:
+    - actions
+    - trigger_event
     type: object
   internal_modules_rules_internal_transport.EffectResp:
     properties:
@@ -2122,6 +3006,65 @@ definitions:
       updated_at:
         type: string
     type: object
+  internal_modules_rules_internal_transport.RuleStatResp:
+    properties:
+      effects_applied:
+        type: integer
+      effects_rejected:
+        type: integer
+      fired:
+        type: integer
+      limited:
+        type: integer
+      name:
+        type: string
+      not_matched:
+        type: integer
+      out_of_schedule:
+        type: integer
+      points_awarded:
+        type: integer
+      rule_id:
+        type: string
+      skipped_by_stop:
+        type: integer
+      xp_awarded:
+        type: integer
+    type: object
+  internal_modules_rules_internal_transport.RuleStatsResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_rules_internal_transport.RuleStatResp'
+        type: array
+      from:
+        type: string
+      to:
+        type: string
+      totals:
+        $ref: '#/definitions/internal_modules_rules_internal_transport.RuleStatsTotalsResp'
+    type: object
+  internal_modules_rules_internal_transport.RuleStatsTotalsResp:
+    properties:
+      effects_applied:
+        type: integer
+      effects_rejected:
+        type: integer
+      fired:
+        type: integer
+      limited:
+        type: integer
+      not_matched:
+        type: integer
+      out_of_schedule:
+        type: integer
+      points_awarded:
+        type: integer
+      skipped_by_stop:
+        type: integer
+      xp_awarded:
+        type: integer
+    type: object
   internal_modules_rules_internal_transport.SimEffectResp:
     properties:
       action_index:
@@ -2188,6 +3131,11 @@ definitions:
         type: string
       status:
         type: string
+      stop_processing:
+        type: boolean
+      stopped_by:
+        description: StoppedBy is the rule whose firing skipped this one (status skipped_by_stop).
+        type: string
     type: object
   internal_modules_rules_internal_transport.SimulateReq:
     properties:
@@ -2196,8 +3144,12 @@ definitions:
         type: integer
       context:
         type: object
+      definition:
+        $ref: '#/definitions/internal_modules_rules_internal_transport.DraftDefinitionReq'
       event_type:
         maxLength: 100
+        type: string
+      occurred_at:
         type: string
       player:
         $ref: '#/definitions/internal_modules_rules_internal_transport.SimPlayerReq'
@@ -2208,13 +3160,22 @@ definitions:
         type: string
       properties:
         type: object
-    required:
-    - event_type
     type: object
   internal_modules_rules_internal_transport.SimulateResp:
     properties:
+      draft:
+        description: Draft is true when definition was simulated instead of the live
+          ruleset.
+        type: boolean
+      history_loaded:
+        description: |-
+          HistoryLoaded is true when history.* facts came from the player's
+          recorded activity (stored players only; inline players have none).
+        type: boolean
       limits_enforced:
         type: boolean
+      occurred_at:
+        type: string
       outcome:
         type: string
       player_id:
@@ -2266,12 +3227,16 @@ definitions:
         type: integer
       program_id:
         type: string
+      schedule:
+        type: object
       status:
         enum:
         - active
         - inactive
         - archived
         type: string
+      stop_processing:
+        type: boolean
       trigger_event:
         maxLength: 100
         type: string
@@ -2307,14 +3272,95 @@ definitions:
         type: string
       rule_id:
         type: string
+      schedule:
+        type: object
+      stop_processing:
+        type: boolean
       version:
         type: integer
+    type: object
+  internal_modules_segments_internal_transport.CreateReq:
+    properties:
+      conditions:
+        additionalProperties: {}
+        type: object
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 255
+        type: string
+    required:
+    - conditions
+    - name
+    type: object
+  internal_modules_segments_internal_transport.MemberListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_segments_internal_transport.MemberResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_segments_internal_transport.MemberResp:
+    properties:
+      added_at:
+        type: string
+      display_name:
+        type: string
+      external_id:
+        type: string
+      player_id:
+        type: string
+    type: object
+  internal_modules_segments_internal_transport.PreviewReq:
+    properties:
+      conditions:
+        additionalProperties: {}
+        type: object
+    required:
+    - conditions
+    type: object
+  internal_modules_segments_internal_transport.PreviewResp:
+    properties:
+      complete:
+        type: boolean
+      count_estimate:
+        description: |-
+          CountEstimate is the number of matching players among the first
+          Scanned players (ascending id, at most 1000). Exact when Complete.
+        type: integer
+      sample:
+        items:
+          $ref: '#/definitions/transport.PlayerSummary'
+        type: array
+      scanned:
+        type: integer
+    type: object
+  internal_modules_segments_internal_transport.UpdateReq:
+    properties:
+      conditions:
+        additionalProperties: {}
+        type: object
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
     type: object
   internal_modules_streaks_internal_transport.CreateReq:
     properties:
       activity_key:
         maxLength: 100
         type: string
+      auto_record:
+        description: |-
+          AutoRecord (default true): activities whose event_type equals
+          activity_key record a period automatically.
+        type: boolean
       description:
         maxLength: 1000
         type: string
@@ -2431,6 +3477,8 @@ definitions:
     properties:
       activity_key:
         type: string
+      auto_record:
+        type: boolean
       created_at:
         type: string
       description:
@@ -2464,6 +3512,8 @@ definitions:
         maxLength: 100
         minLength: 1
         type: string
+      auto_record:
+        type: boolean
       description:
         maxLength: 1000
         type: string
@@ -2490,6 +3540,171 @@ definitions:
         minLength: 1
         type: string
     type: object
+  internal_modules_webhooks_internal_transport.CreateEndpointReq:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      event_types:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+      is_active:
+        type: boolean
+      url:
+        maxLength: 2048
+        type: string
+    required:
+    - event_types
+    - url
+    type: object
+  internal_modules_webhooks_internal_transport.DeliveryListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_webhooks_internal_transport.DeliveryResp:
+    properties:
+      attempts:
+        type: integer
+      created_at:
+        type: string
+      delivered_at:
+        type: string
+      endpoint_id:
+        type: string
+      event:
+        type: string
+      event_id:
+        type: string
+      id:
+        type: string
+      last_attempt_at:
+        type: string
+      last_error:
+        type: string
+      latency_ms:
+        type: integer
+      payload:
+        type: object
+      response_body:
+        type: string
+      response_status:
+        type: integer
+      status:
+        enum:
+        - pending
+        - succeeded
+        - failed
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_modules_webhooks_internal_transport.EndpointListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_webhooks_internal_transport.EndpointResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  internal_modules_webhooks_internal_transport.EndpointResp:
+    properties:
+      consecutive_failures:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      disabled_at:
+        type: string
+      disabled_reason:
+        type: string
+      event_types:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      is_active:
+        type: boolean
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  internal_modules_webhooks_internal_transport.EndpointWithSecretResp:
+    properties:
+      consecutive_failures:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      disabled_at:
+        type: string
+      disabled_reason:
+        type: string
+      event_types:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      is_active:
+        type: boolean
+      secret:
+        type: string
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  internal_modules_webhooks_internal_transport.EventTypeListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_modules_webhooks_internal_transport.EventTypeResp'
+        type: array
+    type: object
+  internal_modules_webhooks_internal_transport.EventTypeResp:
+    properties:
+      description:
+        type: string
+      event:
+        type: string
+    type: object
+  internal_modules_webhooks_internal_transport.UpdateEndpointReq:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      event_types:
+        items:
+          type: string
+        maxItems: 64
+        minItems: 1
+        type: array
+      is_active:
+        type: boolean
+      url:
+        maxLength: 2048
+        minLength: 1
+        type: string
+    required:
+    - event_types
+    type: object
   levelup_internal_platform_httpx.Problem:
     properties:
       code:
@@ -2507,6 +3722,265 @@ definitions:
       trace_id:
         type: string
       type:
+        type: string
+    type: object
+  transport.BadgeCount:
+    properties:
+      badge_id:
+        type: string
+      count:
+        type: integer
+    type: object
+  transport.CohortResp:
+    properties:
+      cohort_start:
+        type: string
+      retained:
+        description: |-
+          Retained[k] is the percentage (0-100, 2 decimals) of the cohort active
+          k weeks after its first week; only weeks that have started are listed.
+        items:
+          type: number
+        type: array
+      size:
+        type: integer
+    type: object
+  transport.CurvePointResp:
+    properties:
+      cohorts:
+        type: integer
+      pct:
+        type: number
+      week:
+        type: integer
+    type: object
+  transport.EngagementDay:
+    properties:
+      badges_awarded:
+        type: integer
+      day:
+        type: string
+      levels_reached:
+        type: integer
+      missions_completed:
+        type: integer
+      missions_started:
+        type: integer
+      rewards_claimed:
+        type: integer
+    type: object
+  transport.EngagementResp:
+    properties:
+      badges_per_day:
+        items:
+          $ref: '#/definitions/internal_modules_analytics_internal_transport.DayCountResp'
+        type: array
+      daily:
+        items:
+          $ref: '#/definitions/transport.EngagementDay'
+        type: array
+      from:
+        type: string
+      levels_by_number:
+        items:
+          $ref: '#/definitions/transport.LevelCount'
+        type: array
+      levels_reached:
+        type: integer
+      missions:
+        $ref: '#/definitions/transport.MissionsResp'
+      rewards_claimed:
+        type: integer
+      to:
+        type: string
+      top_badges:
+        items:
+          $ref: '#/definitions/transport.BadgeCount'
+        type: array
+      top_event_types:
+        items:
+          $ref: '#/definitions/transport.EventTypeCount'
+        type: array
+      top_missions:
+        items:
+          $ref: '#/definitions/transport.MissionCount'
+        type: array
+    type: object
+  transport.EventTypeCount:
+    properties:
+      count:
+        type: integer
+      event_type:
+        type: string
+    type: object
+  transport.FunnelResp:
+    properties:
+      approximation:
+        description: |-
+          Approximation is "day": step order is resolved per UTC day, so steps
+          done on the same day count as in order.
+        type: string
+      from:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/transport.FunnelStepResp'
+        type: array
+      to:
+        type: string
+    type: object
+  transport.FunnelStepResp:
+    properties:
+      event_type:
+        type: string
+      pct_of_first_step:
+        type: number
+      pct_of_previous:
+        type: number
+      players:
+        type: integer
+    type: object
+  transport.LevelCount:
+    properties:
+      count:
+        type: integer
+      level_number:
+        type: string
+    type: object
+  transport.MissionCount:
+    properties:
+      count:
+        type: integer
+      mission_id:
+        type: string
+    type: object
+  transport.MissionsResp:
+    properties:
+      completed:
+        type: integer
+      started:
+        type: integer
+    type: object
+  transport.OverviewDay:
+    properties:
+      active_players:
+        type: integer
+      activities:
+        type: integer
+      day:
+        type: string
+      new_players:
+        type: integer
+      points_credited:
+        type: integer
+      points_debited:
+        type: integer
+    type: object
+  transport.OverviewResp:
+    properties:
+      daily:
+        items:
+          $ref: '#/definitions/transport.OverviewDay'
+        type: array
+      dau:
+        type: integer
+      from:
+        type: string
+      mau:
+        type: integer
+      to:
+        type: string
+      totals:
+        $ref: '#/definitions/transport.OverviewTotals'
+      wau:
+        type: integer
+    type: object
+  transport.OverviewTotals:
+    properties:
+      active_players:
+        type: integer
+      activities:
+        type: integer
+      badges_awarded:
+        type: integer
+      levels_reached:
+        type: integer
+      missions_completed:
+        type: integer
+      missions_started:
+        type: integer
+      new_players:
+        type: integer
+      points_credited:
+        type: integer
+      points_debited:
+        type: integer
+      rewards_claimed:
+        type: integer
+    type: object
+  transport.PlayerSummary:
+    properties:
+      display_name:
+        type: string
+      external_id:
+        type: string
+      id:
+        type: string
+    type: object
+  transport.RefreshResp:
+    properties:
+      segment:
+        $ref: '#/definitions/transport.SegmentResp'
+      status:
+        description: '"queued"'
+        type: string
+    type: object
+  transport.RetentionResp:
+    properties:
+      cohort:
+        type: string
+      cohorts:
+        items:
+          $ref: '#/definitions/transport.CohortResp'
+        type: array
+      curve:
+        items:
+          $ref: '#/definitions/transport.CurvePointResp'
+        type: array
+      weeks:
+        type: integer
+    type: object
+  transport.SegmentListResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/transport.SegmentResp'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  transport.SegmentResp:
+    properties:
+      conditions:
+        additionalProperties: {}
+        type: object
+      created_at:
+        type: string
+      created_by:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      last_refreshed_at:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      refreshing:
+        type: boolean
+      updated_at:
         type: string
     type: object
 info:
@@ -2673,6 +4147,297 @@ paths:
       summary: Ingest up to 100 activities
       tags:
       - activity
+  /activities/last-seen:
+    get:
+      description: For up to 100 player ids, the occurred_at and event_type of each
+        player's most recent activity. Players with no activity resolved to them are
+        absent. Order follows player_ids.
+      parameters:
+      - description: Comma-separated player ids (uuid), at most 100
+        in: query
+        name: player_ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_activity_internal_transport.LastSeenListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: code invalid_player_ids
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Last activity per player
+      tags:
+      - activity
+  /ai/drafts:
+    post:
+      consumes:
+      - application/json
+      description: Returns up to count validated drafts shaped exactly like the owning
+        module's create request. Drafts are not persisted. Counts against the tenant's
+        daily AI request limit.
+      parameters:
+      - description: Draft request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_ai_internal_transport.DraftReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ai_internal_transport.DraftResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: invalid input, ai_refused, ai_output_truncated, invalid_context
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "429":
+          description: ai_quota_exceeded
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "503":
+          description: ai_not_configured, ai_unavailable, ai_bad_output
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Draft gamification entities with AI
+      tags:
+      - ai
+  /ai/templates:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ai_internal_transport.TemplateListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List AI Hub prompt templates
+      tags:
+      - ai
+  /ai/usage:
+    get:
+      parameters:
+      - description: History window in days, today included (default 30, max 90)
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_ai_internal_transport.UsageResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: AI usage and daily quota of the current tenant
+      tags:
+      - ai
+  /analytics/engagement:
+    get:
+      description: Badges per day, missions started/completed, levels reached, rewards
+        claimed and top event types over an inclusive UTC day range (max 366 days).
+      parameters:
+      - description: First day (YYYY-MM-DD or RFC 3339)
+        in: query
+        name: from
+        type: string
+      - description: Last day (YYYY-MM-DD or RFC 3339), default today
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.EngagementResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Analytics engagement
+      tags:
+      - analytics
+  /analytics/funnel:
+    get:
+      description: 'Players who did each event type in order within an inclusive UTC
+        day range (max 366 days). Approximation: order is resolved per UTC day from
+        daily activity, so steps on the same day count as in order.'
+      parameters:
+      - description: 2-10 comma-separated event types, e.g. signup,first_purchase,repeat_purchase
+        in: query
+        name: steps
+        required: true
+        type: string
+      - description: First day (YYYY-MM-DD or RFC 3339)
+        in: query
+        name: from
+        type: string
+      - description: Last day (YYYY-MM-DD or RFC 3339), default today
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.FunnelResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Funnel
+      tags:
+      - analytics
+  /analytics/overview:
+    get:
+      description: Daily activity, active players, points and new players over an
+        inclusive UTC day range (max 366 days; default the 30 days ending today),
+        plus DAU/WAU/MAU ending at "to".
+      parameters:
+      - description: First day (YYYY-MM-DD or RFC 3339)
+        in: query
+        name: from
+        type: string
+      - description: Last day (YYYY-MM-DD or RFC 3339), default today
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.OverviewResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Analytics overview
+      tags:
+      - analytics
+  /analytics/retention:
+    get:
+      description: Weekly cohorts (ISO weeks starting Monday, UTC) by each player's
+        first activity day, for the last N weeks including the current one. retained[k]
+        is the percentage of the cohort active k weeks later; curve is the size-weighted
+        average per week offset.
+      parameters:
+      - description: 'Cohort granularity: week (default)'
+        in: query
+        name: cohort
+        type: string
+      - description: Number of cohorts, 1-52 (default 8)
+        in: query
+        name: weeks
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.RetentionResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Retention cohorts
+      tags:
+      - analytics
   /api-keys:
     get:
       parameters:
@@ -2769,6 +4534,84 @@ paths:
       summary: Revoke an API key (idempotent; effective on the next request)
       tags:
       - api-keys
+  /auth/accept-invite:
+    post:
+      consumes:
+      - application/json
+      description: Creates the user in the invitation's tenant with its roles (email
+        verified) and returns a session like login.
+      parameters:
+      - description: Token, name and password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.AcceptInvitationReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_identity_internal_transport.SessionResp'
+        "409":
+          description: email_taken
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: invalid_invitation_token
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      summary: Accept an invitation and sign in
+      tags:
+      - auth
+  /auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Always 202, whether or not the address has an account (no enumeration).
+        At most 3 emails per address per hour.
+      parameters:
+      - description: Email
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.ForgotPasswordReq'
+      responses:
+        "202":
+          description: Accepted
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      summary: Request a password reset email
+      tags:
+      - auth
+  /auth/invitations/{token}:
+    get:
+      description: Anonymous; the token is the credential. Anything but a pending
+        invitation of an active tenant is 404 invitation_not_found.
+      parameters:
+      - description: Invitation token from the email link
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_identity_internal_transport.InvitationPreviewResp'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      summary: Describe an invitation for the accept page
+      tags:
+      - auth
   /auth/login:
     post:
       consumes:
@@ -2902,6 +4745,75 @@ paths:
       summary: Register a tenant and its owner
       tags:
       - auth
+  /auth/resend-verification:
+    post:
+      description: Earlier links stop working. Throttled requests are accepted silently.
+      responses:
+        "202":
+          description: Accepted
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: email_already_verified
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Email a fresh verification link to the caller
+      tags:
+      - auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Single use. Revokes every session of the user. Unknown, expired,
+        used or superseded tokens are 422 invalid_reset_token.
+      parameters:
+      - description: Token and new password
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.ResetPasswordReq'
+      responses:
+        "204":
+          description: No Content
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      summary: Set a new password with a reset token
+      tags:
+      - auth
+  /auth/verify-email:
+    post:
+      consumes:
+      - application/json
+      description: Unknown, expired or used tokens, or a token for an address the
+        user no longer has, are 422 invalid_verification_token.
+      parameters:
+      - description: Token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.VerifyEmailReq'
+      responses:
+        "204":
+          description: No Content
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      summary: Verify an email address with a token
+      tags:
+      - auth
   /badges:
     get:
       description: Newest first, keyset paginated. Secret and inactive badges are
@@ -2960,6 +4872,10 @@ paths:
     post:
       consumes:
       - application/json
+      description: 'requirements, when set, is evaluated automatically: {"all":[cond],"any":[cond]}
+        with cond {"metric": lifetime_points|missions_completed|streak_days|level|badges_earned|activity_count,
+        "event_type": "<type>" (activity_count only), "gte": int >= 1}. A player meeting
+        it is awarded the badge once. {} or null means no requirements.'
       parameters:
       - description: Badge
         in: body
@@ -2987,7 +4903,7 @@ paths:
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
         "422":
-          description: Unprocessable Entity
+          description: invalid_badge_requirements
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
@@ -3096,7 +5012,7 @@ paths:
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
         "422":
-          description: Unprocessable Entity
+          description: invalid_badge_requirements
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
@@ -3197,6 +5113,32 @@ paths:
       security:
       - BearerAuth: []
       summary: Revoke a badge from a player
+      tags:
+      - badges
+  /badges/stats:
+    get:
+      description: 'Per badge (live badges, plus deleted ones that were awarded):
+        applied awards, distinct players and the last award time, from the award ledger
+        (revokes do not subtract). awards_per_day covers the last 30 UTC days, oldest
+        first, zero-filled.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_badges_internal_transport.StatsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Badge award statistics
       tags:
       - badges
   /event-categories:
@@ -3487,7 +5429,7 @@ paths:
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
         "422":
-          description: Unprocessable Entity
+          description: leaderboard_invalid_type, leaderboard_invalid_metric, leaderboard_invalid_config
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
@@ -3978,7 +5920,7 @@ paths:
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
         "422":
-          description: Unprocessable Entity
+          description: invalid_mission_criteria (fields keyed criteria.*)
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
@@ -4084,7 +6026,7 @@ paths:
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
         "422":
-          description: Unprocessable Entity
+          description: invalid_mission_criteria (fields keyed criteria.*)
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
@@ -4299,6 +6241,482 @@ paths:
       summary: Start a mission for a player (current period)
       tags:
       - missions
+  /missions/{id}/stats:
+    get:
+      parameters:
+      - description: Mission id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_missions_internal_transport.MissionStatsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: mission_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Completion analytics of one mission
+      tags:
+      - missions
+  /missions/stats:
+    get:
+      description: One page of missions (newest first) with started / in_progress
+        / completed attempt counts, completion_rate and avg_hours_to_complete. Missions
+        without attempts report zeros.
+      parameters:
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      - description: Filter by mission status
+        in: query
+        name: status
+        type: string
+      - description: Filter by mission type
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_missions_internal_transport.MissionStatsListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Completion analytics of every mission
+      tags:
+      - missions
+  /notifications/channels:
+    get:
+      description: in_app is always enabled; email is opt-in per tenant.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.ChannelsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Get channel settings
+      tags:
+      - notifications
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email channel fields to change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.UpdateChannelsReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.ChannelsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Update channel settings (partial)
+      tags:
+      - notifications
+  /notifications/history:
+    get:
+      parameters:
+      - description: Filter by template (uuid)
+        in: query
+        name: template_id
+        type: string
+      - description: Filter by status
+        enum:
+        - pending
+        - delivered
+        - failed
+        - skipped
+        in: query
+        name: status
+        type: string
+      - description: Filter by channel
+        enum:
+        - in_app
+        - email
+        in: query
+        name: channel
+        type: string
+      - description: Filter by player (uuid)
+        in: query
+        name: player_id
+        type: string
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.HistoryListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Notification history
+      tags:
+      - notifications
+  /notifications/stats:
+    get:
+      description: sent = every non-skipped notification; open_rate = in_app read
+        / in_app delivered (0..1). from/to bound created_at (RFC 3339, to exclusive).
+      parameters:
+      - description: Created at or after (RFC 3339)
+        in: query
+        name: from
+        type: string
+      - description: Created before (RFC 3339)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.StatsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Notification stats
+      tags:
+      - notifications
+  /notifications/templates:
+    get:
+      parameters:
+      - description: Filter by trigger
+        enum:
+        - badges.awarded
+        - progression.level_reached
+        - missions.completed
+        - streaks.milestone_reached
+        - streaks.broken
+        - rewards.claimed
+        - points.credited
+        in: query
+        name: trigger
+        type: string
+      - description: Filter by is_active
+        in: query
+        name: is_active
+        type: boolean
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.TemplateListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List notification templates
+      tags:
+      - notifications
+    post:
+      consumes:
+      - application/json
+      description: title_template/body_template are Go text/template sources over
+        the documented fields ({{.Player.DisplayName}}, {{.Badge.Name}}, {{.Level.Number}},
+        {{.Points.Amount}}, {{.Mission.Name}}, {{.Streak.Milestone}}, {{.Reward.Name}},
+        ...). They must parse and dry-run; range/define/template/printf are refused.
+      parameters:
+      - description: Template
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.CreateTemplateReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.TemplateResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: notification_template_name_taken
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: notification_template_invalid
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Create a notification template
+      tags:
+      - notifications
+  /notifications/templates/{id}:
+    delete:
+      description: Its notification history stays.
+      parameters:
+      - description: Template id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: notification_template_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Delete a notification template (soft)
+      tags:
+      - notifications
+    get:
+      parameters:
+      - description: Template id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.TemplateResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: notification_template_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Get a notification template
+      tags:
+      - notifications
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.UpdateTemplateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.TemplateResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: notification_template_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: notification_template_name_taken, version_conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: notification_template_invalid
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Update a notification template (partial)
+      tags:
+      - notifications
+  /notifications/templates/{id}/preview:
+    post:
+      consumes:
+      - application/json
+      description: Renders title/body against sample data; with player_id the player
+        fields are that player's. The body may be empty.
+      parameters:
+      - description: Template id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Optional player
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_modules_notifications_internal_transport.PreviewReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.PreviewResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: notification_template_not_found, player_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Preview a notification template
+      tags:
+      - notifications
   /platform/event-categories:
     get:
       produces:
@@ -4716,6 +7134,24 @@ paths:
         in: query
         name: search
         type: string
+      - description: -created_at (default), created_at, or display_name (case-insensitive,
+          falls back to external_id)
+        enum:
+        - -created_at
+        - created_at
+        - display_name
+        in: query
+        name: sort
+        type: string
+      - description: Created at or after (RFC 3339, or YYYY-MM-DD = UTC midnight),
+          inclusive
+        in: query
+        name: created_from
+        type: string
+      - description: Created before (RFC 3339, or YYYY-MM-DD = UTC midnight), exclusive
+        in: query
+        name: created_to
+        type: string
       produces:
       - application/json
       responses:
@@ -4732,7 +7168,7 @@ paths:
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
         "422":
-          description: Unprocessable Entity
+          description: validation, invalid_sort, invalid_created_range
           schema:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
@@ -5046,6 +7482,126 @@ paths:
       summary: List a player's mission attempts with mission summaries
       tags:
       - missions
+  /players/{playerID}/notifications:
+    get:
+      description: For tenant backends and apps. Newest first; unread_count is the
+        player's total unread.
+      parameters:
+      - description: Player id (uuid)
+        in: path
+        name: playerID
+        required: true
+        type: string
+      - description: Only unread
+        in: query
+        name: unread
+        type: boolean
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.FeedResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: player_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: A player's in-app notifications
+      tags:
+      - notifications
+  /players/{playerID}/notifications/{id}/read:
+    post:
+      description: 'Idempotent: read_at keeps the first read time.'
+      parameters:
+      - description: Player id (uuid)
+        in: path
+        name: playerID
+        required: true
+        type: string
+      - description: Notification id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.FeedItemResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: player_not_found, notification_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Mark a notification read
+      tags:
+      - notifications
+  /players/{playerID}/notifications/read-all:
+    post:
+      parameters:
+      - description: Player id (uuid)
+        in: path
+        name: playerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_notifications_internal_transport.ReadAllResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: player_not_found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Mark all of a player's notifications read
+      tags:
+      - notifications
   /players/{playerID}/progress:
     get:
       parameters:
@@ -5525,6 +8081,10 @@ paths:
         in: query
         name: status
         type: string
+      - description: Case-insensitive substring of name or slug (max 100 chars)
+        in: query
+        name: search
+        type: string
       - description: Page size (default 25, max 100)
         in: query
         name: limit
@@ -5937,6 +8497,40 @@ paths:
       summary: Remove a player from a program (idempotent)
       tags:
       - program
+  /progress:
+    get:
+      description: Same shape as GET /players/{playerID}/progress per player. Unknown
+        or foreign players are omitted. At most 100 ids.
+      parameters:
+      - description: Comma-separated player ids (uuid), max 100
+        in: query
+        name: player_ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_progression_internal_transport.ProgressListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: too_many_ids
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Batch-read players' XP and level
+      tags:
+      - progression
   /rewards:
     get:
       parameters:
@@ -6192,6 +8786,72 @@ paths:
       summary: Claim a reward for a player
       tags:
       - rewards
+  /rewards/claims:
+    get:
+      description: Newest first, keyset paginated. from (inclusive) and to (exclusive)
+        bound created_at, RFC 3339.
+      parameters:
+      - description: Claim status
+        enum:
+        - pending_payment
+        - claimed
+        - rejected
+        - redeemed
+        - expired
+        - cancelled
+        - refund_pending
+        - refunded
+        in: query
+        name: status
+        type: string
+      - description: Reward id (uuid)
+        in: query
+        name: reward_id
+        type: string
+      - description: Player id (uuid)
+        in: query
+        name: player_id
+        type: string
+      - description: Created at or after (RFC 3339)
+        in: query
+        name: from
+        type: string
+      - description: Created before (RFC 3339)
+        in: query
+        name: to
+        type: string
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_rewards_internal_transport.ClaimListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List the tenant's reward claims (redemption history)
+      tags:
+      - rewards
   /rewards/claims/{claimID}:
     get:
       parameters:
@@ -6294,6 +8954,30 @@ paths:
       security:
       - BearerAuth: []
       summary: Redeem a claimed reward
+      tags:
+      - rewards
+  /rewards/stats:
+    get:
+      description: Every live reward (and deleted rewards that have claims) with claimed,
+        redeemed, expired, cancelled and points_spent, plus tenant totals.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_rewards_internal_transport.StatsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Claim statistics per reward
       tags:
       - rewards
   /rules:
@@ -6442,10 +9126,10 @@ paths:
     patch:
       consumes:
       - application/json
-      description: 'Partial update. conditions/actions/limits edit the latest version
-        only while it is a draft (409 no_draft_version otherwise: published versions
-        are immutable). status may be active (needs a published version), inactive
-        or archived.'
+      description: 'Partial update. conditions/actions/limits/schedule/stop_processing
+        edit the latest version only while it is a draft (409 no_draft_version otherwise:
+        published versions are immutable). status may be active (needs a published
+        version), inactive or archived.'
       parameters:
       - description: Rule id
         in: path
@@ -6719,7 +9403,12 @@ paths:
       consumes:
       - application/json
       description: 'Synchronous evaluation with no writes: no decision, no counters,
-        no effects. Limits are reported, not enforced.'
+        no history, no effects. Limits are reported, not enforced (stop_processing
+        treats every match as a firing). With definition, only that unpublished body
+        is evaluated (event_type defaults to definition.trigger_event); compile errors
+        are 422 invalid_rule_definition with field errors under definition.*. occurred_at
+        (default now) drives schedules and history windows; history facts are loaded
+        for stored players only.'
       parameters:
       - description: Hypothetical activity
         in: body
@@ -6752,9 +9441,348 @@ paths:
             $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
       security:
       - BearerAuth: []
-      summary: Simulate an activity against the live ruleset
+      summary: Simulate an activity against the live ruleset or a draft definition
       tags:
       - rules
+  /rules/stats:
+    get:
+      description: 'Per rule over [from, to): executions by status (fired, not_matched,
+        limited, out_of_schedule, skipped_by_stop), effects applied/rejected, and
+        points_awarded / xp_awarded (sums of credit_points / grant_xp amounts of fired
+        executions, whatever their settlement), plus totals. Rules are ordered by
+        fired DESC. Defaults: to = now, from = to - 30 days; the range is at most
+        366 days.'
+      parameters:
+      - description: RFC 3339 timestamp or YYYY-MM-DD (UTC midnight)
+        in: query
+        name: from
+        type: string
+      - description: RFC 3339 timestamp or YYYY-MM-DD (UTC midnight), exclusive
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_rules_internal_transport.RuleStatsResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Rule statistics
+      tags:
+      - rules
+  /segments:
+    get:
+      parameters:
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.SegmentListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List segments
+      tags:
+      - segments
+    post:
+      consumes:
+      - application/json
+      description: Stores the definition and queues its first membership refresh.
+      parameters:
+      - description: Segment
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_segments_internal_transport.CreateReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/transport.SegmentResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Create a segment
+      tags:
+      - segments
+  /segments/{id}:
+    delete:
+      description: Drops its membership and publishes segments.deleted.v1.
+      parameters:
+      - description: Segment id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Delete a segment
+      tags:
+      - segments
+    get:
+      parameters:
+      - description: Segment id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.SegmentResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Get a segment
+      tags:
+      - segments
+    patch:
+      consumes:
+      - application/json
+      description: Changing conditions queues a membership refresh.
+      parameters:
+      - description: Segment id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_segments_internal_transport.UpdateReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.SegmentResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Update a segment (partial)
+      tags:
+      - segments
+  /segments/{id}/players:
+    get:
+      description: Materialized members as of the last refresh, newest first.
+      parameters:
+      - description: Segment id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_segments_internal_transport.MemberListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List a segment's players
+      tags:
+      - segments
+  /segments/{id}/refresh:
+    post:
+      description: Queues a recomputation over every player (asynchronous). Poll GET
+        /segments/{id} for last_refreshed_at and member_count.
+      parameters:
+      - description: Segment id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/transport.RefreshResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Refresh a segment's membership
+      tags:
+      - segments
+  /segments/preview:
+    post:
+      consumes:
+      - application/json
+      description: Evaluates unsaved conditions over the tenant's first 1000 players
+        (ascending id) without changing any membership.
+      parameters:
+      - description: Conditions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_segments_internal_transport.PreviewReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_segments_internal_transport.PreviewResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Preview segment conditions
+      tags:
+      - segments
   /streaks:
     get:
       parameters:
@@ -7345,6 +10373,229 @@ paths:
       summary: Replace a user's roles
       tags:
       - users
+  /users/invitations:
+    get:
+      description: Not accepted and not revoked, newest first; expired ones are included
+        with status "expired".
+      parameters:
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from the previous page
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_identity_internal_transport.InvitationListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List the tenant's open invitations
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Emails an accept link (valid 7 days). Same role rules as creating
+        a user. Re-inviting an address revokes its earlier open invitation. Requires
+        a signed-in user (not an API key).
+      parameters:
+      - description: Invitation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_identity_internal_transport.CreateInvitationReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_identity_internal_transport.InvitationResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: email_taken
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Invite a person to the caller's tenant
+      tags:
+      - users
+  /users/invitations/{id}:
+    delete:
+      description: Idempotent. An accepted invitation is 409 invitation_already_accepted.
+      parameters:
+      - description: Invitation id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Revoke an invitation
+      tags:
+      - users
+  /wallets:
+    get:
+      description: Unknown or foreign players are omitted. At most 100 ids.
+      parameters:
+      - description: Comma-separated player ids (uuid), max 100
+        in: query
+        name: player_ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_points_internal_transport.WalletListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: too_many_ids
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Batch-read wallets (zero views for never-opened wallets)
+      tags:
+      - points
+  /wallets/daily:
+    get:
+      parameters:
+      - description: 'First day, YYYY-MM-DD (default: to - 29 days)'
+        in: query
+        name: from
+        type: string
+      - description: 'Last day inclusive, YYYY-MM-DD (default: today)'
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_points_internal_transport.DailyListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: invalid_range
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Daily credited/debited totals from the ledger (UTC days)
+      tags:
+      - points
+  /wallets/distribution:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_points_internal_transport.DistributionResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Balance distribution histogram (10 buckets)
+      tags:
+      - points
+  /wallets/summary:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_points_internal_transport.SummaryResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Tenant-wide wallet summary
+      tags:
+      - points
   /wallets/transfer:
     post:
       consumes:
@@ -7393,4 +10644,401 @@ paths:
       summary: Transfer points between two players of the tenant
       tags:
       - points
+  /webhooks:
+    get:
+      parameters:
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.EndpointListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List webhook endpoints
+      tags:
+      - webhooks
+    post:
+      consumes:
+      - application/json
+      description: |-
+        The URL must be https (http://localhost only when WEBHOOKS_ALLOW_INSECURE) and must not
+        point at private, loopback, link-local or reserved addresses. The response carries the
+        signing secret; it is never shown again (rotate it to get a new one).
+      parameters:
+      - description: Endpoint
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_webhooks_internal_transport.CreateEndpointReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.EndpointWithSecretResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Register a webhook endpoint
+      tags:
+      - webhooks
+  /webhooks/{id}:
+    delete:
+      description: Pending deliveries to it are failed when their job runs.
+      parameters:
+      - description: Endpoint id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Delete a webhook endpoint
+      tags:
+      - webhooks
+    get:
+      parameters:
+      - description: Endpoint id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.EndpointResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Get a webhook endpoint
+      tags:
+      - webhooks
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Endpoint id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_modules_webhooks_internal_transport.UpdateEndpointReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.EndpointResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Update a webhook endpoint (partial)
+      tags:
+      - webhooks
+  /webhooks/{id}/rotate-secret:
+    post:
+      description: Returns the new secret once. Deliveries sent from now on are signed
+        with it.
+      parameters:
+      - description: Endpoint id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.EndpointWithSecretResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Rotate a webhook endpoint's signing secret
+      tags:
+      - webhooks
+  /webhooks/{id}/test:
+    post:
+      description: |-
+        Synchronously POSTs a "webhook.test" event and returns the recorded delivery (status
+        succeeded or failed, response status, latency, response snippet). Not retried.
+      parameters:
+      - description: Endpoint id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Send a test event to a webhook endpoint
+      tags:
+      - webhooks
+  /webhooks/deliveries:
+    get:
+      parameters:
+      - description: Filter by endpoint id
+        in: query
+        name: endpoint_id
+        type: string
+      - description: Filter by status (pending|succeeded|failed)
+        in: query
+        name: status
+        type: string
+      - description: Filter by event name, e.g. badges.awarded
+        in: query
+        name: event
+        type: string
+      - description: Page size (default 25, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Opaque cursor from next_cursor
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.DeliveryListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List webhook deliveries
+      tags:
+      - webhooks
+  /webhooks/deliveries/{deliveryID}:
+    get:
+      parameters:
+      - description: Delivery id
+        in: path
+        name: deliveryID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Get a webhook delivery
+      tags:
+      - webhooks
+  /webhooks/deliveries/{deliveryID}/redeliver:
+    post:
+      description: |-
+        Re-queues the same payload for a fresh retry cycle (signed with the current secret).
+        Responds 202 with the delivery in status pending.
+      parameters:
+      - description: Delivery id
+        in: path
+        name: deliveryID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.DeliveryResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: Redeliver a webhook delivery
+      tags:
+      - webhooks
+  /webhooks/event-types:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_modules_webhooks_internal_transport.EventTypeListResp'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/levelup_internal_platform_httpx.Problem'
+      security:
+      - BearerAuth: []
+      summary: List the subscribable webhook event types
+      tags:
+      - webhooks
 swagger: "2.0"

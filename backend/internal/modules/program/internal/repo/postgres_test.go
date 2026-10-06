@@ -172,7 +172,51 @@ func TestDueForAutoEndAndPurge(t *testing.T) {
 	for range 2 {
 		require.NoError(t, postgres.InTx(ctx, db, func(tx *gorm.DB) error { return r.PurgeTenant(ctx, tx, tenant) }))
 	}
-	list, err := r.List(ctx, tenant, "", app.Page{Limit: 10})
+	list, err := r.List(ctx, tenant, app.ListFilter{}, app.Page{Limit: 10})
 	require.NoError(t, err)
 	require.Empty(t, list)
+}
+
+func TestListSearchEscapesWildcardsAndCountsMembers(t *testing.T) {
+	r, db := setupRepo(t)
+	ctx := context.Background()
+	tenant := id.NewID()
+	pct := mustCreate(t, r, db, tenant, "Summer 50% Off", nil)
+	under := mustCreate(t, r, db, tenant, "Winter_Cup", nil)
+	plain := mustCreate(t, r, db, tenant, "Autumn", nil)
+	mustCreate(t, r, db, id.NewID(), "Summer elsewhere", nil)
+
+	search := func(q string) []string {
+		t.Helper()
+		got, err := r.List(ctx, tenant, app.ListFilter{Search: q}, app.Page{Limit: 10})
+		require.NoError(t, err)
+		ids := make([]string, len(got))
+		for i, p := range got {
+			ids[i] = p.ID
+		}
+		return ids
+	}
+	require.Equal(t, []string{pct.ID}, search("summer"), "case-insensitive, tenant-scoped")
+	require.Equal(t, []string{pct.ID}, search("%"), "% matches literally")
+	require.Equal(t, []string{under.ID}, search("_"), "_ matches literally")
+	require.Equal(t, []string{under.ID}, search("winter-cup"), "slug matches")
+	require.Empty(t, search(`\`))
+	require.Len(t, search(""), 3)
+
+	require.NoError(t, postgres.InTx(ctx, db, func(tx *gorm.DB) error {
+		for _, p := range []string{id.NewID(), id.NewID()} {
+			if _, err := r.Enroll(ctx, tx, domain.Enrollment{ProgramID: pct.ID, TenantID: tenant, PlayerID: p, EnrolledAt: now}); err != nil {
+				return err
+			}
+		}
+		_, err := r.Enroll(ctx, tx, domain.Enrollment{ProgramID: under.ID, TenantID: tenant, PlayerID: id.NewID(), EnrolledAt: now})
+		return err
+	}))
+	counts, err := r.MemberCounts(ctx, tenant, []string{pct.ID, under.ID, plain.ID})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int64{pct.ID: 2, under.ID: 1}, counts)
+
+	foreign, err := r.MemberCounts(ctx, id.NewID(), []string{pct.ID})
+	require.NoError(t, err)
+	require.Empty(t, foreign)
 }

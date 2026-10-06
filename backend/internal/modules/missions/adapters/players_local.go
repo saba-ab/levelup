@@ -33,7 +33,29 @@ func (l *LocalPlayers) PlayersByIDs(ctx context.Context, tenantID string, ids []
 		if p.TenantID != tenantID {
 			continue
 		}
-		out[p.ID] = ports.PlayerSnapshot{ID: p.ID, TenantID: p.TenantID, Active: p.Active}
+		out[p.ID] = snapshot(p)
 	}
 	return out, nil
+}
+
+func (l *LocalPlayers) PlayersByExternalIDs(ctx context.Context, tenantID string, externalIDs []string) (map[string]ports.PlayerSnapshot, error) {
+	out := make(map[string]ports.PlayerSnapshot, len(externalIDs))
+	if len(externalIDs) == 0 {
+		return out, nil
+	}
+	got, err := l.players.PlayersByExternalIDs(ctx, tenantID, externalIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range got {
+		if p.TenantID != tenantID {
+			continue
+		}
+		out[p.ExternalID] = snapshot(p)
+	}
+	return out, nil
+}
+
+func snapshot(p playercontracts.PlayerSnapshot) ports.PlayerSnapshot {
+	return ports.PlayerSnapshot{ID: p.ID, TenantID: p.TenantID, ExternalID: p.ExternalID, Active: p.Active}
 }

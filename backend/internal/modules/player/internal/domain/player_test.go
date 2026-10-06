@@ -167,3 +167,8 @@ func TestMarkDeletedAndBelongsTo(t *testing.T) {
 	p.MarkDeleted(t0)
 	require.True(t, p.Deleted())
 }
+
+func TestSortNameFallsBackToExternalID(t *testing.T) {
+	require.Equal(t, "neo", Player{DisplayName: "NEO", ExternalID: "X-1"}.SortName())
+	require.Equal(t, "x-1", Player{ExternalID: "X-1"}.SortName())
+}

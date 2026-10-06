@@ -12,6 +12,7 @@ import (
 	"levelup/internal/modules/identity/internal/domain"
 	"levelup/internal/platform/authn"
 	"levelup/internal/platform/authz"
+	"levelup/internal/platform/mail"
 	"levelup/internal/shared/errs"
 )
 
@@ -64,10 +65,12 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCmd) (Session, error
 	}
 	t.OwnerUserID = u.ID
 
+	var verification *mail.Message
 	for attempt := range slugAttempts {
 		if attempt > 0 {
 			t.Slug = domain.SlugFor(t.Name, randomSuffix())
 		}
+		verification = nil
 		err = s.tx(ctx, func(tx *gorm.DB) error {
 			// Tenant first: its owner FK is DEFERRABLE INITIALLY DEFERRED.
 			if err := s.repo.CreateTenant(ctx, tx, t); err != nil {
@@ -81,6 +84,13 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCmd) (Session, error
 			}); err != nil {
 				return err
 			}
+			if s.tokensEnabled() == nil {
+				msg, err := s.stageVerification(ctx, tx, u, now)
+				if err != nil {
+					return err
+				}
+				verification = &msg
+			}
 			return s.outbox.Publish(ctx, tx, contracts.TopicUserRegistered, contracts.UserRegisteredV1{
 				UserID: u.ID, TenantID: t.ID, Email: u.Email, Name: u.Name, At: now,
 			})
@@ -91,6 +101,11 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCmd) (Session, error
 	}
 	if err != nil {
 		return Session{}, err
+	}
+	// The verification mail is best effort: login never waits on it, and
+	// POST /auth/resend-verification sends a fresh link.
+	if verification != nil {
+		_ = s.send(ctx, *verification)
 	}
 	return s.issueSession(ctx, u, &t)
 }

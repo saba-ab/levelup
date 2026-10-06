@@ -220,3 +220,48 @@ func toAwardResp(o app.AwardOutcome) AwardResp {
 		PlayerBadge:    toPlayerBadgeResp(o.PlayerBadge, nil),
 	}
 }
+
+// BadgeStatResp is one badge's award counters (applied awards on the ledger).
+type BadgeStatResp struct {
+	BadgeID       string     `json:"badge_id"`
+	Slug          string     `json:"slug"`
+	Name          string     `json:"name"`
+	Tier          string     `json:"tier"`
+	Deleted       bool       `json:"deleted"`
+	AwardedCount  int64      `json:"awarded_count"`
+	UniquePlayers int64      `json:"unique_players"`
+	LastAwardedAt *time.Time `json:"last_awarded_at"`
+}
+
+// DayCountResp is the applied awards of one UTC day.
+type DayCountResp struct {
+	Date  string `json:"date"` // YYYY-MM-DD
+	Count int64  `json:"count"`
+}
+
+// StatsResp is GET /badges/stats.
+type StatsResp struct {
+	Badges        []BadgeStatResp `json:"badges"`
+	AwardsPerDay  []DayCountResp  `json:"awards_per_day"`
+	TotalAwarded  int64           `json:"total_awarded"`
+	UniquePlayers int64           `json:"unique_players"`
+}
+
+func toStatsResp(r app.StatsReport) StatsResp {
+	out := StatsResp{
+		Badges:        make([]BadgeStatResp, len(r.Badges)),
+		AwardsPerDay:  make([]DayCountResp, len(r.AwardsPerDay)),
+		TotalAwarded:  r.TotalAwarded,
+		UniquePlayers: r.UniquePlayers,
+	}
+	for i, b := range r.Badges {
+		out.Badges[i] = BadgeStatResp{
+			BadgeID: b.BadgeID, Slug: b.Slug, Name: b.Name, Tier: b.Tier, Deleted: b.Deleted,
+			AwardedCount: b.AwardedCount, UniquePlayers: b.UniquePlayers, LastAwardedAt: b.LastAwardedAt,
+		}
+	}
+	for i, d := range r.AwardsPerDay {
+		out.AwardsPerDay[i] = DayCountResp{Date: d.Day, Count: d.Count}
+	}
+	return out
+}

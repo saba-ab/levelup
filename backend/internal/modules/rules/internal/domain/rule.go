@@ -109,6 +109,9 @@ func (r Rule) Validate() error {
 	return nil
 }
 
+// ValidTriggerEvent reports a well-formed trigger event slug.
+func ValidTriggerEvent(s string) bool { return len(s) <= MaxTriggerLen && triggerRe.MatchString(s) }
+
 // Slugify lower-cases and dashes a name.
 func Slugify(name string) string {
 	s := nonSlugRe.ReplaceAllString(strings.ToLower(name), "-")
@@ -192,60 +195,124 @@ func (r *Rule) Delete(now time.Time) {
 // Version is one definition of a rule. Draft versions may be edited; once
 // published (PublishedAt set) a version is immutable forever.
 type Version struct {
-	ID          string
-	RuleID      string
-	TenantID    string
-	Version     int
-	Conditions  json.RawMessage
-	Actions     json.RawMessage
-	Limits      json.RawMessage
-	PublishedAt *time.Time
-	CreatedBy   string
-	CreatedAt   time.Time
+	ID             string
+	RuleID         string
+	TenantID       string
+	Version        int
+	Conditions     json.RawMessage
+	Actions        json.RawMessage
+	Limits         json.RawMessage
+	Schedule       json.RawMessage // JSON null = always
+	StopProcessing bool
+	PublishedAt    *time.Time
+	CreatedBy      string
+	CreatedAt      time.Time
+}
+
+// Definition is a version's rule body (what the evaluator compiles).
+type Definition struct {
+	Conditions     json.RawMessage
+	Actions        json.RawMessage
+	Limits         json.RawMessage
+	Schedule       json.RawMessage
+	StopProcessing bool
+}
+
+// Spec maps the definition to the evaluator's input.
+func (d Definition) Spec() eval.Spec {
+	return eval.Spec{Conditions: d.Conditions, Actions: d.Actions, Limits: d.Limits,
+		Schedule: d.Schedule, StopProcessing: d.StopProcessing}
+}
+
+// DefinitionPatch edits parts of a definition; nil leaves a part unchanged.
+type DefinitionPatch struct {
+	Conditions     json.RawMessage
+	Actions        json.RawMessage
+	Limits         json.RawMessage
+	Schedule       json.RawMessage
+	StopProcessing *bool
+}
+
+// IsZero reports a patch that changes nothing.
+func (p DefinitionPatch) IsZero() bool {
+	return p.Conditions == nil && p.Actions == nil && p.Limits == nil && p.Schedule == nil && p.StopProcessing == nil
+}
+
+// Apply returns base with the patch's parts replaced.
+func (p DefinitionPatch) Apply(base Definition) Definition {
+	if p.Conditions != nil {
+		base.Conditions = p.Conditions
+	}
+	if p.Actions != nil {
+		base.Actions = p.Actions
+	}
+	if p.Limits != nil {
+		base.Limits = p.Limits
+	}
+	if p.Schedule != nil {
+		base.Schedule = p.Schedule
+	}
+	if p.StopProcessing != nil {
+		base.StopProcessing = *p.StopProcessing
+	}
+	return base
 }
 
 // Published reports an immutable version.
 func (v Version) Published() bool { return v.PublishedAt != nil }
 
-// NewVersion validates the definition (compile) and builds a draft version.
-func NewVersion(rule Rule, number int, conditions, actions, limits json.RawMessage,
-	createdBy string, opts eval.Options, now time.Time) (Version, error) {
-	v := Version{
-		ID:         id.NewID(),
-		RuleID:     rule.ID,
-		TenantID:   rule.TenantID,
-		Version:    number,
-		Conditions: normalizeJSON(conditions),
-		Actions:    normalizeJSON(actions),
-		Limits:     normalizeJSON(limits),
-		CreatedBy:  createdBy,
-		CreatedAt:  now,
-	}
-	if _, err := eval.CompileDefinition(v.Conditions, v.Actions, v.Limits, opts); err != nil {
-		return Version{}, err
-	}
-	return v, nil
+// Definition returns the version's rule body.
+func (v Version) Definition() Definition {
+	return Definition{Conditions: v.Conditions, Actions: v.Actions, Limits: v.Limits,
+		Schedule: v.Schedule, StopProcessing: v.StopProcessing}
 }
 
-// Edit replaces parts of a draft's definition; nil leaves a part unchanged.
-func (v *Version) Edit(conditions, actions, limits json.RawMessage, opts eval.Options) error {
+// ValidateDefinition normalizes and compiles a definition (the write-time
+// gate): every compile error is errs.Invalid with per-field errors.
+func ValidateDefinition(def Definition, opts eval.Options) (Definition, *eval.Definition, error) {
+	def.Conditions = normalizeJSON(def.Conditions)
+	def.Actions = normalizeJSON(def.Actions)
+	def.Limits = normalizeJSON(def.Limits)
+	def.Schedule = normalizeJSON(def.Schedule)
+	compiled, err := eval.CompileSpec(def.Spec(), opts)
+	if err != nil {
+		return Definition{}, nil, err
+	}
+	return def, compiled, nil
+}
+
+// NewVersion validates the definition (compile) and builds a draft version.
+func NewVersion(rule Rule, number int, def Definition, createdBy string, opts eval.Options, now time.Time) (Version, error) {
+	def, _, err := ValidateDefinition(def, opts)
+	if err != nil {
+		return Version{}, err
+	}
+	return Version{
+		ID:             id.NewID(),
+		RuleID:         rule.ID,
+		TenantID:       rule.TenantID,
+		Version:        number,
+		Conditions:     def.Conditions,
+		Actions:        def.Actions,
+		Limits:         def.Limits,
+		Schedule:       def.Schedule,
+		StopProcessing: def.StopProcessing,
+		CreatedBy:      createdBy,
+		CreatedAt:      now,
+	}, nil
+}
+
+// Edit replaces parts of a draft's definition.
+func (v *Version) Edit(patch DefinitionPatch, opts eval.Options) error {
 	if v.Published() {
 		return ErrVersionPublished
 	}
-	next := *v
-	if conditions != nil {
-		next.Conditions = normalizeJSON(conditions)
-	}
-	if actions != nil {
-		next.Actions = normalizeJSON(actions)
-	}
-	if limits != nil {
-		next.Limits = normalizeJSON(limits)
-	}
-	if _, err := eval.CompileDefinition(next.Conditions, next.Actions, next.Limits, opts); err != nil {
+	def, _, err := ValidateDefinition(patch.Apply(v.Definition()), opts)
+	if err != nil {
 		return err
 	}
-	*v = next
+	v.Conditions, v.Actions, v.Limits, v.Schedule = def.Conditions, def.Actions, def.Limits, def.Schedule
+	v.StopProcessing = def.StopProcessing
 	return nil
 }
 

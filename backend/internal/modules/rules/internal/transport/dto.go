@@ -30,8 +30,8 @@ func (n NullableString) opt() app.OptString {
 	return app.OptString{Set: n.Set, Null: n.Null, Value: n.Value}
 }
 
-// CreateRuleReq creates a rule and its draft version 1. Conditions, actions
-// and limits follow the grammar documented in internal/domain/eval.
+// CreateRuleReq creates a rule and its draft version 1. Conditions, actions,
+// limits and schedule follow the grammar documented in internal/domain/eval.
 type CreateRuleReq struct {
 	Name         string          `json:"name" validate:"required,max=255"`
 	Slug         string          `json:"slug,omitempty" validate:"omitempty,max=120"`
@@ -42,29 +42,37 @@ type CreateRuleReq struct {
 	Conditions   json.RawMessage `json:"conditions,omitempty" swaggertype:"object"`
 	Actions      json.RawMessage `json:"actions" validate:"required" swaggertype:"array,object"`
 	Limits       json.RawMessage `json:"limits,omitempty" swaggertype:"object"`
+	// Schedule: {starts_at?, ends_at?, days_of_week?: [0-6], hours?: {from: "HH:MM", to: "HH:MM"}, timezone?: IANA}.
+	Schedule       json.RawMessage `json:"schedule,omitempty" swaggertype:"object"`
+	StopProcessing bool            `json:"stop_processing,omitempty"`
 }
 
-// UpdateRuleReq is a partial update. conditions/actions/limits edit the
-// latest version and only while it is a draft (409 no_draft_version).
+// UpdateRuleReq is a partial update. conditions/actions/limits/schedule/
+// stop_processing edit the latest version and only while it is a draft (409
+// no_draft_version). schedule: null clears it.
 type UpdateRuleReq struct {
-	Name         *string         `json:"name,omitempty" validate:"omitempty,max=255"`
-	Description  NullableString  `json:"description" swaggertype:"string"`
-	TriggerEvent *string         `json:"trigger_event,omitempty" validate:"omitempty,max=100"`
-	ProgramID    NullableString  `json:"program_id" swaggertype:"string"`
-	Priority     *int            `json:"priority,omitempty" validate:"omitempty,min=0,max=1000000"`
-	Status       *string         `json:"status,omitempty" validate:"omitempty,oneof=active inactive archived"`
-	Conditions   json.RawMessage `json:"conditions,omitempty" swaggertype:"object"`
-	Actions      json.RawMessage `json:"actions,omitempty" swaggertype:"array,object"`
-	Limits       json.RawMessage `json:"limits,omitempty" swaggertype:"object"`
+	Name           *string         `json:"name,omitempty" validate:"omitempty,max=255"`
+	Description    NullableString  `json:"description" swaggertype:"string"`
+	TriggerEvent   *string         `json:"trigger_event,omitempty" validate:"omitempty,max=100"`
+	ProgramID      NullableString  `json:"program_id" swaggertype:"string"`
+	Priority       *int            `json:"priority,omitempty" validate:"omitempty,min=0,max=1000000"`
+	Status         *string         `json:"status,omitempty" validate:"omitempty,oneof=active inactive archived"`
+	Conditions     json.RawMessage `json:"conditions,omitempty" swaggertype:"object"`
+	Actions        json.RawMessage `json:"actions,omitempty" swaggertype:"array,object"`
+	Limits         json.RawMessage `json:"limits,omitempty" swaggertype:"object"`
+	Schedule       json.RawMessage `json:"schedule,omitempty" swaggertype:"object"`
+	StopProcessing *bool           `json:"stop_processing,omitempty"`
 }
 
 // CreateVersionReq creates a new draft version; omitted parts are copied
 // from from_version (default: the latest version).
 type CreateVersionReq struct {
-	FromVersion *int            `json:"from_version,omitempty" validate:"omitempty,min=1"`
-	Conditions  json.RawMessage `json:"conditions,omitempty" swaggertype:"object"`
-	Actions     json.RawMessage `json:"actions,omitempty" swaggertype:"array,object"`
-	Limits      json.RawMessage `json:"limits,omitempty" swaggertype:"object"`
+	FromVersion    *int            `json:"from_version,omitempty" validate:"omitempty,min=1"`
+	Conditions     json.RawMessage `json:"conditions,omitempty" swaggertype:"object"`
+	Actions        json.RawMessage `json:"actions,omitempty" swaggertype:"array,object"`
+	Limits         json.RawMessage `json:"limits,omitempty" swaggertype:"object"`
+	Schedule       json.RawMessage `json:"schedule,omitempty" swaggertype:"object"`
+	StopProcessing *bool           `json:"stop_processing,omitempty"`
 }
 
 // PublishReq names the version to make live.
@@ -82,29 +90,45 @@ type SimPlayerReq struct {
 	Points     *int64         `json:"points,omitempty"`
 }
 
-// SimulateReq is a hypothetical activity evaluated against the live ruleset.
+// DraftDefinitionReq is an unpublished rule body to simulate.
+type DraftDefinitionReq struct {
+	TriggerEvent   string          `json:"trigger_event" validate:"required,max=100"`
+	Conditions     json.RawMessage `json:"conditions,omitempty" swaggertype:"object"`
+	Actions        json.RawMessage `json:"actions" validate:"required" swaggertype:"array,object"`
+	Limits         json.RawMessage `json:"limits,omitempty" swaggertype:"object"`
+	Schedule       json.RawMessage `json:"schedule,omitempty" swaggertype:"object"`
+	StopProcessing bool            `json:"stop_processing,omitempty"`
+}
+
+// SimulateReq is a hypothetical activity evaluated against the live ruleset,
+// or against definition alone when given (event_type then defaults to its
+// trigger_event). occurred_at (default now) drives schedules and history.
 type SimulateReq struct {
-	EventType        string          `json:"event_type" validate:"required,max=100"`
-	PlayerID         string          `json:"player_id,omitempty" validate:"omitempty,uuid"`
-	PlayerExternalID string          `json:"player_external_id,omitempty" validate:"omitempty,max=255"`
-	Player           *SimPlayerReq   `json:"player,omitempty"`
-	Properties       json.RawMessage `json:"properties,omitempty" swaggertype:"object"`
-	Context          json.RawMessage `json:"context,omitempty" swaggertype:"object"`
-	CausationDepth   int             `json:"causation_depth,omitempty" validate:"min=0"`
+	EventType        string              `json:"event_type,omitempty" validate:"max=100"`
+	PlayerID         string              `json:"player_id,omitempty" validate:"omitempty,uuid"`
+	PlayerExternalID string              `json:"player_external_id,omitempty" validate:"omitempty,max=255"`
+	Player           *SimPlayerReq       `json:"player,omitempty"`
+	Properties       json.RawMessage     `json:"properties,omitempty" swaggertype:"object"`
+	Context          json.RawMessage     `json:"context,omitempty" swaggertype:"object"`
+	CausationDepth   int                 `json:"causation_depth,omitempty" validate:"min=0"`
+	OccurredAt       *time.Time          `json:"occurred_at,omitempty"`
+	Definition       *DraftDefinitionReq `json:"definition,omitempty"`
 }
 
 // VersionResp is one rule version with its full definition.
 type VersionResp struct {
-	ID          string          `json:"id"`
-	RuleID      string          `json:"rule_id"`
-	Version     int             `json:"version"`
-	Conditions  json.RawMessage `json:"conditions" swaggertype:"object"`
-	Actions     json.RawMessage `json:"actions" swaggertype:"array,object"`
-	Limits      json.RawMessage `json:"limits" swaggertype:"object"`
-	Published   bool            `json:"published"`
-	PublishedAt *time.Time      `json:"published_at"`
-	CreatedBy   string          `json:"created_by,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
+	ID             string          `json:"id"`
+	RuleID         string          `json:"rule_id"`
+	Version        int             `json:"version"`
+	Conditions     json.RawMessage `json:"conditions" swaggertype:"object"`
+	Actions        json.RawMessage `json:"actions" swaggertype:"array,object"`
+	Limits         json.RawMessage `json:"limits" swaggertype:"object"`
+	Schedule       json.RawMessage `json:"schedule" swaggertype:"object"`
+	StopProcessing bool            `json:"stop_processing"`
+	Published      bool            `json:"published"`
+	PublishedAt    *time.Time      `json:"published_at"`
+	CreatedBy      string          `json:"created_by,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 // RuleResp is a rule; current_version and latest_version carry definitions.
@@ -163,25 +187,71 @@ type SimLimitsResp struct {
 }
 
 type SimRuleResp struct {
-	RuleID        string          `json:"rule_id"`
-	RuleVersionID string          `json:"rule_version_id"`
-	Name          string          `json:"name"`
-	Priority      int             `json:"priority"`
-	Status        string          `json:"status"`
-	Matched       bool            `json:"matched"`
-	Conditions    []TraceResp     `json:"condition_results"`
-	Effects       []SimEffectResp `json:"effects"`
-	Limits        *SimLimitsResp  `json:"limits,omitempty"`
-	Error         string          `json:"error,omitempty"`
+	RuleID         string          `json:"rule_id"`
+	RuleVersionID  string          `json:"rule_version_id"`
+	Name           string          `json:"name"`
+	Priority       int             `json:"priority"`
+	Status         string          `json:"status"`
+	Matched        bool            `json:"matched"`
+	Conditions     []TraceResp     `json:"condition_results"`
+	Effects        []SimEffectResp `json:"effects"`
+	Limits         *SimLimitsResp  `json:"limits,omitempty"`
+	StopProcessing bool            `json:"stop_processing"`
+	// StoppedBy is the rule whose firing skipped this one (status skipped_by_stop).
+	StoppedBy string `json:"stopped_by,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 type SimulateResp struct {
-	Outcome           string        `json:"outcome"`
-	Reason            string        `json:"reason,omitempty"`
-	PlayerID          string        `json:"player_id,omitempty"`
-	RulesetGeneration int64         `json:"ruleset_generation"`
-	LimitsEnforced    bool          `json:"limits_enforced"`
-	Rules             []SimRuleResp `json:"rules"`
+	Outcome           string `json:"outcome"`
+	Reason            string `json:"reason,omitempty"`
+	PlayerID          string `json:"player_id,omitempty"`
+	RulesetGeneration int64  `json:"ruleset_generation"`
+	LimitsEnforced    bool   `json:"limits_enforced"`
+	// Draft is true when definition was simulated instead of the live ruleset.
+	Draft bool `json:"draft"`
+	// HistoryLoaded is true when history.* facts came from the player's
+	// recorded activity (stored players only; inline players have none).
+	HistoryLoaded bool          `json:"history_loaded"`
+	OccurredAt    time.Time     `json:"occurred_at"`
+	Rules         []SimRuleResp `json:"rules"`
+}
+
+// RuleStatResp is one rule's activity over the period.
+type RuleStatResp struct {
+	RuleID          string `json:"rule_id"`
+	Name            string `json:"name"`
+	Fired           int64  `json:"fired"`
+	NotMatched      int64  `json:"not_matched"`
+	Limited         int64  `json:"limited"`
+	OutOfSchedule   int64  `json:"out_of_schedule"`
+	SkippedByStop   int64  `json:"skipped_by_stop"`
+	EffectsApplied  int64  `json:"effects_applied"`
+	EffectsRejected int64  `json:"effects_rejected"`
+	PointsAwarded   int64  `json:"points_awarded"`
+	XPAwarded       int64  `json:"xp_awarded"`
+}
+
+// RuleStatsTotalsResp sums every rule of the period.
+type RuleStatsTotalsResp struct {
+	Fired           int64 `json:"fired"`
+	NotMatched      int64 `json:"not_matched"`
+	Limited         int64 `json:"limited"`
+	OutOfSchedule   int64 `json:"out_of_schedule"`
+	SkippedByStop   int64 `json:"skipped_by_stop"`
+	EffectsApplied  int64 `json:"effects_applied"`
+	EffectsRejected int64 `json:"effects_rejected"`
+	PointsAwarded   int64 `json:"points_awarded"`
+	XPAwarded       int64 `json:"xp_awarded"`
+}
+
+// RuleStatsResp is GET /rules/stats: per-rule rows (fired DESC) and totals
+// over [from, to).
+type RuleStatsResp struct {
+	From   time.Time           `json:"from"`
+	To     time.Time           `json:"to"`
+	Data   []RuleStatResp      `json:"data"`
+	Totals RuleStatsTotalsResp `json:"totals"`
 }
 
 type DecisionResp struct {
@@ -253,7 +323,7 @@ func toVersion(v *domain.Version) *VersionResp {
 	}
 	return &VersionResp{
 		ID: v.ID, RuleID: v.RuleID, Version: v.Version, Conditions: v.Conditions, Actions: v.Actions,
-		Limits: v.Limits, Published: v.Published(), PublishedAt: v.PublishedAt, CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt,
+		Limits: v.Limits, Schedule: nullJSON(v.Schedule), StopProcessing: v.StopProcessing, Published: v.Published(), PublishedAt: v.PublishedAt, CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt,
 	}
 }
 
@@ -282,10 +352,12 @@ func toTrace(ts []eval.CondTrace) []TraceResp {
 
 func toSimulate(r app.SimulateResult) SimulateResp {
 	out := SimulateResp{Outcome: r.Outcome, Reason: r.Reason, PlayerID: r.PlayerID,
-		RulesetGeneration: r.RulesetGeneration, Rules: make([]SimRuleResp, 0, len(r.Rules))}
+		RulesetGeneration: r.RulesetGeneration, Draft: r.Draft, HistoryLoaded: r.HistoryLoaded, OccurredAt: r.OccurredAt,
+		Rules: make([]SimRuleResp, 0, len(r.Rules))}
 	for _, rr := range r.Rules {
 		sr := SimRuleResp{RuleID: rr.RuleID, RuleVersionID: rr.RuleVersionID, Name: rr.Name, Priority: rr.Priority,
-			Status: rr.Status, Matched: rr.Matched, Conditions: toTrace(rr.Trace), Effects: []SimEffectResp{}, Error: rr.Error}
+			Status: rr.Status, Matched: rr.Matched, Conditions: toTrace(rr.Trace), Effects: []SimEffectResp{},
+			StopProcessing: rr.StopProcessing, StoppedBy: rr.StoppedBy, Error: rr.Error}
 		for i, a := range rr.Actions {
 			sr.Effects = append(sr.Effects, SimEffectResp{ActionIndex: i, Type: a.Type, Params: a.Params()})
 		}
@@ -295,6 +367,32 @@ func toSimulate(r app.SimulateResult) SimulateResp {
 		}
 		out.Rules = append(out.Rules, sr)
 	}
+	return out
+}
+
+// nullJSON maps an absent column to JSON null.
+func nullJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("null")
+	}
+	return raw
+}
+
+func toStatResp(r app.RuleStat) RuleStatResp {
+	return RuleStatResp{RuleID: r.RuleID, Name: r.Name, Fired: r.Fired, NotMatched: r.NotMatched, Limited: r.Limited,
+		OutOfSchedule: r.OutOfSchedule, SkippedByStop: r.SkippedByStop, EffectsApplied: r.EffectsApplied,
+		EffectsRejected: r.EffectsRejected, PointsAwarded: r.PointsAwarded, XPAwarded: r.XPAwarded}
+}
+
+func toStats(s app.RuleStats) RuleStatsResp {
+	out := RuleStatsResp{From: s.From, To: s.To, Data: make([]RuleStatResp, len(s.Rules))}
+	for i, r := range s.Rules {
+		out.Data[i] = toStatResp(r)
+	}
+	t := toStatResp(s.Totals)
+	out.Totals = RuleStatsTotalsResp{Fired: t.Fired, NotMatched: t.NotMatched, Limited: t.Limited,
+		OutOfSchedule: t.OutOfSchedule, SkippedByStop: t.SkippedByStop, EffectsApplied: t.EffectsApplied,
+		EffectsRejected: t.EffectsRejected, PointsAwarded: t.PointsAwarded, XPAwarded: t.XPAwarded}
 	return out
 }
 

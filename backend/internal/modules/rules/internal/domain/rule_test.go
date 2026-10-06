@@ -111,25 +111,40 @@ func TestAffectsRuleset(t *testing.T) {
 
 func TestVersionDraftEditAndImmutability(t *testing.T) {
 	r := Rule{ID: "r", TenantID: "t"}
-	v, err := NewVersion(r, 1, nil, json.RawMessage(`[{"type":"grant_xp","amount":1}]`), nil, "u", eval.Options{}, now)
+	v, err := NewVersion(r, 1, Definition{Actions: json.RawMessage(`[{"type":"grant_xp","amount":1}]`)}, "u", eval.Options{}, now)
 	require.NoError(t, err)
 	require.Equal(t, "null", string(v.Conditions))
+	require.Equal(t, "null", string(v.Schedule))
+	require.False(t, v.StopProcessing)
 
-	require.NoError(t, v.Edit(nil, json.RawMessage(`[{"type":"grant_xp","amount":2}]`), nil, eval.Options{}))
+	require.NoError(t, v.Edit(DefinitionPatch{Actions: json.RawMessage(`[{"type":"grant_xp","amount":2}]`)}, eval.Options{}))
 	require.JSONEq(t, `[{"type":"grant_xp","amount":2}]`, string(v.Actions))
 
+	stop := true
+	require.NoError(t, v.Edit(DefinitionPatch{StopProcessing: &stop,
+		Schedule: json.RawMessage(`{"days_of_week":[1,2],"timezone":"Asia/Tbilisi"}`)}, eval.Options{}))
+	require.True(t, v.StopProcessing)
+	require.JSONEq(t, `{"days_of_week":[1,2],"timezone":"Asia/Tbilisi"}`, string(v.Schedule))
+	require.JSONEq(t, `[{"type":"grant_xp","amount":2}]`, string(v.Actions), "untouched parts are kept")
+
 	before := v
-	require.Error(t, v.Edit(json.RawMessage(`[{"source":"x"}]`), nil, nil, eval.Options{}))
+	require.Error(t, v.Edit(DefinitionPatch{Conditions: json.RawMessage(`[{"source":"x"}]`)}, eval.Options{}))
+	require.Error(t, v.Edit(DefinitionPatch{Schedule: json.RawMessage(`{"timezone":"Mars/Base"}`)}, eval.Options{}))
 	require.Equal(t, before, v, "a failed edit leaves the draft untouched")
+
+	require.NoError(t, v.Edit(DefinitionPatch{Schedule: json.RawMessage(`null`)}, eval.Options{}))
+	require.Equal(t, "null", string(v.Schedule), "an explicit null clears the schedule")
 
 	v.MarkPublished(now)
 	first := *v.PublishedAt
 	v.MarkPublished(now.Add(time.Hour))
 	require.Equal(t, first, *v.PublishedAt)
-	require.ErrorIs(t, v.Edit(nil, json.RawMessage(`[{"type":"grant_xp","amount":3}]`), nil, eval.Options{}), ErrVersionPublished)
+	require.ErrorIs(t, v.Edit(DefinitionPatch{Actions: json.RawMessage(`[{"type":"grant_xp","amount":3}]`)}, eval.Options{}), ErrVersionPublished)
 
-	_, err = NewVersion(r, 2, nil, json.RawMessage(`[{"type":"credit_points","amount":0}]`), nil, "u", eval.Options{}, now)
+	_, err = NewVersion(r, 2, Definition{Actions: json.RawMessage(`[{"type":"credit_points","amount":0}]`)}, "u", eval.Options{}, now)
 	require.Error(t, err)
+	require.True(t, DefinitionPatch{}.IsZero())
+	require.False(t, DefinitionPatch{StopProcessing: &stop}.IsZero())
 }
 
 func TestDerivedIDsAreDeterministic(t *testing.T) {

@@ -147,7 +147,8 @@ func (r *Postgres) SaveDraftVersion(ctx context.Context, tx *gorm.DB, v domain.V
 	m := fromVersion(v)
 	res := tx.WithContext(ctx).Model(&ruleVersion{}).
 		Where("tenant_id = ? AND id = ? AND published_at IS NULL", m.TenantID, m.ID).
-		Updates(map[string]any{"conditions": m.Conditions, "actions": m.Actions, "limits": m.Limits})
+		Updates(map[string]any{"conditions": m.Conditions, "actions": m.Actions, "limits": m.Limits,
+			"schedule": m.Schedule, "stop_processing": m.StopProcessing})
 	if res.Error != nil {
 		return internal("save draft version", res.Error)
 	}
@@ -252,14 +253,16 @@ func (r *Postgres) Generation(ctx context.Context, tenantID string) (int64, erro
 }
 
 type liveRow struct {
-	RuleID        string
-	RuleVersionID string
-	Name          string
-	ProgramID     *string
-	Priority      int
-	Conditions    string
-	Actions       string
-	Limits        string
+	RuleID         string
+	RuleVersionID  string
+	Name           string
+	ProgramID      *string
+	Priority       int
+	Conditions     string
+	Actions        string
+	Limits         string
+	Schedule       string
+	StopProcessing bool
 }
 
 // LiveRuleSources returns the ONE current version of every live rule for a
@@ -269,7 +272,8 @@ func (r *Postgres) LiveRuleSources(ctx context.Context, tenantID, triggerEvent s
 	var rows []liveRow
 	err := r.db.WithContext(ctx).Raw(
 		`SELECT r.id AS rule_id, v.id AS rule_version_id, r.name, r.program_id, r.priority,
-		        v.conditions::text AS conditions, v.actions::text AS actions, v.limits::text AS limits
+		        v.conditions::text AS conditions, v.actions::text AS actions, v.limits::text AS limits,
+		        v.schedule::text AS schedule, v.stop_processing
 		   FROM `+r.table("rule")+` r
 		   JOIN `+r.table("ruleVersion")+` v ON v.id = r.current_version_id
 		  WHERE r.tenant_id = ? AND r.trigger_event = ? AND r.status = 'active'
@@ -284,6 +288,7 @@ func (r *Postgres) LiveRuleSources(ctx context.Context, tenantID, triggerEvent s
 			RuleID: row.RuleID, RuleVersionID: row.RuleVersionID, Name: row.Name, ProgramID: val(row.ProgramID),
 			Priority: row.Priority, Conditions: json.RawMessage(row.Conditions),
 			Actions: json.RawMessage(row.Actions), Limits: json.RawMessage(row.Limits),
+			Schedule: json.RawMessage(row.Schedule), StopProcessing: row.StopProcessing,
 		}
 	}
 	return out, nil
@@ -442,6 +447,141 @@ func (r *Postgres) ApplyLimits(ctx context.Context, tx *gorm.DB, c app.LimitChec
 	return true, nil
 }
 
+// --- history projection (grammar v2) ----------------------------------------
+
+const dayLayout = "2006-01-02"
+
+// RecordPlayerEvent counts one evaluated activity into its UTC-day bucket.
+// It runs in the decision tx right after the decision insert won, so a
+// redelivered activity is never counted twice.
+func (r *Postgres) RecordPlayerEvent(ctx context.Context, tx *gorm.DB, e app.PlayerEvent) error {
+	err := tx.WithContext(ctx).Exec(
+		`INSERT INTO `+r.table("rulePlayerEventDay")+` AS h (tenant_id, player_id, event_type, day, count)
+		 VALUES (?, ?, ?, ?::date, 1)
+		 ON CONFLICT (tenant_id, player_id, event_type, day) DO UPDATE SET count = h.count + 1`,
+		e.TenantID, e.PlayerID, e.EventType, e.At.UTC().Format(dayLayout)).Error
+	if err != nil {
+		return internal("record player event", err)
+	}
+	return nil
+}
+
+type historyRow struct {
+	EventType string
+	C1d       int64 `gorm:"column:c1d"`
+	C7d       int64 `gorm:"column:c7d"`
+	C30d      int64 `gorm:"column:c30d"`
+	C90d      int64 `gorm:"column:c90d"`
+	CAll      int64 `gorm:"column:call"`
+}
+
+// PlayerHistory returns, in one query, the player's recorded activity per
+// event type and window. Windows are UTC days ending on q.At's day
+// (inclusive); later days (out-of-order arrivals) are excluded.
+func (r *Postgres) PlayerHistory(ctx context.Context, q app.HistoryQuery) (map[string]map[string]int64, error) {
+	out := map[string]map[string]int64{}
+	if len(q.EventTypes) == 0 || !eval.IsUUID(q.PlayerID) {
+		return out, nil
+	}
+	day := q.At.UTC().Truncate(24 * time.Hour)
+	since := func(window string) string {
+		return day.AddDate(0, 0, 1-eval.WindowDays[window]).Format(dayLayout)
+	}
+	var rows []historyRow
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT event_type,
+		        COALESCE(SUM(count) FILTER (WHERE day >= ?::date), 0) AS c1d,
+		        COALESCE(SUM(count) FILTER (WHERE day >= ?::date), 0) AS c7d,
+		        COALESCE(SUM(count) FILTER (WHERE day >= ?::date), 0) AS c30d,
+		        COALESCE(SUM(count) FILTER (WHERE day >= ?::date), 0) AS c90d,
+		        COALESCE(SUM(count), 0) AS call
+		   FROM `+r.table("rulePlayerEventDay")+`
+		  WHERE tenant_id = ? AND player_id = ? AND event_type IN ? AND day <= ?::date
+		  GROUP BY event_type`,
+		since(eval.Window1d), since(eval.Window7d), since(eval.Window30d), since(eval.Window90d),
+		q.TenantID, q.PlayerID, q.EventTypes, day.Format(dayLayout)).Scan(&rows).Error
+	if err != nil {
+		return nil, internal("load player history", err)
+	}
+	for _, row := range rows {
+		out[row.EventType] = map[string]int64{
+			eval.Window1d: row.C1d, eval.Window7d: row.C7d, eval.Window30d: row.C30d,
+			eval.Window90d: row.C90d, eval.WindowAll: row.CAll,
+		}
+	}
+	return out, nil
+}
+
+// --- stats -------------------------------------------------------------------
+
+type ruleStatRow struct {
+	RuleID          string
+	Name            string
+	Fired           int64
+	NotMatched      int64
+	Limited         int64
+	OutOfSchedule   int64
+	SkippedByStop   int64
+	EffectsApplied  int64
+	EffectsRejected int64
+	PointsAwarded   int64
+	XpAwarded       int64
+}
+
+// RuleStats aggregates executions (by created_at) and their effects (by
+// requested_at, which equals the execution time) over [from, to) per rule.
+// points/xp sum the amounts of every credit_points/grant_xp effect of fired
+// executions, whatever its settlement.
+func (r *Postgres) RuleStats(ctx context.Context, tenantID string, from, to time.Time) ([]app.RuleStat, error) {
+	if !eval.IsUUID(tenantID) {
+		return nil, nil
+	}
+	var rows []ruleStatRow
+	err := r.db.WithContext(ctx).Raw(
+		`WITH ex AS (
+		    SELECT rule_id,
+		           count(*) FILTER (WHERE status = 'fired')           AS fired,
+		           count(*) FILTER (WHERE status = 'not_matched')     AS not_matched,
+		           count(*) FILTER (WHERE status = 'limited')         AS limited,
+		           count(*) FILTER (WHERE status = 'out_of_schedule') AS out_of_schedule,
+		           count(*) FILTER (WHERE status = 'skipped_by_stop') AS skipped_by_stop
+		      FROM `+r.table("ruleExecution")+`
+		     WHERE tenant_id = ? AND created_at >= ? AND created_at < ?
+		     GROUP BY rule_id
+		 ), ef AS (
+		    SELECT rule_id,
+		           count(*) FILTER (WHERE status = 'applied')  AS effects_applied,
+		           count(*) FILTER (WHERE status = 'rejected') AS effects_rejected,
+		           COALESCE(SUM((params->>'amount')::numeric) FILTER (WHERE type = 'credit_points'), 0)::bigint AS points_awarded,
+		           COALESCE(SUM((params->>'amount')::numeric) FILTER (WHERE type = 'grant_xp'), 0)::bigint      AS xp_awarded
+		      FROM `+r.table("ruleExecutionEffect")+`
+		     WHERE tenant_id = ? AND requested_at >= ? AND requested_at < ?
+		     GROUP BY rule_id
+		 )
+		 SELECT COALESCE(ex.rule_id, ef.rule_id) AS rule_id, COALESCE(r.name, '') AS name,
+		        COALESCE(ex.fired, 0) AS fired, COALESCE(ex.not_matched, 0) AS not_matched,
+		        COALESCE(ex.limited, 0) AS limited, COALESCE(ex.out_of_schedule, 0) AS out_of_schedule,
+		        COALESCE(ex.skipped_by_stop, 0) AS skipped_by_stop,
+		        COALESCE(ef.effects_applied, 0) AS effects_applied, COALESCE(ef.effects_rejected, 0) AS effects_rejected,
+		        COALESCE(ef.points_awarded, 0) AS points_awarded, COALESCE(ef.xp_awarded, 0) AS xp_awarded
+		   FROM ex FULL JOIN ef ON ef.rule_id = ex.rule_id
+		   LEFT JOIN `+r.table("rule")+` r ON r.id = COALESCE(ex.rule_id, ef.rule_id) AND r.tenant_id = ?
+		  ORDER BY fired DESC, rule_id`,
+		tenantID, from, to, tenantID, from, to, tenantID).Scan(&rows).Error
+	if err != nil {
+		return nil, internal("rule stats", err)
+	}
+	out := make([]app.RuleStat, len(rows))
+	for i, row := range rows {
+		out[i] = app.RuleStat{
+			RuleID: row.RuleID, Name: row.Name, Fired: row.Fired, NotMatched: row.NotMatched, Limited: row.Limited,
+			OutOfSchedule: row.OutOfSchedule, SkippedByStop: row.SkippedByStop, EffectsApplied: row.EffectsApplied,
+			EffectsRejected: row.EffectsRejected, PointsAwarded: row.PointsAwarded, XPAwarded: row.XpAwarded,
+		}
+	}
+	return out, nil
+}
+
 func (r *Postgres) ListDecisions(ctx context.Context, tenantID string, f app.DecisionFilter, p app.Page) ([]domain.Decision, error) {
 	q := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
 	if f.ActivityID != "" {
@@ -560,7 +700,7 @@ func (r *Postgres) PurgeTenant(ctx context.Context, tx *gorm.DB, tenantID string
 	}
 	q := tx.WithContext(ctx)
 	for _, m := range []any{
-		&ruleExecutionEffect{}, &ruleExecution{}, &decision{}, &rulePlayerCounter{},
+		&ruleExecutionEffect{}, &ruleExecution{}, &decision{}, &rulePlayerCounter{}, &rulePlayerEventDay{},
 	} {
 		if err := q.Where("tenant_id = ?", tenantID).Delete(m).Error; err != nil {
 			return internal("purge tenant", err)
